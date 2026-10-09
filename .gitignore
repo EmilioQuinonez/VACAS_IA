@@ -219,3 +219,43 @@ __marimo__/
 
 # Carpeta de Data
 /Data/
+
+# Datos (crudos, sensibles o reproducibles)
+# Los datos de la granja nunca se versionan; se mantienen fuera del repositorio.
+/data/
+*.csv
+*.csv.gz
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.npy
+*.npz
+
+# Secretos y credenciales
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.*
+
+# Sistema operativo
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+desktop.ini
+
+# Editores / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
