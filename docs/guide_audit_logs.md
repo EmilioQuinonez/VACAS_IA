@@ -22,7 +22,7 @@ Registrar una fila por acción, incluso si el intento fue parcial o fallido. Si 
 ## Cómo actualizar la versión `vacas/x.y`
 
 - **Versión inicial:** asignar `vacas/1.0` a la primera versión identificada del conjunto. `x` comienza en 1 y `y` en 0.
-- **Actualizar `x` (cambio mayor):** aumentar `x` en 1 y reiniciar `y` a 0 cuando cambie la estructura o el significado del dataset de forma que la versión anterior ya no sea directamente comparable. Ejemplos: cambiar columnas o unidades de medida, redefinir qué representa cada fila, cambiar los criterios de inclusión o integrar una fuente que altere sustancialmente la interpretación. 
+- **Actualizar `x` (cambio mayor):** aumentar `x` en 1 y reiniciar `y` a 0 cuando cambie la estructura o el significado del dataset de forma que la versión anterior ya no sea directamente comparable. Ejemplos: cambiar columnas o unidades de medida, crear un nuevo dataset, redefinir qué representa cada fila, cambiar los criterios de inclusión o integrar una fuente que altere sustancialmente la interpretación. 
 - **Actualizar `y` (cambio menor):** mantener `x` y aumentar `y` en 1 cuando cambie el contenido sin alterar la estructura ni el significado: agregar registros compatibles, corregir valores o retirar duplicados o registros erróneos. De `vacas/1.4` se pasa a `vacas/1.5`.
 - **Sin cambio de versión:** representa un acceso o exportación, un intento fallido, una corrección del propio registro de auditoría. Una restauración exacta conserva la versión restaurada.
 
