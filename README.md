@@ -13,12 +13,12 @@
 <strong>Objetivo de minería de datos............................3</strong>
     Criterios de éxito de minería de datos..............3
 <strong>Requerimientos del proyecto.............................3</strong>
-<strong>Plan de valor ganado....................................4</strong>
+<strong><a href="https://docs.google.com/spreadsheets/d/1cll5V8mhmh2yNx-Pf1LDWkmkLIdHjaAfX-hKlmNiJMg/edit?usp=sharing">Plan de valor ganado</a>....................................4</strong>
 <strong>Supuestos del proyecto..................................4</strong>
 <strong>Limitaciones del proyecto...............................4</strong>
-<strong>Inventario de recursos..................................5</strong>
-<strong>Análisis de costo y beneficio...........................5</strong>
-<strong>Matriz de riesgos.......................................5</strong>
+<strong><a href="https://docs.google.com/spreadsheets/d/1WDTALeblrlLVCPUdWbw-YFCtojI6zTDLFODQ9f9Gr6Y/edit?usp=sharing">Inventario de recursos</a>..................................5</strong>
+<strong><a href="https://docs.google.com/document/d/1eC2AxkIQMhPYsphopbgM1sPM5fT8XvkHgX1WiRlCP2M/edit?usp=sharing">Análisis de costo y beneficio</a>...........................5</strong>
+<strong><a href="https://docs.google.com/spreadsheets/d/15yn73QzDFNr9cexEtcF1Ktdak3ik_enyfIcaNqOjK60/edit?usp=sharing">Matriz de riesgos</a>.......................................5</strong>
 <strong>Glosario de terminología................................5</strong>
 <strong>Referencias.............................................7</strong>
 <strong>Adaptaciones de la metodología CRISP-DM.................7</strong>
