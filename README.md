@@ -2,6 +2,28 @@
 
 ## ¿Cómo acceder a los entregables?
 
+### En GitHub
+
+El repositorio concentra el reporte y los entregables de las fases del proyecto. 
+
+La estructura del repositorio es:
+
+- **[`docs/`](docs/)** — Documentación y entregables.
+  - **[`BU/`](docs/BU/)** — Fase de *Entendimiento del negocio*.
+    - Reporte Business Understanding.
+    - Memorándum de entendimiento.
+    - One Page.
+    - WBS y su archivo fuente.
+  - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
+    - Guía y archivo CSV de auditoría de registros.
+- **[`src/`](src/)** — Código fuente de apoyo.
+  - **[`DU/`](src/DU/)** — Scripts de preparación de datos para la fase *Data Understanding*.
+    - [`generate_data.py`](src/DU/generate_data.py) — Procesa los archivos CSV de cada vaca.
+    - [`anonymize_data.py`](src/DU/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
+
+Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
+
+
 ### En Google Drive
 
 ####  [Reporte: Entendimiento de los datos](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.0)
