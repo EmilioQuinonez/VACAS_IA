@@ -22,17 +22,19 @@ Aplica a todos los miembros del equipo. Cualquier elemento creado o modificado a
 3. Todo cambio a un CI debe hacerse mediante el flujo de control de cambios (sección 7). No se aceptan modificaciones directas a `main` ni a `develop`.
 4. Los CIs se mantienen bajo control de versiones en Git. El historial de commits y de Pull Requests es el registro de quién cambió qué y cuándo.
 5. Las líneas base se establecen en puntos de control definidos: entrega al socio formador y aprobación formal de entregables.
-6. Nunca se versionan secretos ni credenciales (`.env`, llaves `*.pem`, tokens). Tampoco se versionan datos sensibles ni crudos de la granja; los datos se mantienen fuera del repositorio.
+6. Nunca se versionan secretos ni credenciales (`.env`, llaves `*.pem`, tokens). Las variables de entorno necesarias se documentan en `.env.example`, sin valores reales; los valores reales viven solo en el `.env` local de cada integrante.
+7. Nunca se versionan los datos de la granja (crudos, anonimizados ni intermedios), ni el archivo de equivalencias entre identificadores originales y anónimos; los datos se mantienen fuera del repositorio, de forma local. Los datos se controlan con su propio versionado y bitácora (sección 5.5).
 
 ## 4. Identificación de CIs
 
 | Categoría | CI | Ubicación |
 |---|---|---|
-| Código fuente | Scripts de análisis y procesamiento de datos | `src/` |
-| Análisis | Análisis descriptivo y EDA | `analisis_basico_descriptivo_datos_vacas/`, `src/` |
+| Código fuente | Scripts de preparación, anonimización y análisis de datos | `src/` (por ejemplo `src/DU/generate_data.py`, `src/DU/anonymize_data.py`) |
 | Documentación de entendimiento del negocio | Reporte de Business Understanding, One Page, Memorándum de entendimiento, WBS | `docs/BU/` |
-| Documentación de entendimiento de los datos | Perfil y descripción de datos, figuras | `docs/DU/` |
-| Dependencias | Archivo de requerimientos | `requirements.txt` |
+| Documentación de entendimiento de los datos | Figuras y documentos de descripción de datos | `docs/DU/` |
+| Control de datos | Bitácora de auditoría de datos y su guía de llenado | `docs/data_audit_logs.csv`, `docs/guide_audit_logs.md` |
+| Dependencias y entorno | Archivo de requerimientos y variables de entorno de ejemplo | `requirements.txt`, `.env.example` |
+| Configuración del repositorio | Plantilla de PR y reglas de archivos ignorados | `.github/pull_request_template.md`, `.gitignore` |
 | Documentación general | README, licencia | `README.md`, `LICENSE` |
 | Gestión de la configuración | Este documento | `docs/Gestion_de_Configuracion.md` |
 
@@ -100,8 +102,9 @@ fix: borrar la carpeta de Data por seguridad
   - **Tipo de cambio:** documentación (`docs/`), código fuente (`src/`) u otro.
   - **Cambios realizados:** lista de los cambios incluidos.
   - **Lista de verificación:** se completa la parte que corresponde al tipo de cambio.
-    - Documentación: la información es correcta, clara y actualizada; se revisaron ortografía, enlaces y rutas; los diagramas, imágenes o adjuntos funcionan.
-    - Código: sigue las convenciones del proyecto; se probó localmente; se agregaron o actualizaron pruebas cuando corresponde; se actualizó la documentación relacionada cuando corresponde.
+    - Documentación: la información es correcta, clara y actualizada; se revisaron ortografía, enlaces y rutas; los diagramas, imágenes o adjuntos funcionan; se actualizó la bitácora de auditoría de datos.
+    - Código: sigue las convenciones del proyecto; se probó localmente; se agregaron o actualizaron pruebas cuando corresponde; se actualizó la documentación (reportes de entrega) cuando corresponde; se actualizó la bitácora de auditoría de datos.
+    - **Bitácora de auditoría de datos:** la plantilla pide actualizarla en ambos tipos de cambio. Se registra en `docs/data_audit_logs.csv` (sección 5.5) cuando el PR realiza o implica una acción sobre los datos. Si el PR no actúa sobre los datos, el punto se deja sin marcar y se indica "No aplica" en las notas.
   - **Evidencia:** capturas, resultados de pruebas o enlaces relevantes, si aplica.
   - **Notas para revisión:** decisiones, limitaciones o aspectos que requieran atención especial.
 - **Issue:** si se requiere formalizar la petición antes de implementar, se abre primero un issue y se vincula al PR.
@@ -122,6 +125,17 @@ Se usa versionado semántico `vMAJOR.MINOR.PATCH`:
 Ejemplos: `v0.1.0` (primera línea base), `v0.2.0` (nueva funcionalidad o documento aprobado), `v1.0.0` (entrega al socio formador).
 
 Los documentos de `docs/` que lo requieran pueden llevar además una tabla de control de versiones propia (versión, descripción, autor, fecha).
+
+Los tags `vX.Y.Z` versionan el repositorio (código y documentación). No deben confundirse con la versión de los datos (`vacas/x.y`, sección 5.5), que es independiente.
+
+### 5.5 Versionado de datos y bitácora de auditoría
+
+Los datos no se guardan en Git, pero su control sí forma parte de la configuración del proyecto.
+
+- **Versión del dataset:** se identifica con `vacas/x.y` (por ejemplo `vacas/1.0`). `x` aumenta (y `y` vuelve a 0) cuando cambia la estructura o el significado del dataset; `y` aumenta cuando cambia el contenido sin alterar estructura ni significado. Las reglas completas están en `docs/guide_audit_logs.md`.
+- **Bitácora:** toda acción sobre los datos se registra en `docs/data_audit_logs.csv`, una fila por acción, siguiendo la guía de llenado: modificación de original, copia, integración, eliminación, restauración, exportación o acceso, y corrección de registro. Los registros nuevos van en la primera fila de datos, debajo del encabezado.
+- **Responsabilidad:** quien realiza la acción es quien la registra. El registro se actualiza en el mismo PR que contiene el código o la documentación asociada.
+- **Uso de los datos:** se aplican las políticas de uso de datos del CAETEC descritas en `docs/guide_audit_logs.md`.
 
 ## 6. Líneas base y releases
 

@@ -235,6 +235,8 @@ __marimo__/
 *.hdf5
 *.npy
 *.npz
+# Excepción: la bitácora de auditoría de datos sí se versiona
+!docs/data_audit_logs.csv
 
 # Secretos y credenciales
 .env.*
