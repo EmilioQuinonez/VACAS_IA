@@ -78,7 +78,6 @@ Formato:
 
 Reglas:
 
-- Una línea de máximo ~72 caracteres, en español, en minúscula tras los dos puntos y sin punto final.
 - Un commit = un cambio lógico. No mezclar temas distintos.
 - Commits y PRs deben estar en el mismo idioma (español).
 - Prohibido `--force`, `reset --hard` o `--no-verify` sobre ramas compartidas sin acuerdo explícito del equipo.
@@ -107,7 +106,6 @@ fix: borrar la carpeta de Data por seguridad
     - **Bitácora de auditoría de datos:** la plantilla pide actualizarla en ambos tipos de cambio. Se registra en `docs/data_audit_logs.csv` (sección 5.5) cuando el PR realiza o implica una acción sobre los datos. Si el PR no actúa sobre los datos, el punto se deja sin marcar y se indica "No aplica" en las notas.
   - **Evidencia:** capturas, resultados de pruebas o enlaces relevantes, si aplica.
   - **Notas para revisión:** decisiones, limitaciones o aspectos que requieran atención especial.
-- **Issue:** si se requiere formalizar la petición antes de implementar, se abre primero un issue y se vincula al PR.
 - **Revisor:** una persona distinta del autor. Al aprobar y hacer el merge asume la responsabilidad de que el cambio cumple los estándares, incluidos los de este documento (nomenclatura de ramas y commits, y que no se incluyan secretos, datos crudos ni archivos del sistema).
 - **Resultado:** el revisor aprueba, o rechaza con *Request changes* indicando qué corregir. Un PR no se aprueba con la lista de verificación incompleta.
 - **Merge:** se hace una vez aprobado.
@@ -160,7 +158,7 @@ Una línea base solo puede asociarse a cambios aprobados: no se establece línea
 Flujo estándar:
 
 ```
-issue (opcional) → rama desde develop → commits → Pull Request → revisión → merge
+rama desde develop → commits → Pull Request → revisión → merge
 ```
 
 1. **Sincronizar:** antes de empezar, `git fetch` y verificar que la rama local esté al día con su upstream y con `develop`.
