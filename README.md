@@ -16,10 +16,14 @@ La estructura del repositorio es:
     - WBS y su archivo fuente.
   - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
     - Guía y archivo CSV de auditoría de registros.
+    - [Reporte de exploración de datos](docs/DU/Reporte_Exploracion_Datos.md) y sus figuras.
+    - [Investigación de la fuente de clima](docs/DU/Investigacion_Clima.md).
 - **[`src/`](src/)** — Código fuente de apoyo.
   - **[`DU/`](src/DU/)** — Scripts de preparación de datos para la fase *Data Understanding*.
     - [`generate_data.py`](src/DU/generate_data.py) — Procesa los archivos CSV de cada vaca.
     - [`anonymize_data.py`](src/DU/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
+    - [`clima_comparacion.py`](src/DU/clima_comparacion.py) — Descarga el clima de NASA POWER y lo compara con ERA5-Land.
+    - [`exploracion_datos.py`](src/DU/exploracion_datos.py) — Genera las figuras e indicadores de la exploración de datos.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
