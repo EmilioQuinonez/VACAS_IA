@@ -23,7 +23,9 @@ La estructura del repositorio es:
     - [`generate_data.py`](src/DU/generate_data.py) — Procesa los archivos CSV de cada vaca.
     - [`anonymize_data.py`](src/DU/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
     - [`clima_comparacion.py`](src/DU/clima_comparacion.py) — Descarga el clima de NASA POWER y lo compara con ERA5-Land.
+    - [`clima_validacion.py`](src/DU/clima_validacion.py) — Valida las fuentes de clima contra una estación observada, elige una sola fuente y genera la tabla horaria de clima.
     - [`exploracion_datos.py`](src/DU/exploracion_datos.py) — Genera las figuras e indicadores de la exploración de datos.
+    - [`exploracion_profunda.py`](src/DU/exploracion_profunda.py) — Profundiza la exploración: descriptivos, correlaciones, persistencia, adaptación, PCA y tablas auxiliares.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
