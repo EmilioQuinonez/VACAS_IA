@@ -156,6 +156,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+!.env.example
 
 # Spyder project settings
 .spyderproject
@@ -199,7 +200,7 @@ cython_debug/
 #   that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
 #   and can be added to the global gitignore or merged into this file. However, if you prefer, 
 #   you could uncomment the following to ignore the entire vscode folder
-# .vscode/
+.vscode/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 
@@ -219,3 +220,30 @@ __marimo__/
 
 # Carpeta de Data
 /Data/
+
+# Datos (crudos, sensibles o reproducibles)
+/data/
+*.csv
+*.csv.gz
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.npy
+*.npz
+
+# Excepción: la bitácora de auditoría de datos sí se versiona
+!docs/data_audit_logs.csv
+
+
+# Sistema operativo
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+desktop.ini
