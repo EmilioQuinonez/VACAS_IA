@@ -1,4 +1,5 @@
 Fecha,Persona,dataset_id / versión,Acción,Propósito,Resultado,Observaciones
+14/10/2026 11:53, XMaster417, vacas/3.0, creación de nuevo dataset con datos de 2026, Juntar más datos de las vacas y su historico, Archivo csv con los registros de vacas de distintas fechas, 
 13/10/2026 10:54, XMaster417, vacas/2.0, Exportación o acceso, Realizar un análisis exploratorio de los datos, archivo .ipynb con el análisis, observaciones en el archivo
 11/10/2026 15:17, Manu090704, vacas/2.0, Creación de nuevo dataset anonimizado, Se creó un nuevo dataset con los datos de vacas anonimizados, Archivo csv con los registros de vacas anonimizados,
 11/10/2026 14:17, XMaster417, vacas/1.0,Modificación de original,Juntar los datos separados de vacas en un solo archivo, Archivo csv con los registros unidos, La fecha se rellenó después de la modificación
