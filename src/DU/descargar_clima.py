@@ -1,11 +1,11 @@
 """
 Descarga el clima por hora de NASA POWER para las fechas de las sesiones de ordeno.
 
-Requiere: numpy, pandas y requests (el repo no tiene requirements.txt en develop).
+Cubre desde el dato mas antiguo hasta el ultimo de las sesiones: del 13/07/2022 al 28/01/2026.
+Requiere: numpy, pandas y requests (ver requirements.txt).
 
 Uso:
     python src/DU/descargar_clima.py
-    python src/DU/descargar_clima.py --inicio 2026-01-20 --fin 2026-01-29 --parametros T2M,RH2M
 
 Salidas (en Data/clima/, que Git ignora):
     nasa_power_<inicio>_<fin>.json   respuesta original de cada bloque anual
@@ -16,10 +16,7 @@ NASA POWER no pide llave ni cuenta: el script no lee el .env ni maneja credencia
 El CSV conserva la hora tal como la entrega POWER (promedio horario); no aplica ningun
 desfase. Al terminar imprime la fila para docs/data_audit_logs.csv y el texto de citacion.
 """
-import argparse
 import json
-import re
-import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -29,7 +26,7 @@ import pandas as pd
 import requests
 
 raiz = Path(__file__).resolve().parent.parent.parent
-destino_defecto = raiz / "Data" / "clima"
+destino = raiz / "Data" / "clima"
 
 URL_POWER = "https://power.larc.nasa.gov/api/temporal/hourly/point"
 # Centro de la celda de NASA POWER (MERRA-2: 0.5 x 0.625 grados). POWER devuelve el mismo
@@ -39,17 +36,18 @@ LONGITUD_CELDA = -100.0
 ZONA_HORARIA = "America/Mexico_City"
 COMUNIDAD = "AG"
 
-# Sesiones del 13/07/2022 al 28/01/2026, mas margen para los rezagos de hasta 4 dias
-# y para el huso horario (el ultimo dia local termina el 29/01 en UTC)
-INICIO_DEFECTO = "2022-07-06"
-FIN_DEFECTO = "2026-01-29"
+# Primera y ultima fecha (hora local) de las sesiones de ordeno
+INICIO_LOCAL = "2022-07-13"
+FIN_LOCAL = "2026-01-28"
+# NASA se pide en UTC: el ultimo dia local termina el 29/01 en UTC
+INICIO_UTC = "2022-07-13"
+FIN_UTC = "2026-01-29"
 
-# Variables horarias de la comunidad AG (maximo 15 por peticion)
-PARAMETROS_DEFECTO = [
+# Variables horarias de la comunidad AG
+PARAMETROS = [
     "T2M", "RH2M", "T2MDEW", "T2MWET", "QV2M", "PS", "WS2M", "WS10M", "WD10M",
     "PRECTOTCORR", "ALLSKY_SFC_SW_DWN", "ALLSKY_SFC_LW_DWN", "CLOUD_AMT",
 ]
-MAX_PARAMETROS = 15
 
 ESTADOS_REINTENTO = {429, 500, 502, 503, 504}
 REINTENTOS = 3
@@ -59,60 +57,6 @@ USER_AGENT = "VacasIA-descarga-clima/1.0"
 
 ARCHIVO_CSV = "clima_nasa_power_por_hora.csv"
 ARCHIVO_MANIFIESTO = "nasa_power_manifest.json"
-
-
-def validar_parametros(texto):
-    """
-        Valida la lista de parametros de NASA POWER pedida por el usuario.
-        Solo se aceptan nombres en mayusculas, digitos y guion bajo, sin repetidos,
-        para que nada raro llegue a la peticion.
-
-        Args:
-            texto (str): Parametros separados por coma, por ejemplo "T2M,RH2M".
-
-        Returns:
-            list: Los parametros en orden y sin repetir.
-    """
-    parametros = []
-    for parametro in texto.split(","):
-        parametro = parametro.strip().upper()
-        if not re.fullmatch(r"[A-Z0-9_]+", parametro):
-            raise ValueError(f"Parametro invalido: {parametro!r}")
-        if parametro not in parametros:
-            parametros.append(parametro)
-
-    if not 1 <= len(parametros) <= MAX_PARAMETROS:
-        raise ValueError(f"Se necesitan entre 1 y {MAX_PARAMETROS} parametros")
-    return parametros
-
-
-def verificar_destino_ignorado(destino):
-    """
-        Aborta si el destino esta dentro del repositorio y Git no lo ignora, para no dejar
-        datos del clima en una carpeta que se pueda versionar por accidente.
-
-        Args:
-            destino (Path): Carpeta donde se guardaran los datos.
-    """
-    destino = destino.resolve()
-    try:
-        destino.relative_to(raiz)
-    except ValueError:
-        return  # Fuera del repositorio: no hay riesgo de versionarlo
-
-    try:
-        resultado = subprocess.run(
-            ["git", "-C", str(raiz), "check-ignore", "-q", str(destino / "archivo")],
-            capture_output=True,
-        )
-    except FileNotFoundError:
-        raise RuntimeError("No se encontro git para comprobar que el destino esta ignorado")
-
-    if resultado.returncode != 0:
-        raise RuntimeError(
-            f"{destino} esta dentro del repo y Git no lo ignora. "
-            "Usa Data/clima u otra carpeta fuera del repositorio."
-        )
 
 
 def pedir_bloque(desde, hasta, parametros):
@@ -321,38 +265,18 @@ def imprimir_resumen(manifiesto):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Descarga el clima por hora de NASA POWER.")
-    parser.add_argument("--inicio", default=INICIO_DEFECTO, help="Primer dia, AAAA-MM-DD (UTC)")
-    parser.add_argument("--fin", default=FIN_DEFECTO, help="Ultimo dia, AAAA-MM-DD (UTC)")
-    parser.add_argument("--parametros", default=",".join(PARAMETROS_DEFECTO),
-                        help=f"Parametros de NASA POWER separados por coma (maximo {MAX_PARAMETROS})")
-    parser.add_argument("--destino", type=Path, default=destino_defecto,
-                        help="Carpeta de salida (por defecto Data/clima)")
-    args = parser.parse_args()
+    inicio, fin = pd.Timestamp(INICIO_UTC), pd.Timestamp(FIN_UTC)
 
-    try:
-        inicio, fin = pd.Timestamp(args.inicio).normalize(), pd.Timestamp(args.fin).normalize()
-        parametros = validar_parametros(args.parametros)
-    except ValueError as error:
-        parser.error(str(error))
-    if inicio > fin:
-        parser.error("--inicio no puede ser posterior a --fin")
-    if fin > pd.Timestamp.now().normalize():
-        parser.error("--fin no puede estar en el futuro")
+    archivos = descargar_bloques(inicio, fin, PARAMETROS, destino)
 
-    destino = args.destino.expanduser()
-    try:
-        verificar_destino_ignorado(destino)
-        archivos = descargar_bloques(inicio, fin, parametros, destino)
-    except RuntimeError as error:
-        raise SystemExit(f"Error: {error}")
-
-    bloques, infos = zip(*(leer_bloque(a, parametros) for a in archivos))
+    bloques, infos = zip(*(leer_bloque(a, PARAMETROS) for a in archivos))
     serie_local = a_hora_local(pd.concat(bloques).sort_index()).rename(columns=str.lower)
+    # Solo las horas locales del rango de las sesiones
+    serie_local = serie_local.loc[INICIO_LOCAL:FIN_LOCAL]
 
     print("... guardando ...")
     serie_local.to_csv(destino / ARCHIVO_CSV)
-    manifiesto = escribir_manifiesto(destino, archivos, parametros, list(infos), serie_local)
+    manifiesto = escribir_manifiesto(destino, archivos, PARAMETROS, list(infos), serie_local)
     print(f"Guardado! {len(serie_local)} horas locales en {destino / ARCHIVO_CSV}")
     imprimir_resumen(manifiesto)
 
