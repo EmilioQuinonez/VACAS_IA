@@ -12,15 +12,13 @@ from scipy import stats
 
 raiz = Path(__file__).resolve().parent.parent.parent
 tablas_defecto = raiz.parent / "analisis_descriptivo_datos_vacas" / "tablas"
-clima_defecto = raiz / "Data" / "clima" / "clima_nasa_power_por_hora.csv"
+clima_defecto = raiz / "Data" / "clima" / "clima_horario.csv"
 resumen_defecto = raiz / "Data" / "eda" / "resumen_exploracion.json"
 salida_defecto = raiz / "docs" / "DU" / "figuras"
 
 CUARTOS = ["di", "dd", "ti", "td"]
 EVENTOS = ["kick", "incomplete", "teat_missing"]
 ETIQUETAS_EVENTO = {"kick": "Patada", "incomplete": "Ordeño incompleto", "teat_missing": "Pezón no encontrado"}
-# NASA POWER entrega promedios horarios; correrlo una hora lo alinea con ERA5-Land (ver clima_comparacion.py)
-DESFASE_CLIMA_HORAS = 1
 UMBRAL_THI = 68
 UMBRAL_BRECHA_DIAS = 45
 
@@ -46,16 +44,18 @@ def guardar(fig, destino, nombre):
     plt.close(fig)
 
 
-def cargar_leche(tablas):
+def cargar_leche(tablas, con_alias=False):
     """
         Lee la tabla de eventos de ordeño, agrega variables derivadas y reemplaza el ID real
         por un alias (V001, V002, ...) para que ningun resultado muestre identificadores originales.
 
         Args:
             tablas (Path): Carpeta con leche_eventos_normalizados.csv.gz.
+            con_alias (bool): Si es True tambien devuelve el diccionario ID real -> alias, que sirve para
+                enlazar otras tablas y nunca debe imprimirse ni guardarse.
 
         Returns:
-            DataFrame: Una fila por sesion de ordeño.
+            DataFrame: Una fila por sesion de ordeño (o la tupla con el diccionario de alias).
     """
     leche = pd.read_csv(tablas / "leche_eventos_normalizados.csv.gz", parse_dates=["timestamp"],
                         dtype={"animal_id": str}).drop(columns=["source_file", "source_row", "source_kind"])
@@ -74,7 +74,7 @@ def cargar_leche(tablas):
     for variable in ["cond", "flow"]:
         columnas = [f"{variable}_{c}" for c in CUARTOS]
         leche[f"{variable}_media"] = leche[columnas].where(leche[columnas] > 0).mean(axis=1)
-    return leche
+    return (leche, alias) if con_alias else leche
 
 
 def perfilar_calidad(leche):
@@ -413,23 +413,46 @@ def graficar_intervalo_conductividad(leche, destino):
 
 def cargar_clima(ruta):
     """
-        Lee la serie horaria de NASA POWER y la corre DESFASE_CLIMA_HORAS para alinear los promedios horarios.
+        Lee la tabla horaria de clima de la fuente elegida (ver clima_validacion.py), que ya viene en
+        hora local, con el desfase corregido y con las variables derivadas de los dias previos.
 
         Args:
-            ruta (Path): CSV generado por clima_comparacion.py.
+            ruta (Path): CSV generado por clima_validacion.py.
 
         Returns:
-            DataFrame: Serie horaria local con temperatura, humedad y THI.
+            DataFrame: Serie horaria local con temperatura, humedad, THI y sus variables derivadas.
     """
     clima = pd.read_csv(ruta, index_col=0, parse_dates=True)
-    clima.index = clima.index + pd.Timedelta(hours=DESFASE_CLIMA_HORAS)
     clima.index.name = "hora_local"
-    return clima[["t2m", "rh2m", "thi"]]
+    return clima
+
+
+def produccion_relativa(leche):
+    """
+        Calcula la producción de cada vaca-dia dividida entre la mediana de sus 28 registros anteriores,
+        para quitar las diferencias entre vacas y la etapa de lactancia. Solo se conservan los dias con
+        un registro previo a 3 dias o menos y una referencia mayor a 5 kg.
+
+        Args:
+            leche (DataFrame): Tabla de sesiones de ordeño.
+
+        Returns:
+            DataFrame: Una fila por vaca-dia con leche_kg, referencia y relativa.
+    """
+    vaca_dia = leche.groupby(["animal_id", "fecha"]).agg(leche_kg=("milk_kg", "sum")).reset_index()
+    vaca_dia = vaca_dia.sort_values(["animal_id", "fecha"])
+    por_vaca = vaca_dia.groupby("animal_id")
+    vaca_dia["referencia"] = por_vaca["leche_kg"].transform(lambda s: s.rolling(28, min_periods=14).median().shift(1))
+    vaca_dia["dias_desde_previo"] = por_vaca["fecha"].diff().dt.days
+    vaca_dia = vaca_dia[(vaca_dia["dias_desde_previo"] <= 3) & (vaca_dia["referencia"] > 5)]
+    vaca_dia = vaca_dia[vaca_dia["fecha"] < leche["fecha"].max()]
+    vaca_dia["relativa"] = vaca_dia["leche_kg"] / vaca_dia["referencia"]
+    return vaca_dia
 
 
 def analizar_clima(leche, clima, destino):
     """
-        Cruza las sesiones con el clima de NASA POWER y grafica la relacion del THI con la producción
+        Cruza las sesiones con el clima de la fuente elegida y grafica la relacion del THI con la producción
         relativa por vaca, la hora de visita y los eventos (hipotesis H1, H2 y parte de H7).
         La producción relativa compara cada vaca-dia con la mediana de sus 28 registros anteriores,
         para quitar las diferencias entre vacas y la etapa de lactancia.
@@ -448,15 +471,7 @@ def analizar_clima(leche, clima, destino):
 
     diario = clima.groupby(clima.index.normalize()).agg(thi_medio=("thi", "mean"), thi_max=("thi", "max"),
                                                        temp_media=("t2m", "mean"))
-    vaca_dia = leche.groupby(["animal_id", "fecha"]).agg(leche_kg=("milk_kg", "sum")).reset_index()
-    vaca_dia = vaca_dia.sort_values(["animal_id", "fecha"])
-    por_vaca = vaca_dia.groupby("animal_id")
-    vaca_dia["referencia"] = por_vaca["leche_kg"].transform(lambda s: s.rolling(28, min_periods=14).median().shift(1))
-    vaca_dia["dias_desde_previo"] = por_vaca["fecha"].diff().dt.days
-    vaca_dia = vaca_dia[(vaca_dia["dias_desde_previo"] <= 3) & (vaca_dia["referencia"] > 5)]
-    vaca_dia = vaca_dia[vaca_dia["fecha"] < leche["fecha"].max()]
-    vaca_dia["relativa"] = vaca_dia["leche_kg"] / vaca_dia["referencia"]
-    vaca_dia = vaca_dia.merge(diario, left_on="fecha", right_index=True, how="inner")
+    vaca_dia = produccion_relativa(leche).merge(diario, left_on="fecha", right_index=True, how="inner")
 
     cortes = [0, 62, 66, 70, 74, 100]
     etiquetas = ["< 62", "62-66", "66-70", "70-74", "≥ 74"]
@@ -535,7 +550,7 @@ def main():
     parser = argparse.ArgumentParser(description="Genera las figuras y los indicadores de la exploración de datos.")
     parser.add_argument("--tablas", type=Path, default=tablas_defecto,
                         help="Carpeta con leche_eventos_normalizados.csv.gz")
-    parser.add_argument("--clima", type=Path, default=clima_defecto, help="CSV de NASA POWER de clima_comparacion.py")
+    parser.add_argument("--clima", type=Path, default=clima_defecto, help="CSV de clima_validacion.py")
     parser.add_argument("--salida", type=Path, default=salida_defecto, help="Carpeta de salida de las imágenes")
     parser.add_argument("--resumen", type=Path, default=resumen_defecto,
                         help="JSON con los indicadores (fuera de Git)")
