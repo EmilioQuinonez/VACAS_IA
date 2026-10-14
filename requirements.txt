@@ -1,5 +1,8 @@
-numpy 
+numpy
 pandas
+requests
+python-dotenv
+openpyxl
 matplotlib
 seaborn
 python-dotenv
