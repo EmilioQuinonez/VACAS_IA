@@ -1,15 +1,21 @@
-import pandas as pd
-import numpy as np
 import re
 import unicodedata
 from pathlib import Path
 
-raiz = Path(__file__).resolve().parent.parent.parent
-carpeta = raiz / "Data" / "vacas"
-clean = []
-total_duplicados = 0
-total_nulos = 0
-total_archivos = len(list(carpeta.glob("*.csv")))
+import numpy as np
+import pandas as pd
+
+
+RAIZ = Path(__file__).resolve().parent.parent.parent
+CARPETA = RAIZ / "Data" / "vacas"
+SALIDA = RAIZ / "Data" / "dataset_vacas.csv"
+
+# Se usan los nombres del CSV para conservar las columnas de salida existentes.
+EQUIVALENCIAS = {
+    "main_numero_de_ordeno": "estado_numero_de_ordeno",
+    "main_rcs_1000_celulas_ml": "estado_rcs_1000_celulas_ml",
+    "misc_ms": "misc_eo_po",
+}
 
 
 def normalizar_nombre(texto):
@@ -29,50 +35,88 @@ def normalizar_nombre(texto):
     return re.sub(r"[^a-z0-9]+", "_", texto).strip("_")
 
 
-for archivo in carpeta.glob("*.csv"):
-    # Carga de datos
-    print(f"\nLeyendo: {archivo.name} ")
+def leer_archivo(archivo):
+    """
+        Lee las dos filas de encabezado y los datos de un CSV o XLSX.
 
-    encabezados = pd.read_csv(archivo, sep=',', header=None, nrows=2, engine='python')
+        Args:
+            archivo (Path): Ruta del archivo a leer.
+
+        Returns:
+            pd.DataFrame: DataFrame con los datos del archivo, con nombres de 
+            columnas normalizados
+    """
+    if archivo.suffix.lower() == ".xlsx":
+        lector = pd.read_excel
+        opciones = {"engine": "openpyxl"}
+    else:
+        lector = pd.read_csv
+        opciones = {"sep": ",", "engine": "python"}
+
+    encabezados = lector(archivo, header=None, nrows=2, **opciones)
     grupo_actual = ""
     columnas = []
 
     for grupo, subcolumna in zip(encabezados.iloc[0], encabezados.iloc[1]):
         if pd.notna(grupo):
             grupo_actual = normalizar_nombre(grupo)
-        columnas.append(f"{grupo_actual}_{normalizar_nombre(subcolumna)}")
+        nombre = f"{grupo_actual}_{normalizar_nombre(subcolumna)}"
+        columnas.append(EQUIVALENCIAS.get(nombre, nombre))
 
-    data = pd.read_csv(
-        archivo,
-        sep=',',
-        header=None,
-        names=columnas,
-        skiprows=2,
-        engine='python'
+    if len(columnas) != len(set(columnas)):
+        raise ValueError(f"Hay columnas repetidas en los encabezados de {archivo.name}")
+
+    return lector(archivo, header=None, names=columnas, skiprows=2, **opciones)
+
+def id_de_vaca(archivo):
+    """
+        Obtiene el identificador de la vaca a partir del nombre del archivo.
+
+        Args:
+            archivo (Path): Ruta del archivo.
+        
+        Returns:
+            str: Identificador de la vaca.
+    """
+    if archivo.suffix.lower() == ".csv":
+        return archivo.stem
+
+    coincidencia = re.search(r"(\d+)$", archivo.stem)
+    if not coincidencia:
+        raise ValueError(f"No se encontró un identificador de vaca en {archivo.name}")
+    return coincidencia.group(1)
+
+
+def main():
+    archivos = sorted(CARPETA.glob("*.csv")) + sorted(
+        archivo for archivo in CARPETA.glob("*.xlsx")
+        if not archivo.name.startswith("~$")
     )
+    clean = []
+    total_duplicados = 0
+    total_nulos = 0
 
-    # Conteo de datos duplicados
-    duplicados = data.duplicated().sum()
-    total_duplicados += duplicados
+    for archivo in archivos:
+        print(f"\nLeyendo: {archivo.name} ")
+        data = leer_archivo(archivo)
 
-    # Revision de datos faltantes
-    data = data.replace('?', np.nan)
-    nulos = data.isnull().sum().sum()
-    total_nulos += nulos
+        total_duplicados += data.duplicated().sum()
+        data = data.replace("?", np.nan)
+        total_nulos += data.isnull().sum().sum()
 
-    nombre_archivo = archivo.stem
+        data.insert(0, "id_vaca", id_de_vaca(archivo))
+        clean.append(data)
 
-    # Crear columna al inicio
-    data.insert(0, "id_vaca", nombre_archivo)
+    print("============================= DF completo =============================")
+    df_salida = pd.concat(clean, ignore_index=True)
+    print("Total de archivos procesados: ", len(archivos))
+    print("Observaciones duplicadas: ", total_duplicados)
+    print("Valores nulos: ", total_nulos)
 
-    clean.append(data)
+    print("... guardando ...")
+    df_salida.to_csv(SALIDA, index=False)
+    print("Guardado!")
 
-print("============================= DF completo =============================")
-df_salida = pd.concat(clean, ignore_index=True)
-print("Total de archivos procesados: ", total_archivos)
-print("Observaciones duplicadas: ", total_duplicados)
-print("Valores nulos: ", total_nulos)
 
-print("... guardando ...")
-df_salida.to_csv(raiz / "Data" / "dataset_vacas.csv", index=False)
-print("Guardado!")
+if __name__ == "__main__":
+    main()

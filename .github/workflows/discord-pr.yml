@@ -1,0 +1,46 @@
+name: Notificar PR en Discord
+
+on:
+    pull_request:
+        types: [opened, reopened, ready_for_review]
+        branches: [develop, main]
+
+jobs:
+    notify:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Enviar mensaje a Discord
+              env:
+                  WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  TITLE: ${{ github.event.pull_request.title }}
+                  URL: ${{ github.event.pull_request.html_url }}
+                  AUTHOR: ${{ github.event.pull_request.user.login }}
+                  BASE: ${{ github.event.pull_request.base.ref }}
+                  HEAD: ${{ github.event.pull_request.head.ref }}
+                  NUMBER: ${{ github.event.pull_request.number }}
+              run: |
+                  if [ "$BASE" = "main" ]; then
+                    INTRO="🚨 ¡MUUUUY IMPORTANTE! Una vaca quiere entrar al establo principal"
+                  else
+                    INTRO="🌾 ¡Muuu! Una vaca trae pasto fresco al corral de desarrollo"
+                  fi
+
+                  jq -n \
+                    --arg title "🐄 ¡MUUU! PR #$NUMBER: $TITLE" \
+                    --arg url "$URL" \
+                    --arg desc "$INTRO
+
+                  🥛 La vaca **$AUTHOR** quiere ordeñar \`$HEAD\` hacia \`$BASE\`.
+                  👀 Vengan a revisarlo antes de que se corte la leche." \
+                    '{
+                      username: "Vaca Mensajera 🐮",
+                      content: "🔔 ¡Muuuuuu! ¡Atención, rebaño!",
+                      embeds: [{
+                        title: $title,
+                        url: $url,
+                        description: $desc,
+                        color: 9127187,
+                        footer: {text: "Rumiando código desde GitHub 🌿"}
+                      }]
+                    }' \
+                  | curl -sS -H "Content-Type: application/json" -d @- "$WEBHOOK"
