@@ -121,7 +121,7 @@ Se usa versionado semántico `vMAJOR.MINOR.PATCH`:
 
 Ejemplos: `v0.1.0` (primera línea base), `v0.2.0` (nueva funcionalidad o documento aprobado), `v1.0.0` (entrega al socio formador).
 
-Los documentos de `docs/` que lo requieran pueden llevar además una tabla de control de versiones propia (versión, descripción, autor, fecha).
+Los documentos de `docs/` no llevan tabla de control de versiones ni número de versión propios; su trazabilidad la dan el historial de Git y los Pull Requests.
 
 Los tags `vX.Y.Z` versionan el repositorio (código y documentación). No deben confundirse con la versión de los datos (`vacas/x.y`, sección 5.5), que es independiente.
 
