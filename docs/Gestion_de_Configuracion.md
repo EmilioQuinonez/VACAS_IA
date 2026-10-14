@@ -21,7 +21,7 @@ Aplica a todos los miembros del equipo. Cualquier elemento creado o modificado a
 2. Los CIs se clasifican por tipo: código, documento, dependencias/configuración, datos de referencia.
 3. Todo cambio a un CI debe hacerse mediante el flujo de control de cambios (sección 7). No se aceptan modificaciones directas a `main` ni a `develop`.
 4. Los CIs se mantienen bajo control de versiones en Git. El historial de commits y de Pull Requests es el registro de quién cambió qué y cuándo.
-5. Las líneas base se establecen en puntos de control definidos: entrega al socio formador y aprobación formal de entregables.
+5. Las únicas líneas base del proyecto son las ramas `main` y `develop`. Un release/tag se crea directamente sobre una de ellas (sección 6).
 6. Nunca se versionan secretos ni credenciales (`.env`, llaves `*.pem`, tokens). Las variables de entorno necesarias se documentan en `.env.example`, sin valores reales; los valores reales viven solo en el `.env` local de cada integrante.
 7. Nunca se versionan los datos de la granja (crudos, anonimizados ni intermedios), ni el archivo de equivalencias entre identificadores originales y anónimos; los datos se mantienen fuera del repositorio, de forma local. Los datos se controlan con su propio versionado y bitácora (sección 5.5).
 
@@ -46,12 +46,11 @@ No se consideran CIs: archivos temporales del sistema (`.DS_Store`), entornos vi
 
 | Rama | Uso | Reglas |
 |---|---|---|
-| `main` | Versión estable y entregas al socio formador. | Protegida. Solo recibe merges desde `release/*` (o desde `develop` al cerrar una entrega). Nunca commit directo. |
+| `main` | Versión estable y entregas al socio formador. | Protegida. Línea base de las entregas. Solo recibe merges desde `develop` mediante PR al cerrar una entrega. Nunca commit directo. |
 | `develop` | Integración del trabajo en curso. | Protegida. Recibe PRs de ramas de trabajo. Nunca commit directo. |
 | `feature/<descripcion>` | Nueva funcionalidad, análisis o documento. | Se crea desde `develop`. |
 | `fix/<descripcion>` | Corrección de un error. | Se crea desde `develop` (o desde `main` si es urgente, y luego se integra a `develop`). |
 | `docs/<descripcion>` | Cambios únicamente de documentación. | Se crea desde `develop`. |
-| `release/vX.Y.Z` | Preparación y congelamiento de una línea base. | Se crea desde `develop`; solo admite correcciones menores. |
 
 Reglas de nombre:
 
@@ -59,7 +58,7 @@ Reglas de nombre:
 - Descriptivo y corto; debe indicar qué se hace, no quién lo hace.
 - Una rama por cambio; se elimina después del merge.
 
-Ejemplos: `feature/gestion_configuracion`, `feature/descripcion_datos`, `fix/path_carpeta_raiz`, `docs/reporte_bu`, `release/v1.0.0`.
+Ejemplos: `feature/gestion_configuracion`, `feature/descripcion_datos`, `fix/path_carpeta_raiz`, `docs/reporte_bu`.
 
 ### 5.2 Commits
 
@@ -94,7 +93,7 @@ fix: borrar la carpeta de Data por seguridad
 
 ### 5.3 Pull Requests
 
-- Todo cambio llega a `develop` (o a `main` desde `release/*`) mediante un Pull Request. No se hace push directo.
+- Todo cambio llega a `develop` (o a `main` desde `develop` al cerrar una entrega) mediante un Pull Request. No se hace push directo.
 - **Título:** mismo formato que un commit (`feature: ...`, `fix: ...`).
 - **Plantilla:** todo PR debe usar la plantilla del repositorio (`.github/pull_request_template.md`), que GitHub carga automáticamente, y completar todas sus secciones:
   - **Resumen:** el problema y la solución propuesta.
@@ -137,21 +136,35 @@ Los datos no se guardan en Git, pero su control sí forma parte de la configurac
 
 ## 6. Líneas base y releases
 
-### 6.1 Cuándo crear una línea base
+### 6.1 Líneas base
 
-- Al realizar una entrega al socio formador.
-- Al aprobar formalmente un entregable (por ejemplo, un reporte o un conjunto de scripts de análisis).
+Las únicas líneas base del proyecto son dos ramas protegidas, que solo cambian mediante PR aprobado:
 
-### 6.2 Cómo crear un release en GitHub
+| Línea base | Qué representa |
+|---|---|
+| `main` | Versión estable y aprobada; lo que se entrega al socio formador. |
+| `develop` | Estado integrado y aprobado del trabajo en curso. |
 
-1. Verificar que `develop` (o la rama `release/*`) esté al día y que todos los cambios incluidos hayan sido aprobados mediante PR.
-2. Mezclar a `main` mediante PR aprobado.
-3. En GitHub: **Releases → Draft a new release**.
-4. Asignar el tag `vX.Y.Z` según la sección 5.4.
-5. Documentar en la descripción los cambios principales y los PRs incluidos.
-6. Publicar el release.
+No hay ramas `release/*`: el release se crea directamente sobre una de estas dos ramas.
 
-Una línea base solo puede asociarse a cambios aprobados: no se establece línea base de algo que está en revisión.
+### 6.2 Desde qué rama sacar un release
+
+| Situación | Rama | Tag de ejemplo |
+|---|---|---|
+| Entrega al socio formador o cierre de una fase. | `main` | `v1.0.0` |
+| Hito interno o entregable aprobado que no se entrega todavía. | `develop` | `v0.2.0` |
+
+Si el release es una entrega, primero se integra `develop` a `main` mediante PR y el tag se crea sobre `main`. Para todo lo demás basta con taguear `develop`.
+
+### 6.3 Cómo crear un release en GitHub
+
+1. Verificar que la rama elegida (`main` o `develop`) esté al día y que todos los cambios incluidos hayan sido aprobados mediante PR.
+2. En GitHub: **Releases → Draft a new release**.
+3. En **Target**, elegir la rama (`main` o `develop`) y crear el tag `vX.Y.Z` según la sección 5.4.
+4. Documentar en la descripción los cambios principales y los PRs incluidos.
+5. Publicar el release.
+
+Un release solo puede crearse sobre cambios aprobados: no se hace release de algo que está en revisión.
 
 ## 7. Control de cambios
 
