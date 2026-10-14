@@ -3,5 +3,7 @@ pandas
 matplotlib
 seaborn
 scipy
-python-dotenv
 notebook
+requests
+python-dotenv
+openpyxl
