@@ -1,9 +1,10 @@
-numpy 
+numpy
 pandas
 matplotlib
 seaborn
 python-dotenv
 scipy
 requests
+openpyxl
 scikit-learn
 statsmodels

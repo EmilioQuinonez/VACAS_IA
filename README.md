@@ -22,6 +22,7 @@ La estructura del repositorio es:
   - **[`DU/`](src/DU/)** — Scripts de preparación de datos para la fase *Data Understanding*.
     - [`generate_data.py`](src/DU/generate_data.py) — Procesa los archivos CSV de cada vaca.
     - [`anonymize_data.py`](src/DU/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
+    - [`descargar_clima.py`](src/DU/descargar_clima.py) — Descarga el clima por hora de NASA POWER a `Data/clima/`.
     - [`clima_comparacion.py`](src/DU/clima_comparacion.py) — Descarga el clima de NASA POWER y lo compara con ERA5-Land.
     - [`clima_validacion.py`](src/DU/clima_validacion.py) — Valida las fuentes de clima contra una estación observada, elige una sola fuente y genera la tabla horaria de clima.
     - [`exploracion_datos.py`](src/DU/exploracion_datos.py) — Genera las figuras e indicadores de la exploración de datos.
