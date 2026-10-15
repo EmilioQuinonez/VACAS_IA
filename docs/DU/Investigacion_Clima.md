@@ -1,6 +1,6 @@
 # Investigación: fuente de datos del clima del CAETEC
 
-Fase *Data Understanding* (CRISP-DM), punto 3 del reporte de exploración: ¿de dónde obtener el clima para el proyecto? Código actual: [`src/DU/descargar_clima.py`](../../src/DU/descargar_clima.py). La comparación de fuentes de las secciones 3 y 4 se hizo el 13/10/2026 con `clima_comparacion.py` y `clima_validacion.py`, que se retiraron del repositorio al cambiar la decisión; siguen en el historial de Git (commits `5d56442` y `f02c4ac`).
+Fase *Data Understanding* (CRISP-DM), punto 3 del reporte de exploración: ¿de dónde obtener el clima para el proyecto? Código actual: [`src/scripts/descargar_clima.py`](../../src/scripts/descargar_clima.py). La comparación de fuentes de las secciones 3 y 4 se hizo el 13/10/2026 con `clima_comparacion.py` y `clima_validacion.py`, que se retiraron del repositorio al cambiar la decisión; siguen en el historial de Git (commits `5d56442` y `f02c4ac`).
 
 **Resultado.** El proyecto usa **una sola fuente de clima: NASA POWER** (API horaria, comunidad AG, celda MERRA-2 de ½° × ⅝°). El 14/10/2026 el equipo eligió NASA POWER sobre ERA5-Land, que había ganado la validación del 13/10/2026 (sección 4). La razón: POWER entrega viento, radiación, presión, precipitación y nubosidad, y ERA5-Land por Open-Meteo solo temperatura y humedad. Además es la fuente que sugirió el socio formador. El costo es un THI con más error contra una estación (RMSE diario 1.72 contra 1.29) y un desfase de una hora que la exploración corrige al leer la serie (sección 4.3).
 
@@ -116,7 +116,7 @@ La exploración corrige el desfase de una hora (sección 4.3), calcula el THI co
 ## 8. Cómo reproducirlo
 
 ```bash
-python src/DU/descargar_clima.py   # serie horaria de NASA POWER (usa red)
+python src/scripts/descargar_clima.py   # serie horaria de NASA POWER (usa red)
 ```
 
 El script guarda las respuestas originales en `Data/clima/` y no las vuelve a pedir si ya existen. Para repetir la comparación de las secciones 3 y 4, los scripts están en el historial de Git (commits `5d56442` y `f02c4ac`).

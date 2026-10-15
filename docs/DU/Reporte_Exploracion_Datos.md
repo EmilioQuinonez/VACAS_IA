@@ -12,7 +12,7 @@ Fase *Data Understanding* (CRISP-DM). Cubre cuatro puntos: visualizar y consulta
 |---|---|
 | Tabla base | Dataset anonimizado **`vacas/3.0`** (`generate_data.py` + `anonymize_data.py`): **280,699 sesiones de 207 vacas**, del 13/07/2022 al 28/01/2026. Una fila es una sesión de ordeño de una vaca en un robot (VMS). Se usan los xlsx de producción y, de los CSV de marzo a junio de 2025, solo los ordeños de las vacas que no tienen xlsx (el resto repite sesiones de los xlsx) |
 | Clima | **NASA POWER horario** (API v2.10.2, comunidad AG, descargado el 15/10/2026 con `descargar_clima.py`), fuente única elegida por el equipo; 100 % de las sesiones con clima (ver [Investigacion_Clima.md](Investigacion_Clima.md)) |
-| Código | [`src/DU/exploracion_datos.py`](../../src/DU/exploracion_datos.py) (primera exploración) y [`src/DU/exploracion_profunda.py`](../../src/DU/exploracion_profunda.py) (profundización y PCA); el clima sale de [`src/DU/descargar_clima.py`](../../src/DU/descargar_clima.py) |
+| Código | [`src/DU/exploracion_datos.py`](../../src/DU/exploracion_datos.py) (primera exploración) y [`src/DU/exploracion_profunda.py`](../../src/DU/exploracion_profunda.py) (profundización y PCA); el clima sale de [`src/scripts/descargar_clima.py`](../../src/scripts/descargar_clima.py) |
 | Datos | Fuera del repositorio (`Data/`), según la política de uso de datos. Todas las figuras de `figuras/` se generaron con `vacas/3.0` y NASA POWER v2.10.2 |
 
 **Variables.** Por sesión: producción (`milk_kg`), duración, intervalo desde el ordeño anterior, número de sesión del día, y por cuarto de la ubre (DI, DD, TI, TD) la producción, el flujo, la sangre y la conductividad; además `mdi`, el robot (`machine`), el destino de la leche y tres banderas binarias: `kick` (patada), `incomplete` (ordeño incompleto) y `teat_missing` (pezón no encontrado). El diccionario completo está en la sección 2.3.
@@ -312,9 +312,9 @@ Un solo índice (THI medio o máximo) captura el nivel, pero no la nubosidad ni 
 ## 8. Cómo reproducirlo
 
 ```bash
-python src/DU/generate_data.py          # une los archivos de Data/vacas/ en Data/dataset_vacas.csv
-python src/DU/anonymize_data.py         # aplica el hash a vaca y robot (llave COWSKEY)
-python src/DU/descargar_clima.py        # clima por hora de NASA POWER (usa red)
+python src/scripts/generate_data.py     # une los archivos de Data/vacas/ en Data/dataset_vacas.csv
+python src/scripts/anonymize_data.py    # aplica el hash a vaca y robot (llave COWSKEY)
+python src/scripts/descargar_clima.py   # clima por hora de NASA POWER (usa red)
 python src/DU/exploracion_datos.py      # figuras e indicadores de la primera exploración
 python src/DU/exploracion_profunda.py   # profundización y PCA
 ```
