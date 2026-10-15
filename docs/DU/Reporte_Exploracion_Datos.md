@@ -25,7 +25,7 @@ Esta versión rehace la exploración con dos insumos nuevos del equipo. Las conc
 |---|---|
 | La tabla base pasa de una tabla normalizada propia (con alias `V001…`) al dataset anonimizado `vacas/3.0` del equipo | Las 280,699 sesiones y 207 vacas coinciden. Los alias de vaca y los nombres «VMS 1 a 3» se sustituyen por hashes |
 | Los intervalos de 24 h o más vienen en Excel como fecha (1900-01-01 equivale a 24 h); la tabla anterior solo conservaba la hora y los convertía en intervalos cortos | Hay **2,337 sesiones con intervalo de 24 a 48 h** que antes parecían de 0 a 24 h. Los **185 intervalos de más de 48 h** (hasta 122 días) son regresos tras una brecha y se tratan como faltantes. El intervalo deja de tener «tope de 24 h», el logaritmo ya no lo sobrecorrige y los incompletos con intervalo menor a 4 h suben de 25.9 % a **28.2 %** (H6) |
-| El clima pasa de ERA5-Land (≈ 11 km, solo temperatura y humedad) a NASA POWER (celda de ½° × ⅝°, 13 variables) | H1 y H2 dan casi lo mismo. El PCA del clima diario ya no es de dos dimensiones: el **viento** forma un tercer componente propio |
+| El clima pasa de ERA5-Land (≈ 11 km, solo temperatura y humedad) a NASA POWER (celda de ½° × ⅝°, 13 variables) | H1 y H2 dan casi lo mismo. El PCA del clima diario ya no es de dos dimensiones: el **viento** forma un tercer componente propio. POWER etiqueta cada hora una hora antes del clima que describe; el desfase se corrige al leer la serie |
 | Se quitan las fuentes auxiliares (consumo, historiales y reportes del 18/07/2025), que no forman parte del dataset anonimizado | Salen los resultados de consumo, acciones rechazadas, periodo seco, días en leche y reporte de patadas |
 
 ## 2. Visualizar y consultar los datos
@@ -253,17 +253,17 @@ Dos advertencias: (1) las variables del PCA se miden durante la misma sesión qu
 
 ## 4. Datos del clima integrados
 
-Se unió cada sesión con la hora de clima de **NASA POWER** (cobertura del 100 %; ver [Investigacion_Clima.md](Investigacion_Clima.md)). La serie se usa tal como la entrega `descargar_clima.py`, sin corregir el desfase de +1 h que se detectó al compararla con una estación (sección 7). Se calculó el índice temperatura-humedad `THI = (1.8 T + 32) − (0.55 − 0.0055 · HR) · (1.8 T − 26)`. En el periodo, el 20.8 % de las sesiones ocurre con THI ≥ 68 y hay 710 de 1,296 días con THI máximo ≥ 70 (con ERA5-Land eran 22.9 % y 724 de 1,305).
+Se unió cada sesión con la hora de clima de **NASA POWER** (cobertura del 100 %; ver [Investigacion_Clima.md](Investigacion_Clima.md)). La fila etiquetada *t* de POWER corresponde al clima de *t* + 1 h (se confirmó con una estación observada), así que al leer la serie se corre una hora: la sesión de la hora *T* toma la fila *T* − 1 h. El CSV de `descargar_clima.py` no se modifica. Se calculó el índice temperatura-humedad `THI = (1.8 T + 32) − (0.55 − 0.0055 · HR) · (1.8 T − 26)`. En el periodo, el 21.2 % de las sesiones ocurre con THI ≥ 68 y hay 710 de 1,297 días con THI máximo ≥ 70 (con ERA5-Land eran 22.9 % y 724 de 1,305).
 
 ![Clima y THI](figuras/eda_clima_thi.png)
 
 Para quitar las diferencias entre vacas y etapas de lactancia, la producción de cada vaca-día se divide entre la mediana de sus 28 registros anteriores («producción relativa»).
 
-**El clima diario tiene al menos tres dimensiones.** Se ajustó un PCA a trece resúmenes diarios sobre 1,296 días con 24 horas completas. Nueve son de temperatura, humedad y THI (temperatura media, máxima y mínima; humedad; THI medio, máximo y mínimo; horas con THI alto; amplitud térmica). Los otros cuatro son variables que ERA5-Land no traía: viento, radiación solar, lluvia y nubosidad. Dos componentes explican el 78.7 % y hacen falta **tres para el 80 %** (86.6 %):
+**El clima diario tiene al menos tres dimensiones.** Se ajustó un PCA a trece resúmenes diarios sobre 1,295 días con 24 horas completas. Nueve son de temperatura, humedad y THI (temperatura media, máxima y mínima; humedad; THI medio, máximo y mínimo; horas con THI alto; amplitud térmica). Los otros cuatro son variables que ERA5-Land no traía: viento, radiación solar, lluvia y nubosidad. Dos componentes explican el 78.7 % y hacen falta **tres para el 80 %** (86.6 %):
 
 ![PCA del clima diario](figuras/eda_pca_clima.png)
 
-- **PC1 (51.1 %)** es el nivel térmico: temperatura media (0.38), THI máximo (0.38), horas con THI alto (0.37) y temperatura máxima (0.37); la radiación también carga aquí (0.29).
+- **PC1 (51.0 %)** es el nivel térmico: temperatura media (0.38), THI máximo (0.38), horas con THI alto (0.37) y temperatura máxima (0.37); la radiación también carga aquí (0.29).
 - **PC2 (27.6 %)** contrasta los días despejados y secos con los nublados y húmedos: amplitud térmica (0.47) contra nubosidad (−0.43), humedad (−0.37), temperatura mínima (−0.36) y lluvia (−0.33).
 - **PC3 (7.9 %)** es casi solo el **viento** (0.97), que no se parece a ninguna otra variable.
 
@@ -283,7 +283,7 @@ Un solo índice (THI medio o máximo) captura el nivel, pero no la nubosidad ni 
 
 **Hallazgos adicionales.**
 
-- La **tasa de patadas sube con el THI de la hora de la sesión**, de 15.3 % con THI menor a 55 a 17.6 % con THI de 68 o más (+2.3 puntos porcentuales; +2.6 con ERA5-Land). Está confundida con la hora del día (las patadas son más frecuentes a mediodía y tarde, 16.3 % a 17.6 % entre 10 y 20 h frente a 14.6 % a 15.7 % de madrugada); se debe controlar antes de afirmarlo. Los ordeños incompletos y los pezones no encontrados no muestran relación con el THI.
+- La **tasa de patadas sube con el THI de la hora de la sesión**, de 15.1 % con THI menor a 55 a 17.6 % con THI de 68 o más (+2.5 puntos porcentuales; +2.6 con ERA5-Land). Está confundida con la hora del día (las patadas son más frecuentes a mediodía y tarde, 16.3 % a 17.6 % entre 10 y 20 h frente a 14.6 % a 15.7 % de madrugada); se debe controlar antes de afirmarlo. Los ordeños incompletos y los pezones no encontrados no muestran relación con el THI.
 - Los eventos **se agrupan en el tiempo**: tras una sesión con evento la probabilidad del siguiente es de 3.3 a 4.5 veces mayor, y 1.5 a 1.6 veces mayor que lo esperable solo por la vaca (sección 3.7).
 - Las vacas recién ingresadas muestran más eventos entre la semana 1 y el mes 1 (sección 3.8), confundido con el inicio de la lactancia.
 
@@ -303,7 +303,7 @@ Un solo índice (THI medio o máximo) captura el nivel, pero no la nubosidad ni 
 
 - El consumo de concentrado, los historiales y los reportes del 18/07/2025 no forman parte del dataset anonimizado y quedaron fuera de esta versión.
 - No hay fecha de parto ni etiquetas de salud: la lactancia se aproxima por brechas de registro, sin validación contra una fecha de parto.
-- El clima es de exterior y de una celda de NASA POWER de ½° × ⅝° (≈ 55 × 65 km); no mide el microclima del establo. Contra una estación observada, su THI diario tiene más error que el de ERA5-Land (RMSE 1.72 contra 1.29), y sus horas quedan **desfasadas una hora**: la correlación por hora con la estación sube de 0.884 a 0.943 al correr la serie una hora hacia adelante. Aquí se usa sin corregir, como la entrega `descargar_clima.py`, así que el clima asignado a cada sesión puede ser el de la hora contigua; afecta el análisis por hora (patadas según el THI), no los resúmenes diarios.
+- El clima es de exterior y de una celda de NASA POWER de ½° × ⅝° (≈ 55 × 65 km); no mide el microclima del establo. Contra una estación observada, su THI diario tiene más error que el de ERA5-Land (RMSE 1.72 contra 1.29), y sus horas vienen **desfasadas una hora**: la correlación por hora con la estación sube de 0.884 a 0.943 al correr la serie una hora hacia adelante. La exploración aplica esa corrección al leer la serie (sección 4); queda la incertidumbre de que el desfase se midió contra una sola estación.
 - Los hashes de vaca y de robot dependen de la llave de `anonymize_data.py`: si se regenera el dataset con otra llave, cambian (no los resultados).
 - Los intervalos de confianza de las tasas suponen sesiones independientes y son optimistas; el análisis de H1 y H2 usa un dato por día, pero los días tampoco son independientes (estacionalidad).
 - Falta confirmar con el socio formador la interpretación de los huecos de las 04, 12–13 y 20 h, el sensor TD del robot `74bb9015` (traducirlo con el mapa de equivalencias), la definición exacta de `incomplete`, `teat_missing` y `kick`, si el robot reintenta tras un incompleto, y la fecha de parto y secado por vaca.

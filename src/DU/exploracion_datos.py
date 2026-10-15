@@ -23,6 +23,8 @@ UMBRAL_THI = 68
 UMBRAL_BRECHA_DIAS = 45
 # Un intervalo de mas de 48 h es el regreso tras una brecha (periodo seco), no un intervalo de ordeño
 UMBRAL_INTERVALO_H = 48
+# NASA POWER etiqueta cada hora una hora antes del clima que describe
+DESFASE_POWER_H = 1
 
 COLOR_BASE = "#2a7a8c"
 COLOR_ALERTA = "#b5473a"
@@ -521,17 +523,21 @@ def graficar_intervalo_conductividad(leche, destino):
 
 def cargar_clima(ruta):
     """
-        Lee la serie horaria de NASA POWER (descargar_clima.py), que ya viene en hora local y sin
-        desfase aplicado, y le agrega el indice temperatura-humedad:
+        Lee la serie horaria de NASA POWER (descargar_clima.py), que ya viene en hora local, corrige su
+        desfase y le agrega el indice temperatura-humedad:
         THI = (1.8 T + 32) - (0.55 - 0.0055 HR) * (1.8 T - 26)
+
+        La fila etiquetada t de POWER corresponde al clima de t + 1 h (confirmado contra una estacion
+        observada), asi que se corre el indice una hora: una sesion a la hora T toma la fila T - 1 h.
 
         Args:
             ruta (Path): CSV generado por descargar_clima.py.
 
         Returns:
-            DataFrame: Serie horaria local con las variables de POWER y el THI.
+            DataFrame: Serie horaria local, ya alineada, con las variables de POWER y el THI.
     """
     clima = pd.read_csv(ruta, index_col="hora", parse_dates=True)
+    clima.index = clima.index + pd.Timedelta(hours=DESFASE_POWER_H)
     clima["thi"] = (1.8 * clima["t2m"] + 32) - (0.55 - 0.0055 * clima["rh2m"]) * (1.8 * clima["t2m"] - 26)
     return clima
 

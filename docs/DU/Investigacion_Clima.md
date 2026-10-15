@@ -2,7 +2,7 @@
 
 Fase *Data Understanding* (CRISP-DM), punto 3 del reporte de exploración: ¿de dónde obtener el clima para el proyecto? Código actual: [`src/DU/descargar_clima.py`](../../src/DU/descargar_clima.py). La comparación de fuentes de las secciones 3 y 4 se hizo el 13/10/2026 con `clima_comparacion.py` y `clima_validacion.py`, que se retiraron del repositorio al cambiar la decisión; siguen en el historial de Git (commits `5d56442` y `f02c4ac`).
 
-**Resultado.** El proyecto usa **una sola fuente de clima: NASA POWER** (API horaria, comunidad AG, celda MERRA-2 de ½° × ⅝°). El 14/10/2026 el equipo eligió NASA POWER sobre ERA5-Land, que había ganado la validación del 13/10/2026 (sección 4). La razón: POWER entrega viento, radiación, presión, precipitación y nubosidad, y ERA5-Land por Open-Meteo solo temperatura y humedad. Además es la fuente que sugirió el socio formador. El costo es un THI con más error contra una estación (RMSE diario 1.72 contra 1.29) y un desfase de una hora que no se corrige (sección 4.3).
+**Resultado.** El proyecto usa **una sola fuente de clima: NASA POWER** (API horaria, comunidad AG, celda MERRA-2 de ½° × ⅝°). El 14/10/2026 el equipo eligió NASA POWER sobre ERA5-Land, que había ganado la validación del 13/10/2026 (sección 4). La razón: POWER entrega viento, radiación, presión, precipitación y nubosidad, y ERA5-Land por Open-Meteo solo temperatura y humedad. Además es la fuente que sugirió el socio formador. El costo es un THI con más error contra una estación (RMSE diario 1.72 contra 1.29) y un desfase de una hora que la exploración corrige al leer la serie (sección 4.3).
 
 ## 1. Pregunta y criterios
 
@@ -83,7 +83,7 @@ Esa comparación mide qué tanto se parecen dos reanálisis entre sí, no cuál 
 
 Lo que hay que tener presente al usar NASA POWER:
 
-1. **Desfase de una hora.** Contra la estación, la correlación horaria de la temperatura sube de 0.884 a 0.943 al correr la serie una hora hacia adelante (POWER entrega promedios horarios). `descargar_clima.py` no aplica ese desfase, y la exploración usa la serie tal cual; afecta los análisis por hora, no los resúmenes diarios.
+1. **Desfase de una hora.** Contra la estación, la correlación horaria de la temperatura sube de 0.884 a 0.943 al correr la serie una hora hacia adelante (POWER entrega promedios horarios). Es decir, la fila etiquetada *t* corresponde al clima de *t* + 1 h. `descargar_clima.py` deja el CSV sin tocar, y la exploración (`cargar_clima` en `exploracion_datos.py`) corre el índice una hora al leerlo, de modo que la sesión de la hora *T* toma la fila *T* − 1 h.
 2. **Sesgo frío y celda gruesa.** El THI horario tiene un sesgo de −1.10 frente a la estación, y la celda de ≈ 55 × 65 km promedia una zona más alta que el establo (2,145 m contra 1,813 m de la estación). Los umbrales absolutos de la literatura (THI 68 o 72) se cruzan con algo menos de frecuencia que en la realidad.
 3. **La estación no es el establo.** Las métricas dicen qué tan bien cada fuente reproduce el clima regional medido en otro punto, no el microclima junto a las vacas.
 
@@ -95,7 +95,7 @@ La serie de POWER trae 13 variables por hora: temperatura, humedad, punto de roc
 
 `descargar_clima.py` deja la tabla `Data/clima/clima_nasa_power_por_hora.csv` (fuera de Git): una fila por hora local (`America/Mexico_City`), del 13/07/2022 00:00 al 28/01/2026 23:00, con **31,104 horas** y las 13 variables de POWER en minúsculas (`t2m`, `rh2m`, `ws2m`, `prectotcorr`, `allsky_sfc_sw_dwn`, `cloud_amt`, …). Guarda además las respuestas originales por bloque anual y un manifiesto con la versión de la API (v2.10.2), la fecha de descarga (15/10/2026), las unidades y los faltantes.
 
-La exploración calcula el THI con `THI = (1.8 T + 32) − (0.55 − 0.0055 · HR) · (1.8 T − 26)` y une cada sesión con su fila por la hora de inicio. Las horas repetidas por el cambio de horario de verano de octubre de 2022 se promedian. Falta confirmar con el socio formador si el reloj del sistema de ordeño siguió ese horario de verano (hasta el 30/10/2022). Las variables que solo usan información previa a la sesión (horas con THI alto en las 24 o 48 h previas, resumen del día anterior, rezagos de 1 a 4 días) se dejan para la fase de preparación de datos.
+La exploración corrige el desfase de una hora (sección 4.3), calcula el THI con `THI = (1.8 T + 32) − (0.55 − 0.0055 · HR) · (1.8 T − 26)` y une cada sesión con su fila por la hora de inicio. Las horas repetidas por el cambio de horario de verano de octubre de 2022 se promedian. Falta confirmar con el socio formador si el reloj del sistema de ordeño siguió ese horario de verano (hasta el 30/10/2022). Las variables que solo usan información previa a la sesión (horas con THI alto en las 24 o 48 h previas, resumen del día anterior, rezagos de 1 a 4 días) se dejan para la fase de preparación de datos.
 
 ## 6. Riesgos y cómo mitigarlos
 
