@@ -1,8 +1,8 @@
 # Investigación: fuente de datos del clima del CAETEC
 
-Fase *Data Understanding* (CRISP-DM), punto 3 del reporte de exploración: ¿de dónde obtener el clima para el proyecto? Código: [`src/DU/clima_comparacion.py`](../../src/DU/clima_comparacion.py) (primera comparación) y [`src/DU/clima_validacion.py`](../../src/DU/clima_validacion.py) (validación contra una estación y tabla final). Fecha de la investigación: 13/10/2026.
+Fase *Data Understanding* (CRISP-DM), punto 3 del reporte de exploración: ¿de dónde obtener el clima para el proyecto? Código actual: [`src/DU/descargar_clima.py`](../../src/DU/descargar_clima.py). La comparación de fuentes de las secciones 3 y 4 se hizo el 13/10/2026 con `clima_comparacion.py` y `clima_validacion.py`, que se retiraron del repositorio al cambiar la decisión; siguen en el historial de Git (commits `5d56442` y `f02c4ac`).
 
-**Resultado.** El proyecto usa **una sola fuente de clima: ERA5-Land** (reanálisis de Copernicus, ≈ 11 km, servido por Open-Meteo). Gana la regla de decisión fijada antes de ver los resultados y es la candidata de mayor resolución. NASA POWER, la fuente que sugirió el socio, queda como respaldo: es una alternativa con casi la misma calidad en la dinámica diaria, pero más sesgada y de resolución más gruesa.
+**Resultado.** El proyecto usa **una sola fuente de clima: NASA POWER** (API horaria, comunidad AG, celda MERRA-2 de ½° × ⅝°). El 14/10/2026 el equipo eligió NASA POWER sobre ERA5-Land, que había ganado la validación del 13/10/2026 (sección 4). La razón: POWER entrega viento, radiación, presión, precipitación y nubosidad, y ERA5-Land por Open-Meteo solo temperatura y humedad. Además es la fuente que sugirió el socio formador. El costo es un THI con más error contra una estación (RMSE diario 1.72 contra 1.29) y un desfase de una hora que no se corrige (sección 4.3).
 
 ## 1. Pregunta y criterios
 
@@ -25,7 +25,7 @@ El Reporte de Business Understanding exige datos del clima "lo más precisos pos
 |---|---|---|---|
 | Costo y acceso | Gratuito. Sin límite fijo, el uso se monitorea y se limita para un acceso equitativo | De pago: 10,000 eventos gratis al mes y luego desde USD 0.15 por 1,000. Requiere cuenta de Google Cloud con facturación | Gratis para uso **no comercial** (menos de 10,000 llamadas al día); licencia de datos CC BY 4.0 |
 | Histórico | Horario desde **2001/01/01** hasta casi tiempo real | Solo las **últimas 24 horas** | ERA5 desde 1940 y ERA5-Land desde 1950, con 5 días de retraso |
-| Resolución espacial | Malla MERRA-2 de ½° × ⅝° (≈ 50 × 60 km); cada valor es el promedio de la celda | Puntual (modelo propio) | ERA5-Land ≈ 11 km; ERA5 ≈ 25 km; IFS ≈ 9 km |
+| Resolución espacial | Malla MERRA-2 de ½° × ⅝° (≈ 55 × 65 km); cada valor es el promedio de la celda | Puntual (modelo propio) | ERA5-Land ≈ 11 km; ERA5 ≈ 25 km; IFS ≈ 9 km |
 | Variables | Temperatura, humedad, viento, presión, precipitación, entre otras | Condiciones actuales, pronóstico horario (240 h) y diario (10 días) | Temperatura y humedad en ERA5-Land; **viento, radiación y precipitación solo en ERA5** |
 | Pronóstico | No | Sí | Sí (API de pronóstico y pronósticos archivados desde ≈ 2022) |
 | Uso y citación | Pide acreditar "POWER Hourly vX.X.X" con la fecha de acceso y avisar al proyecto de las publicaciones | Atribución obligatoria; caché y almacenamiento restringidos (texto oficial por verificar) | Atribución CC BY 4.0 |
@@ -50,10 +50,6 @@ Se descargó la serie horaria de NASA POWER (temperatura a 2 m, humedad relativa
 | Sesgo del THI | −1.37 |
 | Horas con THI ≥ 68 | 19.8 % (NASA POWER) frente a 20.8 % (ERA5-Land) |
 
-![Comparación de NASA POWER y ERA5-Land](figuras/clima_comparacion.png)
-
-![Cobertura de clima sobre las sesiones](figuras/clima_cobertura.png)
-
 Esa comparación mide qué tanto se parecen dos reanálisis entre sí, no cuál se acerca más a la realidad. Por eso se añadió la validación de la sección 4.
 
 ## 4. Validación contra una estación observada
@@ -61,7 +57,7 @@ Esa comparación mide qué tanto se parecen dos reanálisis entre sí, no cuál 
 ### 4.1 Diseño
 
 - **Referencia:** observaciones METAR de la estación del aeropuerto de Querétaro (MMQT), del archivo ASOS del [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/request/download.phtml). Se descargaron 30,847 observaciones (06/07/2022 – 28/01/2026) con temperatura y humedad. Es una medición real, pero de otro punto que el establo y a otra elevación (1,813 m según el archivo; el punto de ERA5-Land usado está a 1,913 m). La estación **solo valida y no entra al dataset**.
-- **Candidatas:** NASA POWER (≈ 50 km), ERA5-Land (≈ 11 km) y ERA5 (≈ 25 km), todas con cobertura del 100 % de las 280,699 sesiones y sin faltantes de temperatura ni humedad.
+- **Candidatas:** NASA POWER (≈ 55 × 65 km), ERA5-Land (≈ 11 km) y ERA5 (≈ 25 km), todas con cobertura del 100 % de las 280,699 sesiones y sin faltantes de temperatura ni humedad.
 - **Alineación:** cada fuente se interpola linealmente en el instante exacto de cada observación. Antes se busca el desfase horario (de −3 a +3 h) que maximiza la correlación de la temperatura, porque POWER entrega promedios horarios y los reanálisis valores instantáneos.
 - **Métricas:** sesgo (fuente − estación), error absoluto medio (MAE), RMSE, RMSE sin el sesgo medio y correlación de Pearson, por hora y por promedios diarios (días con al menos 18 observaciones: 1,299). También el acuerdo en el cruce del umbral de estrés térmico: sensibilidad, precisión y F1 de THI ≥ 68 por hora y de THI máximo del día ≥ 70.
 - **Regla de decisión (fijada antes de ver los resultados):** se mantiene NASA POWER, salvo que otra candidata reduzca al menos **10 %** el RMSE del THI diario medio y **no empeore** el F1 del umbral horario de THI.
@@ -81,59 +77,49 @@ Esa comparación mide qué tanto se parecen dos reanálisis entre sí, no cuál 
 | F1 de THI horario ≥ 68 (sensibilidad / precisión) | 0.849 (0.80 / 0.91) | **0.879** (0.86 / 0.90) | 0.833 (0.99 / 0.72) |
 | F1 de THI máximo del día ≥ 70 | 0.897 | **0.911** | 0.870 |
 
-![Validación de las fuentes contra la estación](figuras/clima_validacion.png)
-
 ### 4.3 Decisión
 
-**ERA5-Land.** Reduce 25 % el RMSE del THI diario medio frente a NASA POWER (1.29 contra 1.72), supera la regla (≥ 10 %) y mejora el F1 del umbral (0.879 contra 0.849). También es la candidata de mayor resolución entre las que cubren todo el periodo y se queda con una sola fuente. NASA POWER conserva ventajas (es la sugerida por el socio y entrega precipitación y viento), pero su celda es más gruesa y su sesgo del THI es negativo (−1.10).
+**Por la regla de la sección 4.1 ganaba ERA5-Land**: reduce 25 % el RMSE del THI diario medio frente a NASA POWER (1.29 contra 1.72) y mejora el F1 del umbral (0.879 contra 0.849). Aun así, **el equipo decidió el 14/10/2026 usar NASA POWER**, porque quiere evaluar más variables que temperatura y humedad. ERA5-Land por Open-Meteo entrega la precipitación, el viento y la radiación 100 % nulos (se comprobó en las 8,760 horas de un bloque anual). Con eso la regla de decisión deja de aplicar: queda como evidencia de lo que se pierde en exactitud.
 
-Tres matices que conviene dejar claros:
+Lo que hay que tener presente al usar NASA POWER:
 
-1. **El desfase de +1 h de NASA POWER queda confirmado** por una estación independiente (la correlación sube de 0.884 a 0.943), no solo por la comparación con otro reanálisis.
-2. **ERA5 (25 km) tiene la mejor correlación y el menor error sin sesgo**, pero un sesgo cálido de +2.2 de THI que el criterio de RMSE penaliza. Un modelo de árboles o una regresión absorben un sesgo constante, pero los umbrales de la literatura (THI 68 o 72) exigen el nivel absoluto. Si se quisiera usar ERA5, habría que corregir el sesgo con una estación; por ahora no se hace.
+1. **Desfase de una hora.** Contra la estación, la correlación horaria de la temperatura sube de 0.884 a 0.943 al correr la serie una hora hacia adelante (POWER entrega promedios horarios). `descargar_clima.py` no aplica ese desfase, y la exploración usa la serie tal cual; afecta los análisis por hora, no los resúmenes diarios.
+2. **Sesgo frío y celda gruesa.** El THI horario tiene un sesgo de −1.10 frente a la estación, y la celda de ≈ 55 × 65 km promedia una zona más alta que el establo (2,145 m contra 1,813 m de la estación). Los umbrales absolutos de la literatura (THI 68 o 72) se cruzan con algo menos de frecuencia que en la realidad.
 3. **La estación no es el establo.** Las métricas dicen qué tan bien cada fuente reproduce el clima regional medido en otro punto, no el microclima junto a las vacas.
 
-### 4.4 Qué se pierde con esta decisión
+### 4.4 Qué se gana con esta decisión
 
-ERA5-Land por Open-Meteo **solo entrega temperatura y humedad**: la precipitación, el viento y la radiación solar llegan 100 % nulos (se comprobó en las 8,760 horas de un bloque anual). El dataset de clima queda entonces con temperatura, humedad y THI, que son las variables con base en la literatura para estrés térmico. Si más adelante se necesitaran lluvia, viento o radiación, habría que consultar ERA5 o el servicio de Copernicus (requiere cuenta), o NASA POWER, y eso rompería la regla de una sola fuente.
+La serie de POWER trae 13 variables por hora: temperatura, humedad, punto de rocío, bulbo húmedo, humedad específica, presión, viento a 2 y 10 m y su dirección, precipitación corregida, radiación de onda corta y larga, y nubosidad. En la exploración, el PCA del clima diario muestra que el **viento** es una dimensión propia que no se parece a la temperatura ni a la humedad, y que la nubosidad y la lluvia se agrupan con la amplitud térmica (ver el reporte de exploración, sección 4).
 
 ## 5. Tabla de clima integrada
 
-`clima_validacion.py` deja la tabla `Data/clima/clima_horario.csv` (fuera de Git): una fila por hora local (`America/Mexico_City`), del 05/07/2022 al 29/01/2026, con 31,295 horas continuas y sin faltantes en temperatura y humedad. Contiene, además del clima por hora (`t2m`, `rh2m`, `thi`), variables que solo usan información anterior a la hora consultada:
+`descargar_clima.py` deja la tabla `Data/clima/clima_nasa_power_por_hora.csv` (fuera de Git): una fila por hora local (`America/Mexico_City`), del 13/07/2022 00:00 al 28/01/2026 23:00, con **31,104 horas** y las 13 variables de POWER en minúsculas (`t2m`, `rh2m`, `ws2m`, `prectotcorr`, `allsky_sfc_sw_dwn`, `cloud_amt`, …). Guarda además las respuestas originales por bloque anual y un manifiesto con la versión de la API (v2.10.2), la fecha de descarga (15/10/2026), las unidades y los faltantes.
 
-| Variable | Definición |
-|---|---|
-| `horas_thi_alto_24h`, `horas_thi_alto_48h` | Horas con THI ≥ 68 en las 24 y 48 horas anteriores |
-| `thi_max_dia_previo`, `thi_medio_dia_previo`, `thi_min_dia_previo` | THI máximo, medio y mínimo del día anterior |
-| `amplitud_t_dia_previo` | Temperatura máxima menos mínima del día anterior |
-| `thi_medio_rezago_1d` a `thi_medio_rezago_4d` | THI medio de 1, 2, 3 y 4 días antes (la literatura reporta efectos de 1 a 4 días sobre la producción) |
-
-El THI se calcula con `THI = (1.8 T + 32) − (0.55 − 0.0055 · HR) · (1.8 T − 26)`. Cada sesión se une a su fila por la hora de inicio. Las horas repetidas por el cambio de horario de verano de octubre de 2022 se promedian. Falta confirmar con el socio formador si el reloj del sistema de ordeño siguió ese horario de verano (hasta el 30/10/2022).
+La exploración calcula el THI con `THI = (1.8 T + 32) − (0.55 − 0.0055 · HR) · (1.8 T − 26)` y une cada sesión con su fila por la hora de inicio. Las horas repetidas por el cambio de horario de verano de octubre de 2022 se promedian. Falta confirmar con el socio formador si el reloj del sistema de ordeño siguió ese horario de verano (hasta el 30/10/2022). Las variables que solo usan información previa a la sesión (horas con THI alto en las 24 o 48 h previas, resumen del día anterior, rezagos de 1 a 4 días) se dejan para la fase de preparación de datos.
 
 ## 6. Riesgos y cómo mitigarlos
 
-1. **Cambio de fuente entre entrenamiento y despliegue.** Entrenar con ERA5-Land y operar con el pronóstico de Open-Meteo usa el mismo proveedor, pero otro modelo. Mitigación: entrenar con variables suavizadas (THI máximo o medio del día, horas acumuladas) y evaluar el modelo con pronósticos archivados antes de desplegar. Queda sujeto a la respuesta del socio sobre los pronósticos del CAETEC.
-2. **Resolución gruesa.** El punto de ≈ 11 km no distingue el microclima del establo. El THI bajo techo, con sombra o con aspersores será distinto del exterior.
+1. **Cambio de fuente entre entrenamiento y despliegue.** NASA POWER no da pronóstico: si el modelo se opera con pronósticos (por ejemplo, de Open-Meteo), entrenamiento y despliegue usan fuentes distintas. Mitigación: entrenar con variables suavizadas (THI máximo o medio del día, horas acumuladas) y evaluar el modelo con pronósticos archivados antes de desplegar. Queda sujeto a la respuesta del socio sobre los pronósticos del CAETEC.
+2. **Resolución gruesa.** La celda de ≈ 55 × 65 km no distingue el microclima del establo. El THI bajo techo, con sombra o con aspersores será distinto del exterior.
 3. **Reanálisis, no medición.** Ninguna de las series mide el clima junto a las vacas; la estación de referencia es un solo punto (aeropuerto) y falta contrastar con una segunda estación o con sensores del establo.
-4. **Humedad con sesgo.** La humedad de ERA5-Land tiene un sesgo de +3.2 puntos y un RMSE horario de 10 puntos; esto afecta al THI sobre todo de noche.
-5. **Estabilidad de los datos.** Open-Meteo y el reanálisis pueden reprocesar valores. Se guardan las respuestas originales (`Data/clima/`) y la fecha de acceso.
+4. **Humedad y temperatura con sesgo.** La humedad de NASA POWER tiene un sesgo de +3.0 puntos y un RMSE horario de 13 puntos, y la temperatura un sesgo de −0.73 °C; esto afecta al THI sobre todo de noche.
+5. **Estabilidad de los datos.** NASA POWER puede reprocesar valores entre versiones. Se guardan las respuestas originales (`Data/clima/`) y la fecha de acceso.
 
 ## 7. Uso, citación y privacidad
 
-- **ERA5-Land y Open-Meteo.** Los datos son CC BY 4.0: en cualquier entregable se cita a Open-Meteo y a Copernicus/ERA5-Land como origen. Fecha de acceso: 13/10/2026.
+- **NASA POWER (fuente del proyecto).** En cualquier entregable: *"The data was obtained from the POWER Project's Hourly v2.10.2 version on 2026/10/15"*, más la referencia al proyecto POWER del Langley Research Center (texto vigente en la [página de referencias](https://power.larc.nasa.gov/docs/referencing/)). POWER pide avisar de las publicaciones a `larc-power-project@mail.nasa.gov`.
+- **ERA5-Land y Open-Meteo (solo comparación).** Datos CC BY 4.0; se citan a Open-Meteo y a Copernicus/ERA5-Land si se muestran los resultados de la sección 4. Fecha de acceso: 13/10/2026.
 - **Estación de referencia.** Observaciones del archivo ASOS/METAR del Iowa Environmental Mesonet (Iowa State University), estación MMQT; fecha de acceso: 13/10/2026. Se usan solo para validar.
-- **NASA POWER (respaldo y comparación).** Si se usa en un entregable: *"The data was obtained from the POWER Project's Hourly 2.x.x version on YYYY/MM/DD"*, más la referencia al proyecto POWER del Langley Research Center (texto vigente en la [página de referencias](https://power.larc.nasa.gov/docs/referencing/)). Versión consultada: v2.10.2; acceso 13/10/2026. POWER pide avisar de las publicaciones a `larc-power-project@mail.nasa.gov`.
 - **Ubicación.** La política de uso de datos del CAETEC pide no divulgar ubicaciones. Las consultas usaron puntos de malla (celdas de 0.1° y de ½° × ⅝°), no la ubicación exacta del establo, y los documentos del repositorio no publican las coordenadas del rancho.
 - **Datos locales.** Las respuestas originales y las series procesadas están en `Data/clima/`, fuera del control de versiones.
 
 ## 8. Cómo reproducirlo
 
 ```bash
-python src/DU/clima_comparacion.py   # primera comparación NASA POWER y ERA5-Land (usa red)
-python src/DU/clima_validacion.py    # validación contra la estación, decisión y tabla final (usa red)
+python src/DU/descargar_clima.py   # serie horaria de NASA POWER (usa red)
 ```
 
-Ambos scripts guardan las respuestas originales en `Data/clima/` y no las vuelven a pedir si ya existen. Requieren `numpy`, `pandas`, `matplotlib` y `requests`.
+El script guarda las respuestas originales en `Data/clima/` y no las vuelve a pedir si ya existen. Para repetir la comparación de las secciones 3 y 4, los scripts están en el historial de Git (commits `5d56442` y `f02c4ac`).
 
 ## 9. Pendientes
 
