@@ -15,12 +15,11 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
-from exploracion_datos import (CUARTOS, EVENTOS, ETIQUETAS_EVENTO, UMBRAL_THI, UMBRAL_BRECHA_DIAS, COLOR_BASE,
-                               COLOR_ALERTA, COLOR_GRIS, guardar, cargar_leche, cargar_clima, produccion_relativa)
+from exploracion_datos import (CUARTOS, EVENTOS, ETIQUETAS_EVENTO, UMBRAL_THI, COLOR_BASE,
+                               COLOR_ALERTA, COLOR_GRIS, guardar, cargar_leche, cargar_clima, produccion_relativa,
+                               datos_defecto, clima_defecto)
 
 raiz = Path(__file__).resolve().parent.parent.parent
-tablas_defecto = raiz.parent / "analisis_descriptivo_datos_vacas" / "tablas"
-clima_defecto = raiz / "Data" / "clima" / "clima_horario.csv"
 resumen_defecto = raiz / "Data" / "eda" / "resumen_profundo.json"
 salida_defecto = raiz / "docs" / "DU" / "figuras"
 
@@ -35,18 +34,18 @@ ETIQUETAS_VARIABLE = {"milk_kg": "Producción (kg)", "duration_min": "Duración 
 # (nombre, columnas, tipo, unidad, descripcion)
 DICCIONARIO = [
     ("timestamp", ["timestamp"], "Fecha-hora", "hora local", "Inicio de la sesión de ordeño"),
-    ("animal_id", ["animal_id"], "Identificador", "—", "Vaca (alias V001, V002, …)"),
+    ("animal_id", ["animal_id"], "Identificador", "—", "Vaca (hash HMAC de 8 caracteres de anonymize_data.py)"),
     ("milk_kg", ["milk_kg"], "Numérica continua", "kg", "Leche de la sesión"),
     ("session_no", ["session_no"], "Discreta", "—", "Número de sesión del día"),
     ("duration_min", ["duration_min"], "Numérica continua", "min", "Duración de la sesión"),
-    ("interval_h", ["interval_h"], "Numérica continua", "h", "Tiempo desde el ordeño anterior (tope de 24 h)"),
+    ("interval_h", ["interval_h"], "Numérica continua", "h", "Tiempo desde el ordeño anterior"),
     ("q_*", [f"q_{c}" for c in CUARTOS], "Numérica continua", "kg", "Leche por cuarto (DI, DD, TI, TD)"),
     ("flow_*", [f"flow_{c}" for c in CUARTOS], "Numérica continua", "kg/min", "Flujo por cuarto"),
     ("blood_*", [f"blood_{c}" for c in CUARTOS], "Numérica continua", "ppm", "Sangre por cuarto"),
     ("cond_*", [f"cond_{c}" for c in CUARTOS], "Numérica continua", "mS/cm", "Conductividad por cuarto"),
     ("mdi", ["mdi"], "Numérica continua", "—", "Índice del robot, sin unidad documentada"),
     ("rcs", ["rcs"], "Numérica continua", "—", "Conteo de células somáticas (vacío)"),
-    ("machine", ["machine"], "Categórica", "—", "Robot de ordeño (VMS 1 a 3)"),
+    ("machine", ["machine"], "Categórica", "—", "Robot de ordeño (hash HMAC de anonymize_data.py)"),
     ("destination", ["destination"], "Categórica", "—", "Destino de la leche (Tanque, Drenaje, Divert 1 a 3)"),
     ("kick", ["kick"], "Binaria", "0/1", "Patada"),
     ("incomplete", ["incomplete"], "Binaria", "0/1", "Ordeño incompleto"),
@@ -603,7 +602,8 @@ def analizar_pca_ordeno(leche, destino):
 
 def analizar_pca_clima(clima, destino):
     """
-        Ajusta un PCA a nueve resumenes diarios del clima para ver cuanta informacion distinta aportan
+        Ajusta un PCA a trece resumenes diarios del clima (los nueve de temperatura,
+        humedad y THI, mas viento, radiacion, lluvia y nubosidad de NASA POWER) para ver cuanta informacion distinta aportan
         y si basta un solo indice (el THI) para describir el dia.
 
         Args:
@@ -618,7 +618,9 @@ def analizar_pca_clima(clima, destino):
         "t_media": dias["t2m"].mean(), "t_max": dias["t2m"].max(), "t_min": dias["t2m"].min(),
         "rh_media": dias["rh2m"].mean(), "thi_medio": dias["thi"].mean(), "thi_max": dias["thi"].max(),
         "thi_min": dias["thi"].min(), "horas_thi_alto": dias["thi"].apply(lambda s: (s >= UMBRAL_THI).sum()),
-        "amplitud_t": dias["t2m"].max() - dias["t2m"].min()})
+        "amplitud_t": dias["t2m"].max() - dias["t2m"].min(), "viento": dias["ws2m"].mean(),
+        "radiacion": dias["allsky_sfc_sw_dwn"].mean(), "lluvia": dias["prectotcorr"].sum(min_count=24),
+        "nubosidad": dias["cloud_amt"].mean()})
     diario = diario[dias.size() == 24].dropna()
     pca, _, cargas = ajustar_pca(diario, list(diario.columns))
     resultado = {"dias": int(len(diario)), **resumir_pca(pca, cargas, componentes=3)}
@@ -682,158 +684,11 @@ def sensibilidad_umbral_clima(leche, clima):
     return resultado
 
 
-def cargar_auxiliares(tablas, alias):
-    """
-        Lee las tablas de consumo, historiales y vistas del 18/07/2025, cambia los ID reales por alias
-        y descarta las filas cuyo ID no esta en la tabla de leche.
-
-        Args:
-            tablas (Path): Carpeta con las tablas normalizadas.
-            alias (dict): ID real -> alias, de cargar_leche.
-
-        Returns:
-            dict: consumo, historiales, activas, secas y patadas, todos con animal_id como alias.
-    """
-    def con_alias(tabla):
-        tabla = tabla.copy()
-        tabla["animal_id"] = tabla["animal_id"].astype("string").str.replace(r"\.0$", "", regex=True).map(alias)
-        return tabla.dropna(subset=["animal_id"])
-
-    lectura = {"dtype": {"animal_id": str}}
-    return {
-        "consumo": con_alias(pd.read_csv(tablas / "consumo_eventos_normalizados.csv.gz", parse_dates=["timestamp"], **lectura)),
-        "historiales": con_alias(pd.read_csv(tablas / "historiales_eventos_normalizados.csv.gz", parse_dates=["timestamp"], **lectura)),
-        "activas": con_alias(pd.read_csv(tablas / "snapshot_activas.csv", **lectura)),
-        "secas": con_alias(pd.read_csv(tablas / "snapshot_secas.csv", parse_dates=["expected_calving", "first_milk_after_snapshot",
-                                                                                   "last_milk_before_snapshot"], **lectura)),
-        "patadas": con_alias(pd.read_csv(tablas / "snapshot_patadas.csv", **lectura)),
-    }
-
-
-def analizar_tablas_auxiliares(leche, auxiliares, destino):
-    """
-        Explora las fuentes que el EDA principal no usa: consumo de concentrado (en valores relativos por vaca),
-        acciones de los historiales (ordeño, rechazada, echada sin ordeñar) y las vistas del 18/07/2025
-        (periodo seco, dias en leche y vacas con patadas).
-
-        Args:
-            leche (DataFrame): Tabla de sesiones de ordeño.
-            auxiliares (dict): Salida de cargar_auxiliares.
-            destino (Path): Carpeta donde se guarda la imagen.
-
-        Returns:
-            dict: Resultados de cada fuente auxiliar.
-    """
-    resultado = {}
-    fig, ejes = plt.subplots(2, 2, figsize=(12, 8.4))
-
-    # Consumo: unidad desconocida, asi que se usa la razon contra la mediana de cada vaca
-    consumo = auxiliares["consumo"].assign(fecha=lambda d: d["timestamp"].dt.normalize())
-    dia = consumo.groupby(["animal_id", "fecha"]).agg(consumo=("amount", "sum"), visitas_alimento=("amount", "size")).reset_index()
-    dia["consumo_relativo"] = dia["consumo"] / dia.groupby("animal_id")["consumo"].transform("median")
-    leche_dia = leche.groupby(["animal_id", "fecha"]).agg(leche_kg=("milk_kg", "sum"), sesiones=("milk_kg", "size"),
-                                                          eventos=("evento_alguno", "mean")).reset_index()
-    leche_dia["leche_relativa"] = leche_dia["leche_kg"] / leche_dia.groupby("animal_id")["leche_kg"].transform("median")
-    cruce = dia.merge(leche_dia, on=["animal_id", "fecha"])
-    cruce = cruce[(cruce["consumo_relativo"] < 4) & (cruce["leche_relativa"] < 4)]
-    rho_leche, p_leche = stats.spearmanr(cruce["consumo_relativo"], cruce["leche_relativa"])
-    rho_sesiones, _ = stats.spearmanr(cruce["consumo_relativo"], cruce["sesiones"])
-    rho_eventos, p_eventos = stats.spearmanr(cruce["consumo_relativo"], cruce["eventos"])
-    rho_eventos_controlado, _ = stats.spearmanr(cruce.loc[cruce["sesiones"] == 2, "consumo_relativo"],
-                                                cruce.loc[cruce["sesiones"] == 2, "eventos"])
-    resultado["consumo"] = {
-        "eventos": int(len(consumo)), "vacas": int(consumo["animal_id"].nunique()), "vaca_dias_cruzados": int(len(cruce)),
-        "mediana_eventos_alimento_por_dia": float(dia["visitas_alimento"].median()),
-        "spearman_consumo_relativo_vs_leche_relativa": {"rho": round(float(rho_leche), 3), "p": float(p_leche)},
-        "spearman_consumo_relativo_vs_sesiones_del_dia": round(float(rho_sesiones), 3),
-        "spearman_consumo_relativo_vs_proporcion_de_sesiones_con_evento": {"rho": round(float(rho_eventos), 3), "p": float(p_eventos)},
-        "spearman_igual_en_dias_con_2_sesiones": round(float(rho_eventos_controlado), 3)}
-    ejes[0, 0].hexbin(cruce["consumo_relativo"], cruce["leche_relativa"], gridsize=40, cmap="viridis", mincnt=1, bins="log")
-    ejes[0, 0].set_xlabel("Concentrado del día / mediana de la vaca")
-    ejes[0, 0].set_ylabel("Leche del día / mediana de la vaca")
-    ejes[0, 0].set_title(f"Consumo y producción (Spearman {rho_leche:.2f})")
-
-    # Acciones de los historiales
-    historiales = auxiliares["historiales"]
-    acciones = historiales["action"].value_counts()
-    bloque_hora = historiales["timestamp"].dt.hour // 4
-    por_bloque = historiales.groupby([bloque_hora, "action"]).size().unstack(fill_value=0)
-    resultado["historiales"] = {
-        "acciones": acciones.to_dict(), "vacas": int(historiales["animal_id"].nunique()),
-        "pct_rechazada": round(float(acciones.get("Rechazada", 0) / len(historiales) * 100), 2),
-        "pct_echada_sin_ordenar": round(float(acciones.get("Echada sin ordeñar", 0) / len(historiales) * 100), 2),
-        "vacas_con_alguna_rechazada": int(historiales.loc[historiales["action"] == "Rechazada", "animal_id"].nunique()),
-        "kg_mediana_por_accion": historiales.groupby("action")["milk_kg"].median().round(2).to_dict()}
-    for i, (accion, color) in enumerate([("Ordeño", COLOR_BASE), ("Rechazada", COLOR_ALERTA), ("Echada sin ordeñar", COLOR_AUXILIAR)]):
-        if accion in por_bloque:
-            ejes[0, 1].bar(por_bloque.index + (i - 1) * 0.27, por_bloque[accion] / por_bloque[accion].sum() * 100, 0.27,
-                           color=color, label=f"{accion} (n = {int(por_bloque[accion].sum())})")
-    ejes[0, 1].set_xticks(range(6))
-    ejes[0, 1].set_xticklabels([f"{4 * k:02d}-{4 * k + 3:02d} h" for k in range(6)])
-    ejes[0, 1].set_xlabel("Hora local (bloques de 4 h)")
-    ejes[0, 1].set_ylabel("% de las acciones de su tipo")
-    ejes[0, 1].set_title("Acciones de los historiales por hora")
-    ejes[0, 1].legend(frameon=False, fontsize=8)
-
-    # Periodo seco: primer ordeño posterior contra la fecha esperada de parto
-    secas = auxiliares["secas"].dropna(subset=["expected_calving", "first_milk_after_snapshot"]).copy()
-    secas["dias"] = (secas["first_milk_after_snapshot"] - secas["expected_calving"]).dt.days
-    resultado["periodo_seco"] = {
-        "vacas": int(len(secas)), "mediana_dias_primer_ordeno_menos_parto_esperado": float(secas["dias"].median()),
-        "q1_q3": [float(secas["dias"].quantile(0.25)), float(secas["dias"].quantile(0.75))],
-        "dentro_de_15_dias_pct": round(float((secas["dias"].abs() <= 15).mean() * 100), 1),
-        "mediana_brecha_dias": float(auxiliares["secas"]["gap_days_across_snapshot"].median())}
-    ejes[1, 0].hist(secas["dias"], bins=15, color=COLOR_BASE)
-    ejes[1, 0].axvline(0, color=COLOR_ALERTA, linestyle="--")
-    ejes[1, 0].set_xlabel("Primer ordeño observado - fecha esperada de parto (días)")
-    ejes[1, 0].set_ylabel("Vacas")
-    ejes[1, 0].set_title(f"Fin de la brecha frente al parto esperado (n = {len(secas)})")
-
-    # Dias en leche: aproximacion por brecha frente al dato del reporte
-    fecha_vista = pd.Timestamp("2025-07-18")
-    ordenado = leche[leche["timestamp"] < fecha_vista + pd.Timedelta(days=1)].sort_values(["animal_id", "timestamp"]).copy()
-    ordenado["brecha"] = ordenado.groupby("animal_id")["timestamp"].diff().dt.days
-    inicio_episodio = ordenado[ordenado["brecha"] >= UMBRAL_BRECHA_DIAS].groupby("animal_id")["timestamp"].max()
-    activas = auxiliares["activas"].set_index("animal_id")["days_in_milk"].dropna()
-    comparables = pd.concat([activas, ((fecha_vista - inicio_episodio).dt.days).rename("dias_aprox")], axis=1, join="inner").dropna()
-    if len(comparables) >= 5:
-        rho, p = stats.spearmanr(comparables["days_in_milk"], comparables["dias_aprox"])
-        resultado["dias_en_leche"] = {
-            "vacas_comparables": int(len(comparables)), "vacas_activas_del_reporte": int(len(activas)),
-            "spearman": round(float(rho), 3), "p": float(p),
-            "mediana_diferencia_dias_aprox_menos_reporte": float((comparables["dias_aprox"] - comparables["days_in_milk"]).median())}
-        ejes[1, 1].scatter(comparables["days_in_milk"], comparables["dias_aprox"], color=COLOR_BASE, s=25)
-        maximo = max(comparables.max())
-        ejes[1, 1].plot([0, maximo], [0, maximo], color=COLOR_ALERTA, linestyle="--")
-        ejes[1, 1].set_xlabel("Días en leche del reporte (18/07/2025)")
-        ejes[1, 1].set_ylabel("Días desde el último regreso tras una brecha")
-        ejes[1, 1].set_title(f"Lactancia aproximada contra el reporte (n = {len(comparables)})")
-    guardar(fig, destino, "eda_tablas_auxiliares")
-
-    # Vacas que el reporte de patadas senala frente a su tasa de patada en los 30 dias previos
-    ventana = leche[(leche["timestamp"] >= fecha_vista - pd.Timedelta(days=30)) & (leche["timestamp"] < fecha_vista + pd.Timedelta(days=1))]
-    tasa = ventana.groupby("animal_id")["kick"].mean().mul(100)
-    senaladas = set(auxiliares["patadas"]["animal_id"])
-    en_lista, fuera = tasa[tasa.index.isin(senaladas)], tasa[~tasa.index.isin(senaladas)]
-    if len(en_lista) >= 5 and len(fuera) >= 5:
-        diferencia = en_lista.mean() - fuera.mean()
-        error = np.sqrt(en_lista.var(ddof=1) / len(en_lista) + fuera.var(ddof=1) / len(fuera))
-        resultado["reporte_patadas"] = {
-            "vacas_en_el_reporte": int(len(en_lista)), "vacas_fuera": int(len(fuera)),
-            "tasa_media_patada_en_reporte_pct": round(float(en_lista.mean()), 1),
-            "tasa_media_patada_fuera_pct": round(float(fuera.mean()), 1),
-            "diferencia": round(float(diferencia), 1),
-            "ic95": [round(float(diferencia - Z95 * error), 1), round(float(diferencia + Z95 * error), 1)],
-            "dias_en_leche_mediana_de_las_senaladas": float(auxiliares["patadas"]["days_in_milk"].median())}
-    return resultado
-
-
 def main():
     parser = argparse.ArgumentParser(description="Profundiza la exploración de datos: descriptivos, correlaciones, "
-                                                 "persistencia, adaptación, PCA y tablas auxiliares.")
-    parser.add_argument("--tablas", type=Path, default=tablas_defecto,
-                        help="Carpeta con las tablas normalizadas (leche, consumo, historiales y vistas del 18/07/2025)")
-    parser.add_argument("--clima", type=Path, default=clima_defecto, help="CSV de clima_validacion.py")
+                                                 "persistencia, adaptación y PCA.")
+    parser.add_argument("--datos", type=Path, default=datos_defecto, help="CSV anonimizado de anonymize_data.py")
+    parser.add_argument("--clima", type=Path, default=clima_defecto, help="CSV de descargar_clima.py")
     parser.add_argument("--salida", type=Path, default=salida_defecto, help="Carpeta de salida de las imágenes")
     parser.add_argument("--resumen", type=Path, default=resumen_defecto, help="JSON con los indicadores (fuera de Git)")
     args = parser.parse_args()
@@ -841,7 +696,7 @@ def main():
     args.salida.mkdir(parents=True, exist_ok=True)
     args.resumen.parent.mkdir(parents=True, exist_ok=True)
 
-    leche, alias = cargar_leche(args.tablas, con_alias=True)
+    leche = cargar_leche(args.datos)
     clima = cargar_clima(args.clima)
     print(f"Sesiones leídas: {len(leche):,} de {leche['animal_id'].nunique()} vacas")
 
@@ -861,7 +716,6 @@ def main():
         "pca_ordeno": analizar_pca_ordeno(leche, args.salida),
         "pca_clima": analizar_pca_clima(clima, args.salida),
         "sensibilidad_umbral_clima": sensibilidad_umbral_clima(leche, clima),
-        "tablas_auxiliares": analizar_tablas_auxiliares(leche, cargar_auxiliares(args.tablas, alias), args.salida),
     }
 
     args.resumen.write_text(json.dumps(resumen, indent=2, ensure_ascii=False, default=str))

@@ -11,8 +11,8 @@ import pandas as pd
 from scipy import stats
 
 raiz = Path(__file__).resolve().parent.parent.parent
-tablas_defecto = raiz.parent / "analisis_descriptivo_datos_vacas" / "tablas"
-clima_defecto = raiz / "Data" / "clima" / "clima_horario.csv"
+datos_defecto = raiz / "Data" / "dataset_vacas_anonimo.csv"
+clima_defecto = raiz / "Data" / "clima" / "clima_nasa_power_por_hora.csv"
 resumen_defecto = raiz / "Data" / "eda" / "resumen_exploracion.json"
 salida_defecto = raiz / "docs" / "DU" / "figuras"
 
@@ -21,6 +21,8 @@ EVENTOS = ["kick", "incomplete", "teat_missing"]
 ETIQUETAS_EVENTO = {"kick": "Patada", "incomplete": "Ordeño incompleto", "teat_missing": "Pezón no encontrado"}
 UMBRAL_THI = 68
 UMBRAL_BRECHA_DIAS = 45
+# Un intervalo de mas de 48 h es el regreso tras una brecha (periodo seco), no un intervalo de ordeño
+UMBRAL_INTERVALO_H = 48
 
 COLOR_BASE = "#2a7a8c"
 COLOR_ALERTA = "#b5473a"
@@ -44,25 +46,82 @@ def guardar(fig, destino, nombre):
     plt.close(fig)
 
 
-def cargar_leche(tablas, con_alias=False):
+def a_horas(texto):
     """
-        Lee la tabla de eventos de ordeño, agrega variables derivadas y reemplaza el ID real
-        por un alias (V001, V002, ...) para que ningun resultado muestre identificadores originales.
+        Convierte un intervalo hh:mm:ss a horas. Excel guarda los intervalos de 24 h o mas como fecha
+        (1900-01-01 hh:mm:ss equivale a 24 h + hh:mm:ss), asi que esos se cuentan desde el 31/12/1899.
 
         Args:
-            tablas (Path): Carpeta con leche_eventos_normalizados.csv.gz.
-            con_alias (bool): Si es True tambien devuelve el diccionario ID real -> alias, que sirve para
-                enlazar otras tablas y nunca debe imprimirse ni guardarse.
+            texto (Series): Intervalos como texto.
 
         Returns:
-            DataFrame: Una fila por sesion de ordeño (o la tupla con el diccionario de alias).
+            Series: Intervalos en horas.
     """
-    leche = pd.read_csv(tablas / "leche_eventos_normalizados.csv.gz", parse_dates=["timestamp"],
-                        dtype={"animal_id": str}).drop(columns=["source_file", "source_row", "source_kind"])
+    como_fecha = pd.to_datetime(texto.where(texto.str.len() > 8), format="%Y-%m-%d %H:%M:%S")
+    dias = (como_fecha - pd.Timestamp("1899-12-31")).dt.total_seconds() / 3600
+    como_hora = pd.to_timedelta(texto.where(texto.str.len() <= 8)).dt.total_seconds() / 3600
+    return dias.fillna(como_hora)
 
-    orden = leche.groupby("animal_id")["timestamp"].min().sort_values().index
-    alias = {original: f"V{i:03d}" for i, original in enumerate(orden, start=1)}
-    leche["animal_id"] = leche["animal_id"].map(alias)
+
+def a_minutos(texto):
+    """
+        Convierte la duracion a minutos: los xlsx la traen como hh:mm:ss y los CSV como mm:ss.
+
+        Args:
+            texto (Series): Duraciones como texto.
+
+        Returns:
+            Series: Duraciones en minutos.
+    """
+    completo = texto.where(texto.str.len() > 5, "00:" + texto)
+    return pd.to_timedelta(completo).dt.total_seconds() / 60
+
+
+def cargar_leche(ruta):
+    """
+        Lee el dataset anonimizado del equipo (generate_data.py + anonymize_data.py), deja una fila por
+        sesion de ordeño con nombres cortos y agrega variables derivadas. La vaca y el robot ya vienen
+        con el hash del equipo, asi que ningun resultado muestra identificadores originales.
+
+        Los CSV de marzo a junio de 2025 repiten sesiones de los xlsx: de ellos solo se usan los ordeños
+        de las vacas que no tienen xlsx (las filas de rechazo o de vaca echada no traen leche).
+
+        Args:
+            ruta (Path): CSV anonimizado (Data/dataset_vacas_anonimo.csv).
+
+        Returns:
+            DataFrame: Una fila por sesion de ordeño.
+    """
+    crudo = pd.read_csv(ruta, dtype=str, low_memory=False)
+    es_csv = crudo["main_hora_de_inicio"].str.contains(r"[ap]\. m\.", na=False)
+    con_xlsx = set(crudo.loc[~es_csv, "id_vaca"])
+    crudo = crudo[~es_csv | (~crudo["id_vaca"].isin(con_xlsx) & (crudo["main_accion"] == "Ordeño"))]
+
+    inicio = crudo["main_hora_de_inicio"].str.replace("a. m.", "AM").str.replace("p. m.", "PM")
+    leche = pd.DataFrame({
+        "animal_id": crudo["id_vaca"],
+        "timestamp": pd.to_datetime(inicio, format="%Y-%m-%d %H:%M:%S", errors="coerce").fillna(
+            pd.to_datetime(inicio, format="%d/%m/%Y %I:%M %p", errors="coerce")),
+        "milk_kg": pd.to_numeric(crudo["main_produccion_kg"]),
+        "session_no": pd.to_numeric(crudo["estado_numero_de_ordeno"]),
+        "duration_min": a_minutos(crudo["main_duracion_mm_ss"]),
+        "interval_h": a_horas(crudo["main_intervalo_de_ordeno_hh_mm"]),
+        "machine": crudo["misc_eo_po"],
+        "destination": crudo["misc_destino_leche"],
+        "mdi": pd.to_numeric(crudo["estado_mdi"]),
+        "rcs": pd.to_numeric(crudo["estado_rcs_1000_celulas_ml"]),
+    })
+    # Las banderas traen los cuartos afectados (DI, TD, Todos...): cualquier valor es un evento
+    for evento, columna in [("kick", "estado_patada"), ("incomplete", "estado_incompleto"),
+                            ("teat_missing", "estado_pezones_no_encontrados")]:
+        leche[evento] = crudo[columna].notna().astype(int)
+    for corto, grupo in [("q", "producciones_kg"), ("flow", "media_de_los_flujos_kg_min"),
+                         ("blood", "sangre_ppm"), ("cond", "conductividad_ms_cm")]:
+        for c in CUARTOS:
+            leche[f"{corto}_{c}"] = pd.to_numeric(crudo[f"{grupo}_{c}"])
+    leche = leche.dropna(subset=["timestamp", "milk_kg"]).reset_index(drop=True)
+    leche.attrs["intervalos_mayores_48h"] = int((leche["interval_h"] > UMBRAL_INTERVALO_H).sum())
+    leche["interval_h"] = leche["interval_h"].where(leche["interval_h"] <= UMBRAL_INTERVALO_H)
 
     leche["fecha"] = leche["timestamp"].dt.normalize()
     leche["hora"] = leche["timestamp"].dt.hour
@@ -74,7 +133,7 @@ def cargar_leche(tablas, con_alias=False):
     for variable in ["cond", "flow"]:
         columnas = [f"{variable}_{c}" for c in CUARTOS]
         leche[f"{variable}_media"] = leche[columnas].where(leche[columnas] > 0).mean(axis=1)
-    return (leche, alias) if con_alias else leche
+    return leche
 
 
 def perfilar_calidad(leche):
@@ -105,6 +164,9 @@ def perfilar_calidad(leche):
         "milk_kg_menor_igual_0": int((leche["milk_kg"] <= 0).sum()),
         "milk_kg_mayor_40": int((leche["milk_kg"] > 40).sum()),
         "duration_min_mayor_30": int((leche["duration_min"] > 30).sum()),
+        "interval_h_menor_igual_0": int((leche["interval_h"] <= 0).sum()),
+        "interval_h_mayor_24": int((leche["interval_h"] > 24).sum()),
+        "interval_h_mayor_48_tratados_como_faltantes": leche.attrs["intervalos_mayores_48h"],
         "ceros_conductividad_pct": {c: round(float((leche[f"cond_{c}"] == 0).mean() * 100), 1) for c in CUARTOS},
         "ceros_produccion_cuarto_pct": {c: round(float((leche[f"q_{c}"] == 0).mean() * 100), 1) for c in CUARTOS},
         "suma_cuartos_difiere_mas_0_2kg": int(((suma_cuartos - leche["milk_kg"]).abs() > 0.2).sum()),
@@ -114,6 +176,52 @@ def perfilar_calidad(leche):
         "sesiones_por_vms": leche["machine"].value_counts().to_dict(),
         "destino_leche": leche["destination"].value_counts().to_dict(),
     }
+
+
+def graficar_nulos(leche, destino):
+    """
+        Grafica el porcentaje de valores faltantes por variable de la tabla de sesiones.
+
+        Args:
+            leche (DataFrame): Tabla de sesiones de ordeño.
+            destino (Path): Carpeta donde se guarda la imagen.
+    """
+    nulos = leche.isna().mean().mul(100)
+    nulos = nulos[nulos >= 0.05].sort_values()
+
+    fig, eje = plt.subplots(figsize=(8, 5))
+    eje.barh(nulos.index, nulos.values, color=[COLOR_ALERTA if v >= 50 else COLOR_BASE for v in nulos])
+    for y, valor in enumerate(nulos.values):
+        eje.text(valor + 1, y, f"{valor:.1f} %", va="center", fontsize=9)
+    eje.set_xlim(0, 112)
+    eje.set_xlabel("Valores faltantes (%)")
+    eje.set_title(f"Datos faltantes por variable ({len(leche):,} sesiones de ordeño)")
+    guardar(fig, destino, "nulos_por_variable")
+
+
+def graficar_cobertura(leche, destino):
+    """
+        Grafica un mapa de calor con las sesiones de ordeño por vaca y mes, sin identificar a las vacas.
+
+        Args:
+            leche (DataFrame): Tabla de sesiones de ordeño.
+            destino (Path): Carpeta donde se guarda la imagen.
+    """
+    matriz = leche.pivot_table(index="animal_id", columns="mes", values="milk_kg", aggfunc="size")
+    matriz = matriz.reindex(columns=pd.date_range(matriz.columns.min(), matriz.columns.max(), freq="MS"))
+    matriz = matriz.loc[matriz.apply(lambda fila: fila.first_valid_index(), axis=1).sort_values().index]
+
+    fig, eje = plt.subplots(figsize=(10, 6))
+    imagen = eje.imshow(matriz.values, aspect="auto", cmap="viridis", interpolation="nearest")
+    posiciones = list(range(0, len(matriz.columns), 3))
+    eje.set_xticks(posiciones)
+    eje.set_xticklabels([matriz.columns[i].strftime("%m/%Y") for i in posiciones], rotation=45, ha="right")
+    eje.set_yticks([])
+    eje.set_xlabel("Mes")
+    eje.set_ylabel(f"Vacas ({matriz.shape[0]}), ordenadas por primer registro")
+    eje.set_title("Sesiones de ordeño por vaca y mes")
+    fig.colorbar(imagen, ax=eje, label="Sesiones en el mes")
+    guardar(fig, destino, "cobertura_por_vaca")
 
 
 def graficar_distribuciones(leche, destino):
@@ -239,14 +347,14 @@ def graficar_lactancia(leche, destino):
 
 def graficar_cuartos_vms(leche, destino):
     """
-        Compara la producción por cuarto y la tasa de eventos por VMS, con pruebas chi-cuadrada.
+        Compara la producción por cuarto y la tasa de eventos por robot, con pruebas chi-cuadrada.
 
         Args:
             leche (DataFrame): Tabla de sesiones de ordeño.
             destino (Path): Carpeta donde se guarda la imagen.
 
         Returns:
-            dict: Tasas por VMS y resultados de las pruebas.
+            dict: Tasas por robot y resultados de las pruebas.
     """
     produccion = {c.upper(): leche[f"q_{c}"].where(leche[f"q_{c}"] > 0).mean() for c in CUARTOS}
     sin_leche = {c.upper(): (leche[f"q_{c}"] == 0).mean() * 100 for c in CUARTOS}
@@ -270,7 +378,7 @@ def graficar_cuartos_vms(leche, destino):
     ejes[2].set_xticks(posiciones)
     ejes[2].set_xticklabels([f"{m}\n(n={sesiones[m]:,})" for m in tasas.index])
     ejes[2].set_ylabel("% de las sesiones")
-    ejes[2].set_title("Eventos por VMS")
+    ejes[2].set_title("Eventos por robot")
     ejes[2].legend(frameon=False, fontsize=8)
     guardar(fig, destino, "eda_cuartos_y_vms")
 
@@ -385,7 +493,7 @@ def graficar_intervalo_conductividad(leche, destino):
         Returns:
             dict: Tasas de eventos por rango.
     """
-    cortes_intervalo = [0, 4, 6, 8, 10, 12, 16, 24.01]
+    cortes_intervalo = [0, 4, 6, 8, 10, 12, 16, 24, UMBRAL_INTERVALO_H + 0.01]
     intervalo = pd.cut(leche["interval_h"], cortes_intervalo, right=False)
     cuantiles = pd.qcut(leche["cond_media"], 10, duplicates="drop")
     por_intervalo = leche.groupby(intervalo, observed=True)[EVENTOS].mean().mul(100)
@@ -413,17 +521,18 @@ def graficar_intervalo_conductividad(leche, destino):
 
 def cargar_clima(ruta):
     """
-        Lee la tabla horaria de clima de la fuente elegida (ver clima_validacion.py), que ya viene en
-        hora local, con el desfase corregido y con las variables derivadas de los dias previos.
+        Lee la serie horaria de NASA POWER (descargar_clima.py), que ya viene en hora local y sin
+        desfase aplicado, y le agrega el indice temperatura-humedad:
+        THI = (1.8 T + 32) - (0.55 - 0.0055 HR) * (1.8 T - 26)
 
         Args:
-            ruta (Path): CSV generado por clima_validacion.py.
+            ruta (Path): CSV generado por descargar_clima.py.
 
         Returns:
-            DataFrame: Serie horaria local con temperatura, humedad, THI y sus variables derivadas.
+            DataFrame: Serie horaria local con las variables de POWER y el THI.
     """
-    clima = pd.read_csv(ruta, index_col=0, parse_dates=True)
-    clima.index.name = "hora_local"
+    clima = pd.read_csv(ruta, index_col="hora", parse_dates=True)
+    clima["thi"] = (1.8 * clima["t2m"] + 32) - (0.55 - 0.0055 * clima["rh2m"]) * (1.8 * clima["t2m"] - 26)
     return clima
 
 
@@ -548,9 +657,8 @@ def analizar_clima(leche, clima, destino):
 
 def main():
     parser = argparse.ArgumentParser(description="Genera las figuras y los indicadores de la exploración de datos.")
-    parser.add_argument("--tablas", type=Path, default=tablas_defecto,
-                        help="Carpeta con leche_eventos_normalizados.csv.gz")
-    parser.add_argument("--clima", type=Path, default=clima_defecto, help="CSV de clima_validacion.py")
+    parser.add_argument("--datos", type=Path, default=datos_defecto, help="CSV anonimizado de anonymize_data.py")
+    parser.add_argument("--clima", type=Path, default=clima_defecto, help="CSV de descargar_clima.py")
     parser.add_argument("--salida", type=Path, default=salida_defecto, help="Carpeta de salida de las imágenes")
     parser.add_argument("--resumen", type=Path, default=resumen_defecto,
                         help="JSON con los indicadores (fuera de Git)")
@@ -559,10 +667,12 @@ def main():
     args.salida.mkdir(parents=True, exist_ok=True)
     args.resumen.parent.mkdir(parents=True, exist_ok=True)
 
-    leche = cargar_leche(args.tablas)
+    leche = cargar_leche(args.datos)
     print(f"Sesiones leídas: {len(leche):,} de {leche['animal_id'].nunique()} vacas")
 
     resumen = {"calidad": perfilar_calidad(leche)}
+    graficar_nulos(leche, args.salida)
+    graficar_cobertura(leche, args.salida)
     graficar_distribuciones(leche, args.salida)
     resumen["temporal"] = graficar_temporal(leche, args.salida)
     resumen["lactancia"] = graficar_lactancia(leche, args.salida)
