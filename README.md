@@ -21,6 +21,8 @@ La estructura del repositorio es:
     - [`generate_data.py`](src/DU/generate_data.py) — Procesa los archivos CSV de cada vaca.
     - [`anonymize_data.py`](src/DU/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
     - [`descargar_clima.py`](src/DU/descargar_clima.py) — Descarga el clima por hora de NASA POWER a `Data/clima/`.
+    - [`generate_concentrado.py`](src/DU/generate_concentrado.py) — Procesa los XLSX de concentrado de alimento consumido por vaca.
+    - [`anonymize_concentrado.py`](src/DU/anonymize_concentrado.py) — Anonimiza el concentrado con los mismos identificadores de vaca.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
