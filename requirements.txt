@@ -1,5 +1,11 @@
 numpy
 pandas
+matplotlib
+seaborn
+scipy
+notebook
 requests
 python-dotenv
 openpyxl
+scikit-learn
+statsmodels

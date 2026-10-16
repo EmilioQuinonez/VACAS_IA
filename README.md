@@ -16,13 +16,16 @@ La estructura del repositorio es:
     - WBS y su archivo fuente.
   - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
     - Guía y archivo CSV de auditoría de registros.
+    - [Reporte de exploración de datos](docs/DU/Reporte_Exploracion_Datos.md) y sus figuras.
+    - [Investigación de la fuente de clima](docs/DU/Investigacion_Clima.md).
 - **[`src/`](src/)** — Código fuente de apoyo.
-  - **[`DU/`](src/DU/)** — Scripts de preparación de datos para la fase *Data Understanding*.
-    - [`generate_data.py`](src/DU/generate_data.py) — Procesa los archivos CSV de cada vaca.
-    - [`anonymize_data.py`](src/DU/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
-    - [`descargar_clima.py`](src/DU/descargar_clima.py) — Descarga el clima por hora de NASA POWER a `Data/clima/`.
-    - [`generate_concentrado.py`](src/DU/generate_concentrado.py) — Procesa los XLSX de concentrado de alimento consumido por vaca.
-    - [`anonymize_concentrado.py`](src/DU/anonymize_concentrado.py) — Anonimiza el concentrado con los mismos identificadores de vaca.
+  - **[`scripts/`](src/scripts/)** — Scripts de preparación de datos.
+    - [`generate_data.py`](src/scripts/generate_data.py) — Procesa los archivos CSV y XLSX de cada vaca.
+    - [`anonymize_data.py`](src/scripts/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
+    - [`descargar_clima.py`](src/scripts/descargar_clima.py) — Descarga el clima por hora de NASA POWER a `Data/clima/`.
+  - **[`DU/`](src/DU/)** — Notebooks y scripts de exploración para la fase *Data Understanding*.
+    - [`exploracion_datos.py`](src/DU/exploracion_datos.py) — Genera las figuras e indicadores de la exploración de datos a partir del dataset anonimizado y del clima de NASA POWER.
+    - [`exploracion_profunda.py`](src/DU/exploracion_profunda.py) — Profundiza la exploración: descriptivos, correlaciones, persistencia, adaptación y PCA.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
