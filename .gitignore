@@ -219,3 +219,5 @@ __marimo__/
 
 # Carpeta de Data
 /Data/
+
+.DS_Store
