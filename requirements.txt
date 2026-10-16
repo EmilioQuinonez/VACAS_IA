@@ -1,4 +1,4 @@
-numpy 
+numpy
 pandas
 matplotlib
 seaborn
@@ -7,6 +7,5 @@ notebook
 requests
 python-dotenv
 openpyxl
-matplotlib
-seaborn
-python-dotenv
+scikit-learn
+statsmodels
