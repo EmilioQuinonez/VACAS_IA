@@ -15,7 +15,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
-from exploracion_datos import (CUARTOS, EVENTOS, ETIQUETAS_EVENTO, UMBRAL_THI, COLOR_BASE,
+from DU.IndividualEda.exploracion_datos import (CUARTOS, EVENTOS, ETIQUETAS_EVENTO, UMBRAL_THI, COLOR_BASE,
                                COLOR_ALERTA, COLOR_GRIS, guardar, cargar_leche, cargar_clima, produccion_relativa,
                                datos_defecto, clima_defecto)
 
