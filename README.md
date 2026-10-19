@@ -16,7 +16,7 @@ La estructura del repositorio es:
     - WBS y su archivo fuente.
   - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
     - Guía y archivo CSV de auditoría de registros.
-    - [Reporte de exploración de datos](docs/DU/Reporte_Exploracion_Datos.md) y sus figuras.
+    - [Reporte de entendimiento de los datos](docs/DU/reporteData.md) y sus figuras.
     - [Investigación de la fuente de clima](docs/DU/Investigacion_Clima.md).
 - **[`src/`](src/)** — Código fuente de apoyo.
   - **[`scripts/`](src/scripts/)** — Scripts de preparación de datos.

@@ -53,8 +53,6 @@ Fase *Data Understanding* (CRISP-DM). Este reporte resume lo que se encontró en
 
 **Tras la limpieza.** De las 286,217 filas originales quedan 280,915 (se quitan 2 duplicados exactos y las sesiones del csv que ya venían en el xlsx). De ellas, 280,697 son ordeños de las tres máquinas, y son la base del análisis; las otras son 216 visitas rechazadas o de «echada sin ordeñar» (solo se registran en 2025) y 2 sesiones de un cuarto valor de máquina.
 
-> Los hashes de las máquinas de este reporte (`7063e4b1`, `86696b37`, `b96e85be`) corresponden al dataset actual y no coinciden con los de [Reporte_Exploracion_Datos.md](Reporte_Exploracion_Datos.md), cuyo dataset se anonimizó con otra llave. Las cifras son las mismas; cambia solo el nombre.
-
 # **2. Formato y tipos de datos**
 
 El archivo original tiene **30 columnas numéricas (`float64`) y 14 de texto**. Pandas asigna un tipo distinto al real en varias de ellas:
@@ -327,6 +325,28 @@ De los 164 ordeños con producción de 0 kg, en 149 (91 %) el robot reporta «To
 | No imputar los nulos estructurales ni los cuartos sin leche | La ausencia es información |
 | Dejar fuera la máquina con 2 registros | Muy pocos datos, sin eventos |
 | Conservar los ordeños con 0 kg y marcarlos | Casi todos son visitas sin ordeñar, útiles para el modelo |
+
+## 8.6 Acciones de limpieza para la preparación de los datos
+
+Lista de las acciones de limpieza que se derivan del EDA y de lo que requiere el modelado. La columna «Estado» indica si el notebook ya la aplica (secciones 2 y 20 de `final_data_understanding.ipynb`) o si queda para la fase de preparación de datos.
+
+| # | Acción | Por qué | Estado |
+| :---- | :---- | :---- | :---- |
+| 1 | Convertir fechas, duración e intervalo a `datetime` y número; los intervalos de Excel se leen como fecha | Dos formatos de fecha y duración; los intervalos de 24 h o más vienen como `1900-01-01 hh:mm:ss` | Aplicada |
+| 2 | Quitar las 5,302 sesiones repetidas entre csv y xlsx y los 2 duplicados exactos | Se contarían dos veces | Aplicada |
+| 3 | Eliminar `estado_rcs_1000_celulas_ml`, `misc_usuario` y `misc_programa_de_lavado` | Vacías o con un solo valor | Aplicada en `df_modelo` |
+| 4 | Separar los ordeños de los 216 rechazos y visitas de «echada sin ordeñar», y dejar fuera la máquina con 2 registros | Los rechazos no tienen producción ni mediciones; la máquina tiene muy pocos datos | Aplicada en el análisis; los rechazos se conservan aparte |
+| 5 | Convertir las alertas de texto a banderas 0/1 por cuarto | El texto guarda una lista de cuartos (`DI,TD`, `Todos`) y el nulo significa «no ocurrió» | Aplicada en `df_modelo` |
+| 6 | Tratar la conductividad igual a 0 como faltante; en el cuarto trasero derecho de `b96e85be` (89 % de sus ceros son avería del sensor), calcular la razón de conductividad (EC_Ratio) solo con los cuartos válidos o excluir ese cuarto en esa máquina | Es físicamente imposible; 28.3 % de ceros en TD | Ceros a faltante: aplicada. Regla del cuarto TD: por aplicar |
+| 7 | Marcar los 420 intervalos de más de 48 h como «regreso tras periodo seco» (bandera) y dejar el intervalo en NaN | No son intervalos de ordeño | NaN: aplicada. Bandera: por aplicar |
+| 8 | No imputar los cuartos sin leche ni los nulos estructurales; para MDI (8.4 % de nulos) y sensores, usar el manejo de nulos del propio modelo o imputar por vaca, sin imputación múltiple ciega | La ausencia es información y los nulos no son aleatorios | Cuartos y estructurales: aplicada. MDI y sensores: por aplicar |
+| 9 | Conservar los 164 ordeños con 0 kg y marcarlos; marcar los 9 ordeños donde la suma de los cuartos no cuadra con el total | Casi todos los 0 kg son visitas sin ordeñar; las 9 diferencias son un error de registro | Por aplicar |
+| 10 | No eliminar los atípicos; usar logaritmo o métodos robustos | Pueden ser justo las anomalías a detectar | Por aplicar |
+| 11 | Calcular los rezagos y promedios móviles por vaca con desplazamiento de un ordeño, para no filtrar el presente, y reiniciarlos tras una ausencia de 45 días o más | Evita fuga de información; hay 248 brechas de 45 días o más en 133 vacas | Por aplicar |
+| 12 | Excluir del historial por vaca a las que tienen menos de 30 registros | Tres vacas tienen muy poca historia para una línea base individual | Por aplicar |
+| 13 | Alinear el clima con una hora de desfase, calcular el THI por hora y de ahí el máximo diario y sus rezagos | NASA POWER etiqueta cada hora una hora antes del clima que describe | Desfase y THI por hora: aplicada. Máximo diario y rezagos: por aplicar |
+| 14 | Definir las clases (prioridad o etiquetas múltiples) antes de construir el objetivo | El incompleto y el pezón no encontrado coinciden en 79 a 80 % y los eventos se traslapan | Por aplicar, con el socio formador |
+| 15 | Normalizar la sangre por máquina o marcarla | Picos de hasta 27.8 % de los ordeños en una máquina y máximos de 8,000 ppm | Por aplicar |
 
 # **9. Datos atípicos**
 
