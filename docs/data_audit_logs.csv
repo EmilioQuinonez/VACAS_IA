@@ -1,4 +1,5 @@
 Fecha,Persona,dataset_id / versión,Acción,Propósito,Resultado,Observaciones
+19/10/2026 12:07, Manu090704, vacas/4.0, Creación de nuevo dataset anonimizado de concentrado, Se creó un nuevo dataset con los datos de vacas anonimizados de concentrado, Archivo csv con los registros de vacas anonimizados de concentrado,
 15/10/2026 20:23, Manu090704, vacas/4.0, Exportación o acceso, Realizar un análisis exploratorio de los datos, eda.ipynb con el análisis, observaciones en el archivo
 15/10/2026 10.29, EmilioQuinonez, vacas/4.0, Creación de nuevo dataset limpio, Se creó un nuevo dataset con los datos de vacas limpios y sin duplicados, Archivo csv con los registros de vacas limpios y sin duplicados, 
 15/10/2026 15:09,TheSimpleMau,vacas/3.0,Corrección de registro,Corregir la hora de la fila de Exportación o acceso de TheSimpleMau anotada como 15/10/2026 15:10,Completado,La exploración terminó antes de la eliminación de las 14:41; la hora real fue alrededor de las 14:40 del 15/10/2026; la fila original se conserva
