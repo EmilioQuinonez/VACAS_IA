@@ -47,7 +47,7 @@ Fase *Data Understanding* (CRISP-DM). Este reporte resume lo que se encontró en
 | :---- | :---- |
 | Ordeño | `Data/dataset_vacas_anonimo.csv`, que une los reportes csv (marzo a julio de 2025) y los históricos xlsx de producción (2022 a 2026). Original: **286,217 filas y 44 columnas**. Cada fila es una visita de una vaca a una máquina de ordeño. |
 | Clima | `Data/clima/clima_nasa_power_por_hora.csv`: NASA POWER, serie horaria en hora local, 13 variables (ver [Investigacion_Clima.md](Investigacion_Clima.md)). |
-| Concentrado | `Data/TEC-UAQ-UNAM/Concentrado consumido *.xlsx`: un archivo por vaca, del 28/01/2025 al 28/01/2026. Se unen al ordeño con `Data/mapa_id_vacas.csv`. |
+| Concentrado | `Data/dataset_concentrado_anonimo.csv` (`vacas/4.0`): registros de concentrado consumido por vaca, anonimizados con el mismo mapa que el ordeño, del 28/01/2025 al 28/01/2026. Se une al ordeño por `id_vaca`. |
 | Código | [`src/DU/final_data_understanding.ipynb`](../../src/DU/final_data_understanding.ipynb) (fusión de los EDA individuales, en `src/DU/IndividualEda/`). |
 | Datos | Fuera del repositorio (`Data/`), según la política de uso de datos. |
 
@@ -441,7 +441,6 @@ Para cada evento por separado, el accuracy de 80 % se supera sin aprender nada, 
 - Los intervalos de confianza de las tasas suponen sesiones independientes y son optimistas.
 - Falta confirmar con el socio formador: las pausas fijas de las 4, 12 y 20 h; el sensor de conductividad del cuarto trasero derecho de la máquina `b96e85be`; los picos de sangre y la caída de ordeños de la máquina `7063e4b1` en 2024; el umbral de conductividad (6.5 mS/cm es una referencia por confirmar); la definición exacta de `incomplete`, `teat_missing` y `kick`; si el robot reintenta tras un incompleto; la fecha de parto y de secado por vaca; la unidad del concentrado (la mediana por registro es 1.08, probablemente kg); y el significado de los contadores y del programa de lavado.
 - Falta decidir si el modelo se despliega con pronóstico o con clima observado.
-- Un archivo de concentrado no tiene número en el nombre y el de la vaca 216 no tiene equivalencia en el mapa; ambos quedaron fuera del análisis.
 
 # **13. Adaptaciones de la metodología CRISP-DM**
 
