@@ -133,6 +133,18 @@ La producción, la duración y el intervalo son asimétricos a la derecha: la me
 
 El dataset no registra la llegada de la vaca a la fila ni la espera, solo el inicio y la duración del ordeño, así que la cola solo se puede estimar.
 
+**Cómo se detecta.** Como no hay hora de llegada, la cola se infiere de qué tan pegados quedan los ordeños consecutivos de una misma máquina:
+
+1. **Hueco:** inicio de la vaca siguiente − (inicio + duración) de la vaca anterior en la misma máquina (mínimo 0). Si la siguiente es otra vaca y entra a 2 min o menos del fin de la anterior, el relevo es «pegado» (probablemente había alguien esperando).
+2. **Ocupación (ρ):** suma de las duraciones de los ordeños de la máquina entre el tiempo observado, es decir, la fracción del tiempo en que la máquina está ocupada.
+3. **Espera estimada:** fórmula de Pollaczek-Khinchine de la teoría de colas (cola M/G/1, con llegadas al azar y una vaca atendida a la vez):
+
+    *Espera media = ρ · E[S] · (1 + CV²) / (2 · (1 − ρ))*
+
+donde ρ es la ocupación, E[S] la duración media del ordeño (min) y CV su coeficiente de variación (desviación estándar entre media). Por ejemplo, con ρ = 0.73, E[S] = 8.1 min y CV = 0.32 la espera es de unos 12 min. Los indicadores de la tabla se calcularon con los últimos 3 meses de datos.
+
+**Limitaciones:** la fórmula supone llegadas aleatorias y una cola independiente por máquina, y crece rápido cuando ρ se acerca a 1. Las vacas no llegan al azar (horarios y pausas), así que la espera es una estimación orientativa y no una medición.
+
 | Indicador | Resultado |
 | :---- | :---- |
 | Relevos pegados (la siguiente vaca entra a 2 min o menos de que termine la anterior) | De 21 % (2022) a 80 % (2026) |
