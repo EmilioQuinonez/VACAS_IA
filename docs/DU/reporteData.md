@@ -259,7 +259,7 @@ El clima diario tiene mucha redundancia: tres componentes explican 86.6 % de la 
 
 **Hallazgos adicionales.**
 
-- Hay 201 de las 207 vacas con concentrado y 49,981 días-vaca con leche y concentrado. Todos los registros de concentrado están a la hora en punto, así que no se puede asociar un consumo a un ordeño específico, solo a un día o a una hora.
+- El concentrado tiene 129,532 registros de 202 vacas; 201 de ellas están también entre las 207 con ordeño, y hay 49,981 días-vaca con leche y concentrado. Todos los registros de concentrado están a la hora en punto, así que no se puede asociar un consumo a un ordeño específico, solo a un día o a una hora.
 
 ![Relación diaria entre concentrado y leche](figuras/nb_concentrado_leche.png)
 
