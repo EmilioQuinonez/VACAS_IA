@@ -1,17 +1,16 @@
 """
-Une las sesiones de ordeño con el clima por hora de NASA POWER (fase de Data Preparation).
+Agrega a las sesiones de ordeño los atributos de clima de NASA POWER (fase de Data Preparation).
 
 Lee Data/dataset_vacas_anonimo.csv (vacas/3.0) y Data/clima/clima_nasa_power_por_hora.csv
-(descargar_clima.py), aplica la limpieza decidida en el entendimiento de los datos, agrega la
-temperatura y el THI de la hora en que inicia cada sesion y las horas con THI alto de las 24 h
-previas, y guarda Data/dataset_vacas_clima.csv (vacas/5.0).
+(descargar_clima.py) y le agrega a cada sesion la temperatura y el THI de la hora en que inicia
+y las horas con THI alto de las 24 h previas. Las sesiones no se limpian ni se modifican: solo
+se agregan esas tres columnas. Guarda Data/dataset_vacas_clima.csv (vacas/5.0).
 
 Uso:
     python src/DP/integrar_clima.py
 """
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 raiz = Path(__file__).resolve().parent.parent.parent
@@ -19,78 +18,30 @@ ORIGEN = raiz / "Data" / "dataset_vacas_anonimo.csv"
 CLIMA = raiz / "Data" / "clima" / "clima_nasa_power_por_hora.csv"
 SALIDA = raiz / "Data" / "dataset_vacas_clima.csv"
 
-CUARTOS = ["di", "dd", "ti", "td"]
 # NASA POWER etiqueta cada hora una hora antes del clima que describe
 DESFASE_POWER_H = 1
 UMBRAL_THI = 68
-# Un intervalo de mas de 48 h es el regreso tras una brecha (periodo seco), no un intervalo de ordeño
-UMBRAL_INTERVALO_H = 48
-ALERTAS = {"estado_patada": "patada", "estado_incompleto": "incompleto",
-           "estado_pezones_no_encontrados": "pezon_no_encontrado", "estado_amd_pezon": "amd_pezon"}
-# Columnas vacias o constantes, y el intervalo del sistema, que solo trae una de las dos fuentes
-DESCARTADAS = ["estado_rcs_1000_celulas_ml", "misc_usuario", "misc_programa_de_lavado",
-               "main_intervalo_de_ordeno_hh_mm"]
 
 
-def cargar_sesiones(ruta):
+def hora_de_inicio(texto):
     """
-        Lee el dataset anonimizado y aplica la limpieza del reporte de datos (seccion 3.3, pasos 1 a 7):
-        fechas y duraciones a numero, sin sesiones repetidas entre csv y xlsx ni duplicados exactos,
-        solo las tres maquinas, alertas por cuarto como banderas 0/1, conductividad 0 como faltante
-        e intervalos de mas de 48 h como faltantes con bandera.
+        Convierte main_hora_de_inicio a fecha y hora. generate_data.py unio en un solo CSV las filas
+        de los CSV crudos (mar-jul 2025) y de los xlsx crudos (2022-2026), y cada fila conserva el
+        formato de su origen: "dd/mm/aaaa hh:mm a. m." (22 caracteres) o "aaaa-mm-dd hh:mm:ss".
 
         Args:
-            ruta (Path): CSV generado por anonymize_data.py.
+            texto (Series): Columna main_hora_de_inicio.
 
         Returns:
-            DataFrame: Una fila por visita de una vaca a una de las tres maquinas, ordenada por vaca e inicio.
+            Series: Fecha y hora de inicio de cada sesion.
     """
-    bruto = pd.read_csv(ruta, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
-
-    # El archivo junta dos fuentes con formatos distintos:
-    #   csv  (mar-jul 2025): hora "dd/mm/aaaa hh:mm a. m.", duracion "mm:ss", trae main_accion
-    #   xlsx (2022-2026):    hora "aaaa-mm-dd hh:mm:ss",   duracion "hh:mm:ss", no trae main_accion
-    es_csv = bruto["main_hora_de_inicio"].str.len() == 22
-    bruto["inicio"] = pd.Series(pd.NaT, index=bruto.index, dtype="datetime64[ns]")
-    bruto.loc[es_csv, "inicio"] = pd.to_datetime(
-        bruto.loc[es_csv, "main_hora_de_inicio"].str.replace("a. m.", "AM", regex=False).str.replace("p. m.", "PM", regex=False),
+    de_csv = texto.str.len() == 22
+    inicio = pd.Series(pd.NaT, index=texto.index, dtype="datetime64[ns]")
+    inicio[de_csv] = pd.to_datetime(
+        texto[de_csv].str.replace("a. m.", "AM", regex=False).str.replace("p. m.", "PM", regex=False),
         format="%d/%m/%Y %I:%M %p")
-    bruto.loc[~es_csv, "inicio"] = pd.to_datetime(bruto.loc[~es_csv, "main_hora_de_inicio"], format="%Y-%m-%d %H:%M:%S")
-
-    duracion = bruto["main_duracion_mm_ss"].where(bruto["main_duracion_mm_ss"].str.len() == 8, "00:" + bruto["main_duracion_mm_ss"])
-    bruto["duracion_seg"] = pd.to_timedelta(duracion).dt.total_seconds()
-
-    # Los registros de 2025 estan en las dos fuentes: se quitan del csv los que ya vienen en el xlsx (misma vaca y mismo minuto)
-    llave = pd.MultiIndex.from_arrays([bruto["id_vaca"], bruto["inicio"].dt.floor("min")])
-    repetido = es_csv & llave.isin(llave[~es_csv])
-    sesiones = bruto[~repetido].drop_duplicates().copy()
-    sesiones["main_accion"] = sesiones["main_accion"].fillna("Ordeño")   # el xlsx solo trae ordeños
-    sesiones = sesiones.sort_values(["id_vaca", "inicio"])
-
-    # Horas desde el ordeño anterior de la misma vaca (solo entre ordeños). Se calcula antes de quitar la
-    # cuarta maquina porque sus 2 registros tambien son ordeños de la vaca
-    es_ordeno = sesiones["main_accion"] == "Ordeño"
-    sesiones.loc[es_ordeno, "intervalo_h"] = sesiones[es_ordeno].groupby("id_vaca")["inicio"].diff().dt.total_seconds() / 3600
-    sesiones["regreso_periodo_seco"] = (sesiones["intervalo_h"] > UMBRAL_INTERVALO_H).astype(int)
-    sesiones["intervalo_h"] = sesiones["intervalo_h"].where(sesiones["intervalo_h"] <= UMBRAL_INTERVALO_H)
-
-    # Una "maquina" del archivo tiene solo 2 registros: se deja fuera
-    maquinas = sesiones["misc_eo_po"].value_counts().loc[lambda s: s > 100].index
-    sesiones = sesiones[sesiones["misc_eo_po"].isin(maquinas)]
-
-    # Las alertas traen la lista de cuartos afectados (DI,TD o Todos): una columna 0/1 por cuarto
-    bloques = []
-    for columna, nombre in ALERTAS.items():
-        texto = sesiones[columna].fillna("").str.upper().replace("TODOS", "DI,DD,TI,TD")
-        bloque = texto.str.get_dummies(sep=",").reindex(columns=[c.upper() for c in CUARTOS], fill_value=0)
-        bloques.append(bloque.rename(columns=lambda c: f"{nombre}_{c.lower()}"))
-
-    # Una conductividad de 0 es imposible: es una lectura faltante
-    conductividad = [f"conductividad_ms_cm_{c}" for c in CUARTOS]
-    sesiones[conductividad] = sesiones[conductividad].replace(0, np.nan)
-
-    sesiones = sesiones.drop(columns=["main_hora_de_inicio", "main_duracion_mm_ss", *ALERTAS, *DESCARTADAS])
-    return pd.concat([sesiones, *bloques], axis=1).reset_index(drop=True)
+    inicio[~de_csv] = pd.to_datetime(texto[~de_csv], format="%Y-%m-%d %H:%M:%S")
+    return inicio
 
 
 def cargar_clima(ruta):
@@ -122,7 +73,7 @@ def agregar_clima(sesiones, clima):
         de POWER (viento, radiacion, lluvia, nubosidad...) no se usan en el modelo y no se agregan.
 
         Args:
-            sesiones (DataFrame): Tabla de cargar_sesiones.
+            sesiones (DataFrame): Dataset anonimizado de sesiones.
             clima (DataFrame): Serie horaria de cargar_clima.
 
         Returns:
@@ -131,18 +82,16 @@ def agregar_clima(sesiones, clima):
     clima = clima.asfreq("h")
     clima["horas_thi_alto_24h"] = (clima["thi"] >= UMBRAL_THI).astype(float).where(clima["thi"].notna()).shift(1).rolling(24).sum()
     clima = clima[["t2m", "thi", "horas_thi_alto_24h"]].rename(columns={"t2m": "t_sesion", "thi": "thi_sesion"})
-    return sesiones.merge(clima, left_on=sesiones["inicio"].dt.floor("h"), right_index=True, how="left").drop(columns="key_0", errors="ignore")
+    hora = hora_de_inicio(sesiones["main_hora_de_inicio"]).dt.floor("h")
+    return sesiones.join(clima.reindex(hora).set_axis(sesiones.index))
 
 
 def main():
-    sesiones = cargar_sesiones(ORIGEN)
+    sesiones = pd.read_csv(ORIGEN, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
     integrado = agregar_clima(sesiones, cargar_clima(CLIMA))
     integrado.to_csv(SALIDA, index=False)
 
-    ordenos = integrado["main_accion"] == "Ordeño"
-    print(f"Sesiones: {len(integrado):,} ({ordenos.sum():,} ordeños) | vacas: {integrado['id_vaca'].nunique()} | "
-          f"{integrado['inicio'].min():%d/%m/%Y} a {integrado['inicio'].max():%d/%m/%Y}")
-    print(f"Intervalos de más de {UMBRAL_INTERVALO_H} h (regreso tras periodo seco): {integrado['regreso_periodo_seco'].sum():,}")
+    print(f"Sesiones: {len(integrado):,} | vacas: {integrado['id_vaca'].nunique()}")
     print(f"Sin clima de su hora: {integrado['thi_sesion'].isna().sum():,} | "
           f"sin las 24 h previas completas: {integrado['horas_thi_alto_24h'].isna().sum():,}")
     print(f"Sesiones con THI ≥ {UMBRAL_THI}: {(integrado['thi_sesion'] >= UMBRAL_THI).mean():.1%}")
