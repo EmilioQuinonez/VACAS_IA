@@ -156,7 +156,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-!.env.example
 
 # Spyder project settings
 .spyderproject
@@ -222,7 +221,6 @@ __marimo__/
 /Data/
 
 # Datos (crudos, sensibles o reproducibles)
-/data/
 *.csv
 *.csv.gz
 *.xlsx
@@ -238,7 +236,6 @@ __marimo__/
 
 # Excepción: la bitácora de auditoría de datos sí se versiona
 !docs/data_audit_logs.csv
-
 
 # Sistema operativo
 .DS_Store
