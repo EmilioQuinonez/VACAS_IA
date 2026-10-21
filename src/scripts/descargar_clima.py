@@ -5,7 +5,7 @@ Cubre desde el dato mas antiguo hasta el ultimo de las sesiones: del 13/07/2022 
 Requiere: numpy, pandas y requests (ver requirements.txt).
 
 Uso:
-    python src/DU/descargar_clima.py
+    python src/scripts/descargar_clima.py
 
 Salidas (en Data/clima/, que Git ignora):
     nasa_power_<inicio>_<fin>.json   respuesta original de cada bloque anual
