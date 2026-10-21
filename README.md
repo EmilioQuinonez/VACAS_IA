@@ -16,11 +16,14 @@ La estructura del repositorio es:
     - WBS y su archivo fuente.
   - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
     - Guía y archivo CSV de auditoría de registros.
+    - [Investigación de la fuente de clima](docs/DU/Investigacion_Clima.md).
 - **[`src/`](src/)** — Código fuente de apoyo.
-  - **[`DU/`](src/DU/)** — Scripts de preparación de datos para la fase *Data Understanding*.
-    - [`generate_data.py`](src/DU/generate_data.py) — Procesa los archivos CSV de cada vaca.
-    - [`anonymize_data.py`](src/DU/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
-    - [`descargar_clima.py`](src/DU/descargar_clima.py) — Descarga el clima por hora de NASA POWER a `Data/clima/`.
+  - **[`scripts/`](src/scripts/)** — Scripts de preparación de datos.
+    - [`generate_data.py`](src/scripts/generate_data.py) — Procesa los archivos CSV y XLSX de cada vaca.
+    - [`anonymize_data.py`](src/scripts/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
+    - [`descargar_clima.py`](src/scripts/descargar_clima.py) — Descarga el clima por hora de NASA POWER a `Data/clima/`.
+  - **[`DU/`](src/DU/)** — Notebook de exploración para la fase *Data Understanding*.
+    - [`final_data_understanding.ipynb`](src/DU/final_data_understanding.ipynb) — Reúne los análisis exploratorios del equipo sobre el dataset anonimizado, el clima de NASA POWER y el concentrado.
   - **[`DP/`](src/DP/)** — Scripts de la fase *Data Preparation*.
     - [`integrar_clima.py`](src/DP/integrar_clima.py) — Limpia las sesiones y les une el clima de NASA POWER en `Data/dataset_vacas_clima.csv`.
 
