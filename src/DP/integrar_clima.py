@@ -2,9 +2,9 @@
 Une las sesiones de ordeño con el clima por hora de NASA POWER (fase de Data Preparation).
 
 Lee Data/dataset_vacas_anonimo.csv (vacas/3.0) y Data/clima/clima_nasa_power_por_hora.csv
-(descargar_clima.py), aplica la limpieza decidida en el entendimiento de los datos, agrega el
-clima de la hora en que inicia cada sesion y las horas con THI alto de las 24 h previas, y guarda
-Data/dataset_vacas_clima.csv (vacas/5.0).
+(descargar_clima.py), aplica la limpieza decidida en el entendimiento de los datos, agrega la
+temperatura y el THI de la hora en que inicia cada sesion y las horas con THI alto de las 24 h
+previas, y guarda Data/dataset_vacas_clima.csv (vacas/5.0).
 
 Uso:
     python src/DP/integrar_clima.py
@@ -116,20 +116,21 @@ def cargar_clima(ruta):
 
 def agregar_clima(sesiones, clima):
     """
-        Une a cada sesion el clima de la hora en que inicia y el numero de horas con THI alto en las
-        24 h previas. La ventana termina justo antes de la hora de la sesion, asi que solo usa clima que
-        ya ocurrio; si no esta completa, el atributo queda faltante.
+        Une a cada sesion la temperatura y el THI de la hora en que inicia y el numero de horas con THI
+        alto en las 24 h previas. La ventana termina justo antes de la hora de la sesion, asi que solo
+        usa clima que ya ocurrio; si no esta completa, el atributo queda faltante. Las demas variables
+        de POWER (viento, radiacion, lluvia, nubosidad...) no se usan en el modelo y no se agregan.
 
         Args:
             sesiones (DataFrame): Tabla de cargar_sesiones.
             clima (DataFrame): Serie horaria de cargar_clima.
 
         Returns:
-            DataFrame: Las sesiones con las variables de POWER, t_sesion, thi_sesion y horas_thi_alto_24h.
+            DataFrame: Las sesiones con t_sesion, thi_sesion y horas_thi_alto_24h.
     """
     clima = clima.asfreq("h")
     clima["horas_thi_alto_24h"] = (clima["thi"] >= UMBRAL_THI).astype(float).where(clima["thi"].notna()).shift(1).rolling(24).sum()
-    clima = clima.rename(columns={"t2m": "t_sesion", "thi": "thi_sesion"})
+    clima = clima[["t2m", "thi", "horas_thi_alto_24h"]].rename(columns={"t2m": "t_sesion", "thi": "thi_sesion"})
     return sesiones.merge(clima, left_on=sesiones["inicio"].dt.floor("h"), right_index=True, how="left").drop(columns="key_0", errors="ignore")
 
 
