@@ -29,7 +29,7 @@ Aplica a todos los miembros del equipo. Cualquier elemento creado o modificado a
 
 | Categoría | CI | Ubicación |
 |---|---|---|
-| Código fuente | Scripts de preparación, anonimización y análisis de datos | `src/` (por ejemplo `src/DU/generate_data.py`, `src/DU/anonymize_data.py`) |
+| Código fuente | Scripts de preparación, anonimización y análisis de datos | `src/` (por ejemplo `src/scripts/generate_data.py`, `src/scripts/anonymize_data.py`) |
 | Documentación de entendimiento del negocio | Reporte de Business Understanding, One Page, Memorándum de entendimiento, WBS | `docs/BU/` |
 | Documentación de entendimiento de los datos | Figuras y documentos de descripción de datos | `docs/DU/` |
 | Control de datos | Bitácora de auditoría de datos y su guía de llenado | `docs/data_audit_logs.csv`, `docs/guide_audit_logs.md` |
