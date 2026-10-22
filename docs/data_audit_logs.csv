@@ -1,4 +1,6 @@
 Fecha,Persona,dataset_id / versión,Acción,Propósito,Resultado,Observaciones
+22/10/2026 11:17,XMaster417, muestra_vacas/1.0, Creación de nuevo dataset muestral, Se creó un nuevo dataset con los datos de vacas muestrales, Archivo csv con los registros de vacas muestrales,
+22/10/2026 11:17,XMaster417, vacas/7.0, Exportación o acceso, Acceder a los datos para obtener una muestra representativa,Dataset con datos muestrales,  
 21/10/2026 19:52,XMaster417, vacas/7.0, Integración, Integrar en un unico dataset los datos de clima y atributos derivados, Dataset con clima y atributos derivados,
 21/10/2026 16:43,XMaster417,vacas/6.0,Creación de nuevo dataset con atributos derivados,Construir los atributos derivados y los eventos de ordeño,Dataset con atributos derivados,
 21/10/2026 16:03,TheSimpleMau,vacas/5.0,Integración,Agregar a las sesiones de ordeño los atributos de clima de NASA POWER para la preparación de datos,Completado,"src/DP/integrar_clima.py sobre vacas/3.0 (llave del equipo) y el clima de NASA POWER v2.10.3 desde el 11/07/2022 (descargar_clima.py); Data/dataset_vacas_clima.csv con las 286,217 sesiones sin cambios más t_sesion, thi_sesion y horas_thi_alto_24h (47 columnas); todas las sesiones con clima"
