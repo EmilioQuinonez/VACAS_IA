@@ -26,6 +26,7 @@ La estructura del repositorio es:
     - [`final_data_understanding.ipynb`](src/DU/final_data_understanding.ipynb) — Reúne los análisis exploratorios del equipo sobre el dataset anonimizado, el clima de NASA POWER y el concentrado.
   - **[`DP/`](src/DP/)** — Scripts de la fase *Data Preparation*.
     - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) en `Data/dataset_vacas_clima.csv`.
+    - [`integrar_atributos.py`](src/DP/integrar_atributos.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento en `Data/dataset_vacas_derivados.csv`. [Criterios de construcción y umbral de MDI](docs/DP/atributos_derivados.md).
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
