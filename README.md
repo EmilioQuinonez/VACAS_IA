@@ -107,6 +107,61 @@ python3 src/DP/integrate_derivates.py
 
 **Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las variables derivadas y etiquetas de eventos, conservando las filas y columnas existentes, incluidas las de clima. La terminal muestra estadísticas de las sesiones y eventos.
 
+## Preparación para reto de datos.
+
+Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. 
+
+Ejecuta los siguientes comandos desde la raíz del repositorio.
+
+### 1. Obtener una muestra representativa de la población
+
+Ejecuta `get_data_sample.py` para calcular el tamaño de muestra mediante la fórmula de Cochran con corrección por población finita y seleccionar registros al azar, estratificados proporcionalmente por `id_vaca`.
+
+**Windows**
+
+```powershell
+py src/RETO_DATOS/get_data_sample.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/RETO_DATOS/get_data_sample.py
+```
+
+**Resultado esperado:** se genera `src/RETO_DATOS/dataset_vacas_muestra.csv`, conservando todas las columnas del conjunto integrado. La terminal muestra el tamaño de la muestra y cuántos estratos están representados.
+
+### 2. Separar los conjuntos de entrenamiento, validación y prueba
+
+Ejecuta `k_fold.py` para separar primero un 20% de la muestra como conjunto de prueba (`test`). Este conjunto queda fijo y **no participa en k-fold**. Con el 80% restante se generan cinco folds: en cada uno, una parte se usa para validación (`val`) y las otras cuatro para entrenamiento (`train`).
+
+**Windows**
+
+```powershell
+py src/DP/k_fold.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/DP/k_fold.py
+```
+
+**Resultado esperado:** la terminal muestra el número de registros de `train`, `val` y `test` en cada fold, además de las primeras cinco filas de los conjuntos del primer fold.
+
+Para obtener los conjuntos desde otro script, importa `get_k_folds` y selecciona un fold:
+
+```python
+from src.DP.k_fold import INPUT_DIR, get_k_folds
+
+dataset, folds = get_k_folds(INPUT_DIR)
+fold = folds[0]
+
+train = dataset.iloc[fold["train"]]
+val = dataset.iloc[fold["val"]]
+test = dataset.iloc[fold["test"]]
+```
+
 
 ## ¿Cómo acceder a los entregables?
 
