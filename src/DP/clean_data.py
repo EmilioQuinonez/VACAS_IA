@@ -54,8 +54,37 @@ def convertir_fechas_y_duraciones(vacas):
     return vacas.drop(columns=["main_hora_de_inicio", "main_duracion_mm_ss", "main_intervalo_de_ordeno_hh_mm"])
 
 
+def quitar_duplicados(vacas):
+    """Acción 2: quita las sesiones repetidas entre csv y xlsx y los duplicados exactos."""
+    n_inicial = len(vacas)
+
+    # Los registros de 2025 están en las dos fuentes: se quitan del csv los que ya vienen en el xlsx
+    # (misma vaca y mismo minuto de inicio)
+    vacas = vacas.assign(minuto=vacas["inicio"].dt.floor("min"))
+    xlsx = vacas[vacas["fuente"] == "xlsx"].drop_duplicates(["id_vaca", "minuto"])
+    cruce = vacas.reset_index().merge(xlsx, on=["id_vaca", "minuto"], suffixes=("", "_xlsx")).set_index("index")
+    # El xlsx solo registra ordeños: un rechazo o una echada sin ordeñar del csv nunca es repetido, aunque caiga en el mismo minuto
+    cruce = cruce[(cruce["fuente"] == "csv") & (cruce["main_accion"] == "Ordeño")]
+    repetido = vacas.index.isin(cruce.index)
+    print(f"[duplicados] {repetido.sum():,} ordeños del .csv que ya estaban en el .xlsx (misma vaca y mismo minuto)")
+
+    # El csv no guarda segundos en la hora de inicio, así que se confirma con la duración (que sí los tiene)
+    misma_duracion = ((cruce["duracion_seg"] - cruce["duracion_seg_xlsx"]).abs() <= 1).sum()
+    print(f"[duplicados] {misma_duracion:,} de {len(cruce):,} coinciden además en duración (±1 s)")
+    vacas = vacas[~repetido].drop(columns="minuto")
+
+    exactos = vacas.duplicated()
+    print(f"[duplicados] {exactos.sum():,} filas idénticas en todas las columnas")
+    vacas = vacas[~exactos]
+
+    print(f"[duplicados] {n_inicial:,} -> {len(vacas):,} filas ({n_inicial - len(vacas):,} eliminadas)")
+    print(f"[duplicados] quedan {(vacas['fuente'] == 'csv').sum():,} filas del .csv y {(vacas['fuente'] == 'xlsx').sum():,} del .xlsx")
+    return vacas.reset_index(drop=True)
+
+
 if __name__ == "__main__":
     vacas = pd.read_csv(RUTA_VACAS, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
     clima = pd.read_csv(RUTA_CLIMA, parse_dates=["hora"])
 
     vacas = convertir_fechas_y_duraciones(vacas)
+    vacas = quitar_duplicados(vacas)
