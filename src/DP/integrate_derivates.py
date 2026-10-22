@@ -1,7 +1,8 @@
 """
-Lee Data/dataset_vacas_clima.csv, generado por integrar_clima.py, y guarda
-Data/dataset_vacas_derivados.csv. Conserva todas las filas, su orden y sus
-columnas originales. Los FME, diferencias de sangre y tiempo/producción usan
+Lee Data/dataset_vacas_integrado.csv, generado primero por `integrar_clima.py`,
+y agrega los atributos y eventos guardando el resultado sobre ese mismo archivo.
+Conserva todas las filas, su orden y sus columnas originales, incluidas las de clima.
+Los FME, diferencias de sangre y tiempo/producción usan
 la sesión anterior de cada vaca; la tasa de patadas usa [inicio - 7 días, inicio).
 Las cuatro etiquetas describen la sesión actual y pueden coexistir, salvo éxito.
 
@@ -18,8 +19,8 @@ except ImportError:
     from integrar_clima import hora_de_inicio
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-INPUT_PATH = ROOT / "Data" / "dataset_vacas_clima.csv"
-OUTPUT_PATH = ROOT / "Data" / "dataset_vacas_derivados.csv"
+INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
+OUTPUT_PATH = INPUT_PATH
 
 QUARTERS = ("di", "dd", "ti", "td")
 MDI_THRESHOLD = 1.4  # Alerta MDi >= 1.4.
