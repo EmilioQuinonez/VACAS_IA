@@ -134,6 +134,37 @@ def marcar_acciones(vacas, base="Ordeño", min_registros_maquina=100):
     return vacas
 
 
+ALERTAS = ["estado_patada", "estado_incompleto", "estado_pezones_no_encontrados", "estado_amd_pezon"]
+CUARTOS = ["di", "dd", "ti", "td"]
+
+
+def alertas_a_banderas(vacas, alertas=ALERTAS, cuartos=CUARTOS):
+    """Acción 5: convierte cada alerta de texto ("DI,TD", "Todos") en una bandera 0/1 por cuarto.
+
+    El nulo significa que el evento no ocurrió (0). Las columnas de texto originales se eliminan.
+    """
+    vacas = vacas.copy()
+    nuevas = []
+    for alerta in alertas:
+        texto = vacas[alerta].fillna("").str.lower()
+        n_todos = (texto == "todos").sum()
+        banderas = texto.str.replace("todos", ",".join(cuartos), regex=False).str.get_dummies(sep=",")
+
+        desconocidos = set(banderas.columns) - set(cuartos)
+        if desconocidos:
+            raise ValueError(f"'{alerta}' trae cuartos desconocidos: {desconocidos}")
+        banderas = banderas.reindex(columns=cuartos, fill_value=0)
+        banderas.columns = [f"{alerta.removeprefix('estado_')}_{cuarto}" for cuarto in cuartos]
+        nuevas.append(banderas)
+
+        con_evento = (texto != "").sum()
+        por_cuarto = banderas.sum().rename(lambda c: c[-2:]).to_dict()
+        print(f"[alertas] {alerta}: {con_evento:,} visitas con evento ({n_todos:,} marcadas 'Todos'), por cuarto {por_cuarto}")
+
+    print(f"[alertas] {len(alertas)} columnas de texto -> {len(alertas) * len(cuartos)} banderas 0/1 (nulo = no ocurrió)")
+    return pd.concat([vacas.drop(columns=alertas), *nuevas], axis=1)
+
+
 if __name__ == "__main__":
     vacas = pd.read_csv(RUTA_VACAS, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
     clima = pd.read_csv(RUTA_CLIMA, parse_dates=["hora"])
@@ -142,3 +173,4 @@ if __name__ == "__main__":
     vacas = quitar_duplicados(vacas)
     vacas = quitar_columnas_vacias_o_constantes(vacas)
     vacas = marcar_acciones(vacas)
+    vacas = alertas_a_banderas(vacas)
