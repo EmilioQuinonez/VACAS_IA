@@ -1,3 +1,4 @@
+import unicodedata
 from pathlib import Path
 
 import numpy as np
@@ -6,6 +7,12 @@ import pandas as pd
 RAIZ = Path(__file__).resolve().parents[2]
 RUTA_VACAS = RAIZ / "Data" / "dataset_vacas_anonimo.csv"
 RUTA_CLIMA = RAIZ / "Data" / "clima" / "clima_nasa_power_por_hora.csv"
+
+
+def _a_nombre_columna(texto):
+    """'Echada sin ordeñar' -> 'echada_sin_ordenar' (minúsculas, sin acentos ni espacios)."""
+    sin_acentos = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
+    return "_".join(sin_acentos.lower().split())
 
 
 def convertir_fechas_y_duraciones(vacas):
@@ -98,6 +105,35 @@ def quitar_columnas_vacias_o_constantes(vacas):
     return vacas.drop(columns=vacias + constantes)
 
 
+def marcar_acciones(vacas, base="Ordeño", min_registros_maquina=100):
+    """Acción 4: convierte main_accion en dummies 0/1, una por cada acción distinta de la categoría base
+    (la base queda con todas en 0), y deja fuera las máquinas con muy pocos registros."""
+    vacas = vacas.copy()
+
+    # El xlsx solo registra ordeños y no trae main_accion: sus nulos son la categoría base
+    n_xlsx = vacas["main_accion"].isna().sum()
+    vacas["main_accion"] = vacas["main_accion"].fillna(base)
+    print(f"[acción] {n_xlsx:,} filas del .xlsx sin main_accion se marcan como '{base}'")
+    print(f"[acción] {(vacas['main_accion'] == base).sum():,} visitas '{base}' (categoría base: todas las dummies en 0)")
+
+    # drop_first quitaría la primera en orden alfabético, no necesariamente la base: se quita por nombre
+    dummies = pd.get_dummies(vacas["main_accion"], dtype=int).drop(columns=base)
+    dummies.columns = ["accion_" + _a_nombre_columna(c) for c in dummies.columns]
+    for columna in dummies:
+        print(f"[acción] {columna}: {dummies[columna].sum():,} visitas")
+    vacas = pd.concat([vacas.drop(columns="main_accion"), dummies], axis=1)
+
+    # Máquinas con muy pocos registros no permiten comparar nada: se dejan fuera
+    por_maquina = vacas["misc_eo_po"].value_counts()
+    raras = por_maquina[por_maquina < min_registros_maquina].index
+    for maquina in raras:
+        print(f"[máquina] '{maquina}' solo tiene {por_maquina[maquina]:,} registros: se deja fuera")
+    vacas = vacas[~vacas["misc_eo_po"].isin(raras)].reset_index(drop=True)
+
+    print(f"[acción] quedan {len(vacas):,} visitas en {vacas['misc_eo_po'].nunique()} máquinas")
+    return vacas
+
+
 if __name__ == "__main__":
     vacas = pd.read_csv(RUTA_VACAS, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
     clima = pd.read_csv(RUTA_CLIMA, parse_dates=["hora"])
@@ -105,3 +141,4 @@ if __name__ == "__main__":
     vacas = convertir_fechas_y_duraciones(vacas)
     vacas = quitar_duplicados(vacas)
     vacas = quitar_columnas_vacias_o_constantes(vacas)
+    vacas = marcar_acciones(vacas)
