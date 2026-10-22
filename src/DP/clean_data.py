@@ -82,9 +82,26 @@ def quitar_duplicados(vacas):
     return vacas.reset_index(drop=True)
 
 
+def quitar_columnas_vacias_o_constantes(vacas):
+    """Acción 3: elimina las columnas sin datos o con un solo valor, que no aportan al modelo."""
+    n_valores = vacas.nunique(dropna=True)
+    vacias = n_valores[n_valores == 0].index.tolist()
+    constantes = n_valores[n_valores == 1].index.tolist()
+
+    for col in vacias:
+        print(f"[columnas] '{col}' vacía: sin ningún dato")
+    for col in constantes:
+        valor = vacas[col].dropna().iloc[0]
+        print(f"[columnas] '{col}' constante: siempre {valor!r} ({vacas[col].notna().sum():,} registros, el resto nulo)")
+
+    print(f"[columnas] {len(vacias) + len(constantes)} columnas eliminadas, quedan {vacas.shape[1] - len(vacias) - len(constantes)}")
+    return vacas.drop(columns=vacias + constantes)
+
+
 if __name__ == "__main__":
     vacas = pd.read_csv(RUTA_VACAS, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
     clima = pd.read_csv(RUTA_CLIMA, parse_dates=["hora"])
 
     vacas = convertir_fechas_y_duraciones(vacas)
     vacas = quitar_duplicados(vacas)
+    vacas = quitar_columnas_vacias_o_constantes(vacas)
