@@ -1,5 +1,113 @@
 # Vaca_AI
 
+## ¿Cómo obtener y preparar los datos?
+
+Ejecuta los siguientes pasos en orden para construir el conjunto de datos. Se asume que estas en la carpeta raíz del repositorio para correr los comandos.
+
+### 1. Preparar los archivos y el entorno
+
+1. Descarga los datos de Google Drive.
+2. Crea la carpeta `Data/vacas/` en la raíz del repositorio.
+3. Copia a `Data/vacas/` los archivos `.xlsx` de `TEC-UAQ-UNAM` y los archivos `.csv` de `DATOS vacas en establo marzo_junio_2025` cuyo nombre sea un número, los demás puedes ignorarlos.
+4. Instala Python y las dependencias del proyecto:
+
+   **Windows (PowerShell)**
+
+   ```powershell
+   py -m pip install -r requirements.txt
+   ```
+
+   **macOS y Linux**
+
+   ```bash
+   python3 -m pip install -r requirements.txt
+   ```
+
+**Resultado esperado:** los archivos originales están en `Data/vacas/` y las dependencias están instaladas.
+
+### 2. Unir los datos de las vacas
+
+**Windows**
+
+```powershell
+py src/scripts/generate_data.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/scripts/generate_data.py
+```
+
+**Resultado esperado:** se genera `Data/dataset_vacas.csv` con los datos combinados. La terminal muestra el número de archivos procesados, observaciones duplicadas y valores nulos.
+
+### 3. Anonimizar los datos
+
+Crea un archivo `.env` en la raíz con `COWSKEY=tu_llave_secreta`, sustituyendo el valor por una llave privada. Conserva la misma llave si necesitas generar los mismos identificadores anónimos.
+
+**Windows**
+
+```powershell
+py src/scripts/anonymize_data.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/scripts/anonymize_data.py
+```
+
+**Resultado esperado:** se genera `Data/dataset_vacas_anonimo.csv` con los identificadores anonimizados y `Data/mapa_id_vacas.csv` con sus equivalencias.
+
+### 4. Descargar los datos del clima
+
+**Windows**
+
+```powershell
+py src/scripts/descargar_clima.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/scripts/descargar_clima.py
+```
+
+**Resultado esperado:** se crea `Data/clima/clima_nasa_power_por_hora.csv`, junto con las respuestas originales y un manifiesto en `Data/clima/`. La terminal muestra la cita de la fuente y una fila para la bitácora de auditoría.
+
+### 5. Integrar el clima
+
+**Windows**
+
+```powershell
+py src/DP/integrar_clima.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/DP/integrar_clima.py
+```
+
+**Resultado esperado:** se genera `Data/dataset_vacas_integrado.csv` a partir de los datos anonimizados, con temperatura y THI de la sesión y horas con THI alto en las 24 horas previas.
+
+### 6. Integrar las variables derivadas
+
+**Windows**
+
+```powershell
+py src/DP/integrate_derivates.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/DP/integrate_derivates.py
+```
+
+**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las variables derivadas y etiquetas de eventos, conservando las filas y columnas existentes, incluidas las de clima. La terminal muestra estadísticas de las sesiones y eventos.
+
+
 ## ¿Cómo acceder a los entregables?
 
 ### En GitHub
@@ -26,6 +134,7 @@ La estructura del repositorio es:
     - [`final_data_understanding.ipynb`](src/DU/final_data_understanding.ipynb) — Reúne los análisis exploratorios del equipo sobre el dataset anonimizado, el clima de NASA POWER y el concentrado.
   - **[`DP/`](src/DP/)** — Scripts de la fase *Data Preparation*.
     - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) en `Data/dataset_vacas_clima.csv`.
+    - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento en `Data/dataset_vacas_derivados.csv`.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 

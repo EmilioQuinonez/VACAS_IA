@@ -4,7 +4,7 @@ Agrega a las sesiones de ordeño los atributos de clima de NASA POWER (fase de D
 Lee Data/dataset_vacas_anonimo.csv (vacas/3.0) y Data/clima/clima_nasa_power_por_hora.csv
 (descargar_clima.py) y le agrega a cada sesion la temperatura y el THI de la hora en que inicia
 y las horas con THI alto de las 24 h previas. Las sesiones no se limpian ni se modifican: solo
-se agregan esas tres columnas. Guarda Data/dataset_vacas_clima.csv (vacas/5.0).
+se agregan esas tres columnas. Guarda Data/dataset_vacas_integrado.csv.
 
 Uso:
     python src/DP/integrar_clima.py
@@ -16,7 +16,7 @@ import pandas as pd
 raiz = Path(__file__).resolve().parent.parent.parent
 ORIGEN = raiz / "Data" / "dataset_vacas_anonimo.csv"
 CLIMA = raiz / "Data" / "clima" / "clima_nasa_power_por_hora.csv"
-SALIDA = raiz / "Data" / "dataset_vacas_clima.csv"
+SALIDA = raiz / "Data" / "dataset_vacas_integrado.csv"
 
 # NASA POWER etiqueta cada hora una hora antes del clima que describe
 DESFASE_POWER_H = 1
