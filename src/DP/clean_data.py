@@ -165,6 +165,23 @@ def alertas_a_banderas(vacas, alertas=ALERTAS, cuartos=CUARTOS):
     return pd.concat([vacas.drop(columns=alertas), *nuevas], axis=1)
 
 
+def conductividad_a_faltante(vacas, cuartos=CUARTOS):
+    """Acción 6: la conductividad 0 es imposible en leche, es una lectura faltante (NaN).
+
+    No se imputa. La razón entre cuartos no se calcula aquí: es colineal con las conductividades
+    y se puede derivar después, en la etapa de variables del modelo, si el objetivo la requiere.
+    """
+    vacas = vacas.copy()
+    for cuarto in cuartos:
+        columna = f"conductividad_ms_cm_{cuarto}"
+        ceros = vacas[columna] == 0
+        vacas.loc[ceros, columna] = np.nan
+        por_maquina = ceros.groupby(vacas["misc_eo_po"]).mean()
+        print(f"[conductividad] {columna}: {ceros.sum():,} ceros -> NaN ({ceros.mean():.1%}); "
+              f"máxima por máquina: {por_maquina.idxmax()} con {por_maquina.max():.1%}")
+    return vacas
+
+
 if __name__ == "__main__":
     vacas = pd.read_csv(RUTA_VACAS, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
     clima = pd.read_csv(RUTA_CLIMA, parse_dates=["hora"])
@@ -174,3 +191,4 @@ if __name__ == "__main__":
     vacas = quitar_columnas_vacias_o_constantes(vacas)
     vacas = marcar_acciones(vacas)
     vacas = alertas_a_banderas(vacas)
+    vacas = conductividad_a_faltante(vacas)
