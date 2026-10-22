@@ -78,22 +78,22 @@ def count_kicked_quarters(kicks):
 
     return count
 
-def parse_duration_minutes(duration):
+def parse_duration_seconds(duration):
     """
-    Convierte las duraciones mm:ss y hh:mm:ss a minutos con parte decimal.
+    Convierte las duraciones mm:ss y hh:mm:ss a segundos.
 
     Args:
         duration (pd.Series): Columna main_duracion_mm_ss con las duraciones
             originales; puede contener valores faltantes.
 
     Returns:
-        pd.Series: Duración numérica en minutos, con el mismo índice. Los
-            segundos se conservan como fracción de minuto y los nulos permanecen.
+        pd.Series: Duración numérica en segundos, con el mismo índice.
+            Se conservan las fracciones de segundo y los valores nulos.
     """
     duration = duration.astype("string").str.strip()
     duration = duration.where(duration.str.count(":").ne(1), "00:" + duration)
     
-    return pd.to_timedelta(duration).dt.total_seconds() / 60
+    return pd.to_timedelta(duration).dt.total_seconds()
 
 def add_derived_features(
         milky_sessions, 
@@ -170,9 +170,9 @@ def add_derived_features(
     blood_differences = blood.sub(blood.mean(axis=1), axis=0)
     current_features[[f"blood_diff_{quarter}" for quarter in QUARTERS]] = blood_differences.to_numpy()
 
-    # box_time_to_yield_ratio: duración en minutos / producción total en kg.
+    # box_time_to_yield_ratio: duración en segundos / producción total en kg (s/kg).
     current_features["box_time_to_yield_ratio"] = (
-        parse_duration_minutes(base["main_duracion_mm_ss"])
+        parse_duration_seconds(base["main_duracion_mm_ss"])
         / total_yield.where(total_yield.gt(0))
     )
 
