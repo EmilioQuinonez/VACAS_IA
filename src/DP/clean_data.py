@@ -182,6 +182,46 @@ def conductividad_a_faltante(vacas, cuartos=CUARTOS):
     return vacas
 
 
+def corregir_intervalos(vacas, umbral_horas=48):
+    """Acción 7: completa el intervalo faltante y marca los regresos tras una pausa larga.
+
+    El intervalo es el tiempo entre el fin del ordeño anterior de la vaca y el inicio del actual.
+    Los intervalos de más de `umbral_horas` (periodo seco, ausencia) no son el ritmo normal de ordeño:
+    pasan a NaN y quedan marcados con la bandera `regreso_tras_periodo_seco`.
+    """
+    vacas = vacas.copy()
+    es_ordeno = vacas[[c for c in vacas.columns if c.startswith("accion_")]].sum(axis=1) == 0
+
+    # Intervalo calculado con el ordeño anterior de la misma vaca (los rechazos no cuentan como ordeño)
+    ordenos = vacas[es_ordeno].sort_values(["id_vaca", "inicio"])
+    por_vaca = ordenos.groupby("id_vaca")
+    fin_previo = por_vaca["inicio"].shift() + pd.to_timedelta(por_vaca["duracion_seg"].shift(), unit="s")
+    calculado = ((ordenos["inicio"] - fin_previo).dt.total_seconds() / 3600).reindex(vacas.index)
+
+    # Se comprueba la definición contra los intervalos que ya trae el xlsx
+    con_dato = vacas["intervalo_horas"].notna() & calculado.notna()
+    distinto = con_dato & ((calculado - vacas["intervalo_horas"]).abs() > 0.01)
+    print(f"[intervalo] el cálculo coincide con {1 - distinto.sum() / con_dato.sum():.1%} de los {con_dato.sum():,} intervalos que ya existían (±36 s)")
+    print(f"[intervalo] {distinto.sum():,} no coinciden: el robot reporta ~0 h tras una ausencia larga "
+          f"(el cálculo da de {calculado[distinto].min():,.0f} a {calculado[distinto].max():,.0f} h, mediana {calculado[distinto].median():,.0f} h)")
+
+    # Se usa siempre el intervalo calculado cuando existe: completa los faltantes del csv y corrige esos ceros
+    faltante = vacas["intervalo_horas"].isna() & es_ordeno
+    usar = es_ordeno & calculado.notna()
+    vacas.loc[usar, "intervalo_horas"] = calculado[usar]
+    sin_previo = (vacas["intervalo_horas"].isna() & es_ordeno).sum()
+    print(f"[intervalo] {(faltante & usar).sum():,} intervalos completados con el ordeño anterior")
+    print(f"[intervalo] {sin_previo:,} ordeños del .csv sin ordeño anterior en los datos: quedan NaN")
+    print(f"[intervalo] {(~es_ordeno).sum():,} visitas sin ordeño: no tienen intervalo")
+
+    larga = vacas["intervalo_horas"] > umbral_horas
+    vacas["regreso_tras_periodo_seco"] = larga.astype(int)
+    print(f"[intervalo] {larga.sum():,} intervalos de más de {umbral_horas} h ({vacas.loc[larga, 'id_vaca'].nunique()} vacas): "
+          f"van de {vacas.loc[larga, 'intervalo_horas'].min():.0f} h a {vacas.loc[larga, 'intervalo_horas'].max():,.0f} h -> NaN y bandera")
+    vacas.loc[larga, "intervalo_horas"] = np.nan
+    return vacas
+
+
 if __name__ == "__main__":
     vacas = pd.read_csv(RUTA_VACAS, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
     clima = pd.read_csv(RUTA_CLIMA, parse_dates=["hora"])
@@ -192,3 +232,4 @@ if __name__ == "__main__":
     vacas = marcar_acciones(vacas)
     vacas = alertas_a_banderas(vacas)
     vacas = conductividad_a_faltante(vacas)
+    vacas = corregir_intervalos(vacas)
