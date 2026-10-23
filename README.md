@@ -1,5 +1,168 @@
 # Vaca_AI
 
+## ¿Cómo obtener y preparar los datos?
+
+Ejecuta los siguientes pasos en orden para construir el conjunto de datos. Se asume que estas en la carpeta raíz del repositorio para correr los comandos.
+
+### 1. Preparar los archivos y el entorno
+
+1. Descarga los datos de Google Drive.
+2. Crea la carpeta `Data/vacas/` en la raíz del repositorio.
+3. Copia a `Data/vacas/` los archivos `.xlsx` de `TEC-UAQ-UNAM` y los archivos `.csv` de `DATOS vacas en establo marzo_junio_2025` cuyo nombre sea un número, los demás puedes ignorarlos.
+4. Instala Python y las dependencias del proyecto:
+
+   **Windows (PowerShell)**
+
+   ```powershell
+   py -m pip install -r requirements.txt
+   ```
+
+   **macOS y Linux**
+
+   ```bash
+   python3 -m pip install -r requirements.txt
+   ```
+
+**Resultado esperado:** los archivos originales están en `Data/vacas/` y las dependencias están instaladas.
+
+### 2. Unir los datos de las vacas
+
+**Windows**
+
+```powershell
+py src/scripts/generate_data.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/scripts/generate_data.py
+```
+
+**Resultado esperado:** se genera `Data/dataset_vacas.csv` con los datos combinados. La terminal muestra el número de archivos procesados, observaciones duplicadas y valores nulos.
+
+### 3. Anonimizar los datos
+
+Crea un archivo `.env` en la raíz con `COWSKEY=tu_llave_secreta`, sustituyendo el valor por una llave privada. Conserva la misma llave si necesitas generar los mismos identificadores anónimos.
+
+**Windows**
+
+```powershell
+py src/scripts/anonymize_data.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/scripts/anonymize_data.py
+```
+
+**Resultado esperado:** se genera `Data/dataset_vacas_anonimo.csv` con los identificadores anonimizados y `Data/mapa_id_vacas.csv` con sus equivalencias.
+
+### 4. Descargar los datos del clima
+
+**Windows**
+
+```powershell
+py src/scripts/descargar_clima.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/scripts/descargar_clima.py
+```
+
+**Resultado esperado:** se crea `Data/clima/clima_nasa_power_por_hora.csv`, junto con las respuestas originales y un manifiesto en `Data/clima/`. La terminal muestra la cita de la fuente y una fila para la bitácora de auditoría.
+
+### 5. Integrar el clima
+
+**Windows**
+
+```powershell
+py src/DP/integrar_clima.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/DP/integrar_clima.py
+```
+
+**Resultado esperado:** se genera `Data/dataset_vacas_integrado.csv` a partir de los datos anonimizados, con temperatura y THI de la sesión y horas con THI alto en las 24 horas previas.
+
+### 6. Integrar las variables derivadas
+
+**Windows**
+
+```powershell
+py src/DP/integrate_derivates.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/DP/integrate_derivates.py
+```
+
+**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las variables derivadas y etiquetas de eventos, conservando las filas y columnas existentes, incluidas las de clima. La terminal muestra estadísticas de las sesiones y eventos.
+
+## Preparación para reto de datos.
+
+Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. 
+
+Ejecuta los siguientes comandos desde la raíz del repositorio.
+
+### 1. Obtener una muestra representativa de la población
+
+Ejecuta `get_data_sample.py` para calcular el tamaño de muestra mediante la fórmula de Cochran con corrección por población finita y seleccionar registros al azar, estratificados proporcionalmente por `id_vaca`.
+
+**Windows**
+
+```powershell
+py src/RETO_DATOS/get_data_sample.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/RETO_DATOS/get_data_sample.py
+```
+
+**Resultado esperado:** se genera `src/RETO_DATOS/dataset_vacas_muestra.csv`, conservando todas las columnas del conjunto integrado. La terminal muestra el tamaño de la muestra y cuántos estratos están representados.
+
+### 2. Separar los conjuntos de entrenamiento, validación y prueba
+
+Ejecuta `k_fold.py` para separar primero un 20% de la muestra como conjunto de prueba (`test`). Este conjunto queda fijo y **no participa en k-fold**. Con el 80% restante se generan cinco folds: en cada uno, una parte se usa para validación (`val`) y las otras cuatro para entrenamiento (`train`).
+
+**Windows**
+
+```powershell
+py src/DP/k_fold.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/DP/k_fold.py
+```
+
+**Resultado esperado:** la terminal muestra el número de registros de `train`, `val` y `test` en cada fold, además de las primeras cinco filas de los conjuntos del primer fold.
+
+Para obtener los conjuntos desde otro script, importa `get_k_folds` y selecciona un fold:
+
+```python
+from src.DP.k_fold import INPUT_DIR, get_k_folds
+
+dataset, folds = get_k_folds(INPUT_DIR)
+fold = folds[0]
+
+train = dataset.iloc[fold["train"]]
+val = dataset.iloc[fold["val"]]
+test = dataset.iloc[fold["test"]]
+```
+
+
 ## ¿Cómo acceder a los entregables?
 
 ### En GitHub
@@ -16,16 +179,17 @@ La estructura del repositorio es:
     - WBS y su archivo fuente.
   - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
     - Guía y archivo CSV de auditoría de registros.
-    - [Reporte de entendimiento de los datos](docs/DU/reporteData.md) y sus figuras.
     - [Investigación de la fuente de clima](docs/DU/Investigacion_Clima.md).
 - **[`src/`](src/)** — Código fuente de apoyo.
   - **[`scripts/`](src/scripts/)** — Scripts de preparación de datos.
     - [`generate_data.py`](src/scripts/generate_data.py) — Procesa los archivos CSV y XLSX de cada vaca.
     - [`anonymize_data.py`](src/scripts/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
     - [`descargar_clima.py`](src/scripts/descargar_clima.py) — Descarga el clima por hora de NASA POWER a `Data/clima/`.
-  - **[`DU/`](src/DU/)** — Notebooks y scripts de exploración para la fase *Data Understanding*.
-    - [`exploracion_datos.py`](src/DU/exploracion_datos.py) — Genera las figuras e indicadores de la exploración de datos a partir del dataset anonimizado y del clima de NASA POWER.
-    - [`exploracion_profunda.py`](src/DU/exploracion_profunda.py) — Profundiza la exploración: descriptivos, correlaciones, persistencia, adaptación y PCA.
+  - **[`DU/`](src/DU/)** — Notebook de exploración para la fase *Data Understanding*.
+    - [`final_data_understanding.ipynb`](src/DU/final_data_understanding.ipynb) — Reúne los análisis exploratorios del equipo sobre el dataset anonimizado, el clima de NASA POWER y el concentrado.
+  - **[`DP/`](src/DP/)** — Scripts de la fase *Data Preparation*.
+    - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) en `Data/dataset_vacas_clima.csv`.
+    - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento en `Data/dataset_vacas_derivados.csv`.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
