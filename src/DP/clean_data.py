@@ -1,3 +1,4 @@
+import re
 import unicodedata
 from pathlib import Path
 
@@ -7,6 +8,8 @@ import pandas as pd
 RAIZ = Path(__file__).resolve().parents[2]
 RUTA_VACAS = RAIZ / "Data" / "dataset_vacas_anonimo.csv"
 RUTA_CLIMA = RAIZ / "Data" / "clima" / "clima_nasa_power_por_hora.csv"
+SALIDA_VACAS = RAIZ / "Data" / "dataset_vacas_limpio.csv"
+SALIDA_CLIMA = RAIZ / "Data" / "clima" / "clima_nasa_power_limpio.csv"
 
 
 def _a_nombre_columna(texto):
@@ -319,23 +322,84 @@ def tratar_nulos(vacas, cuartos=CUARTOS):
     return vacas
 
 
-def rellenar_con_cero_y_bandera(vacas, cuartos=CUARTOS):
-    """Cierre: los nulos que quedan (vacas sin historial) pasan a 0 con una bandera `*_sin_dato`.
+def marcar_inconsistencias(vacas, tolerancia_kg=0.05):
+    """Acción 9: conserva y marca los ordeños con 0 kg y los que tienen la suma de cuartos distinta del total."""
+    vacas = vacas.copy()
+    es_ordeno = _es_ordeno(vacas)
+    suma = vacas.filter(regex=r"^producciones_kg_").sum(axis=1)
+    vacas["ordeno_cero_kg"] = (es_ordeno & (vacas["main_produccion_kg"] == 0)).astype(int)
+    vacas["suma_cuartos_distinta"] = (es_ordeno & ((suma - vacas["main_produccion_kg"]).abs() > tolerancia_kg)).astype(int)
+    print(f"[inconsistencias] {vacas['ordeno_cero_kg'].sum():,} ordeños con 0 kg y {vacas['suma_cuartos_distinta'].sum():,} con suma de cuartos distinta: marcados, no se quitan")
+    return vacas
 
-    Es una constante fija, no un estadístico de los datos, así que no filtra información. La bandera permite al modelo
-    distinguir el 0 de relleno de un valor real. Debe ser el último paso: los rezagos y promedios móviles se calculan antes,
-    con los NaN, para que el 0 no entre en ellos.
+
+def marcar_sangre(vacas, umbral_saturacion=7900, umbral_pico=0.15):
+    """Acción 15: marca la sangre por máquina sin cambiar su escala (los eventos de salud usan los ppm originales).
+
+    El robot satura la sangre en 8,000 ppm y hay trimestres donde una máquina marca sangre en 14 a 28 % de sus ordeños (contra ~5 %).
+    `sangre_saturada`: algún cuarto cerca del tope del sensor. `sangre_tasa_maquina_30d`: tasa de visitas con sangre de la máquina en los
+    30 días anteriores (solo el pasado). `sangre_pico_maquina`: esa tasa supera `umbral_pico` (constante fija, no ajustada con los datos).
     """
     vacas = vacas.copy()
-    conductividad = [f"conductividad_ms_cm_{cuarto}" for cuarto in cuartos]
-    grupos = {"mdi_sin_dato": ["estado_mdi"], "intervalo_sin_dato": ["intervalo_horas"], "conductividad_sin_dato": conductividad}
-    for bandera, columnas in grupos.items():
-        faltante = vacas[columnas].isna().any(axis=1)
-        vacas[bandera] = faltante.astype(int)
-        vacas[columnas] = vacas[columnas].fillna(0)
-        print(f"[cierre] {bandera}: {faltante.sum():,} visitas con {', '.join(columnas[:2])}{'...' if len(columnas) > 2 else ''} = 0")
-    print(f"[cierre] nulos que quedan en todo el dataset: {int(vacas.isna().sum().sum()):,}")
+    sangre = vacas.filter(regex=r"^sangre_ppm_")
+    vacas["sangre_saturada"] = (sangre.max(axis=1) >= umbral_saturacion).astype(int)
+    con_sangre = (sangre.max(axis=1) > 0).astype(float)
+    tasa = pd.Series(0.0, index=vacas.index)
+    for _, filas in vacas.sort_values("inicio").groupby("misc_eo_po"):
+        tasa[filas.index] = pd.Series(con_sangre[filas.index].to_numpy(), index=filas["inicio"]).rolling("30D", closed="left").mean().fillna(0).to_numpy()
+    vacas["sangre_tasa_maquina_30d"] = tasa
+    vacas["sangre_pico_maquina"] = (tasa > umbral_pico).astype(int)
+    print(f"[sangre] {vacas['sangre_saturada'].sum():,} visitas cerca del tope del sensor (>= {umbral_saturacion} ppm); "
+          f"{vacas['sangre_pico_maquina'].sum():,} visitas en picos de la máquina (tasa a 30 días > {umbral_pico:.0%})")
     return vacas
+
+
+def preparar_historial(vacas, min_registros=30, dias_reinicio=45):
+    """Acciones 11 y 12: deja el dataset listo para calcular historial por vaca (los rezagos los crea integrate_derivates).
+
+    Excluye las vacas con menos de `min_registros` registros, ordena por vaca e inicio y agrega `bloque_historial`: cambia tras una
+    ausencia de `dias_reinicio` días o más, para reiniciar ahí los rezagos y promedios móviles.
+    """
+    pocos = vacas.groupby("id_vaca")["id_vaca"].transform("size") < min_registros
+    print(f"[historial] {vacas.loc[pocos, 'id_vaca'].nunique()} vacas con menos de {min_registros} registros se excluyen ({pocos.sum():,} visitas)")
+    vacas = vacas[~pocos].sort_values(["id_vaca", "inicio"], kind="stable").reset_index(drop=True)
+    ausencia = vacas.groupby("id_vaca")["inicio"].diff() >= pd.Timedelta(days=dias_reinicio)
+    vacas["bloque_historial"] = ausencia.groupby(vacas["id_vaca"]).cumsum()
+    print(f"[historial] {vacas.groupby(['id_vaca', 'bloque_historial']).ngroups:,} bloques de historial (se reinicia tras ausencias de {dias_reinicio}+ días)")
+    return vacas
+
+
+def rellenar_con_cero_y_bandera(vacas):
+    """Cierre: los nulos que quedan (vacas sin historial) pasan a 0 con una bandera `<variable>_sin_dato`.
+
+    Es una constante fija, no un estadístico de los datos, así que no filtra información.
+    """
+    vacas = vacas.copy()
+    for columna in vacas.columns[vacas.isna().any()]:
+        bandera = re.sub(r"_(di|dd|ti|td)$", "", columna) + "_sin_dato"
+        vacas[bandera] = (vacas[bandera] if bandera in vacas else 0) | vacas[columna].isna().astype(int)
+        vacas[columna] = vacas[columna].fillna(0)
+    print(f"[cierre] nulos que quedan: {int(vacas.isna().sum().sum()):,}; banderas de relleno: {[c for c in vacas.columns if c.endswith('_sin_dato')]}")
+    return vacas
+
+
+def limpiar_clima(clima, max_horas_faltantes=3):
+    """Limpieza del clima de NASA POWER: orden, duplicados, rejilla horaria completa, códigos de faltante y rangos físicos.
+
+    No aplica el desfase de una hora, el THI ni los rezagos: eso lo hace integrar_clima.py al integrarlo con las visitas.
+    """
+    clima = clima.drop_duplicates("hora").sort_values("hora").set_index("hora")
+    horas = pd.date_range(clima.index.min(), clima.index.max(), freq="h")
+    clima = clima.reindex(horas).rename_axis("hora")
+    clima = clima.mask(clima <= -900)                                   # NASA usa -999 para dato faltante
+    clima["rh2m"] = clima["rh2m"].clip(0, 100)
+    clima["cloud_amt"] = clima["cloud_amt"].clip(0, 100)
+    faltantes = clima.isna().sum().sum()
+    clima = clima.interpolate(limit=max_horas_faltantes, limit_area="inside")
+    print(f"[clima] {len(clima):,} horas ({clima.index.min():%Y-%m-%d} a {clima.index.max():%Y-%m-%d}); {faltantes:,} valores faltantes, "
+          f"{clima.isna().sum().sum():,} tras interpolar huecos de hasta {max_horas_faltantes} h; "
+          f"rocío > temperatura en {(clima['t2mdew'] > clima['t2m'] + 0.01).sum():,} horas (se conserva, es del reanálisis)")
+    return clima.reset_index()
 
 
 if __name__ == "__main__":
@@ -350,5 +414,13 @@ if __name__ == "__main__":
     vacas = conductividad_a_faltante(vacas)
     vacas = corregir_intervalos(vacas)
     vacas = tratar_nulos(vacas)
-    # Debe ir al final: los rezagos y promedios móviles se calculan antes, con los NaN
+    vacas = marcar_inconsistencias(vacas)
+    vacas = marcar_sangre(vacas)
+    vacas = preparar_historial(vacas)
     vacas = rellenar_con_cero_y_bandera(vacas)
+    clima = limpiar_clima(clima)
+
+    vacas.to_csv(SALIDA_VACAS, index=False)
+    clima.to_csv(SALIDA_CLIMA, index=False)
+    print(f"[guardado] {len(vacas):,} visitas x {vacas.shape[1]} columnas -> {SALIDA_VACAS.relative_to(RAIZ)}")
+    print(f"[guardado] {len(clima):,} horas x {clima.shape[1]} columnas -> {SALIDA_CLIMA.relative_to(RAIZ)}")
