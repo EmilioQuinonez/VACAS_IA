@@ -129,6 +129,62 @@ python3 src/DP/integrar_concentrado.py
 
 **Resultado esperado:** se generan `Data/dataset_concentrado.csv` y `Data/dataset_concentrado_anonimo.csv`. El segundo usa los mismos hashes de vaca que ordeño, y el mapa no se modifica. Los archivos de `Data/` son locales y no se versionan en Git. `Data/dataset_vacas_integrado.csv` conserva todas sus filas y columnas previas, y añade las 4 variables definidas para el concentrado: `conc_sesion_previa`, `tope_sesion_previa`, `conc_d1` y `conc_media_7d`.
 
+## Preparación para reto de datos.
+
+Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. 
+
+Ejecuta los siguientes comandos desde la raíz del repositorio.
+
+### 1. Obtener una muestra representativa de la población
+
+Ejecuta `get_data_sample.py` para calcular el tamaño de muestra mediante la fórmula de Cochran con corrección por población finita y seleccionar registros al azar, estratificados proporcionalmente por `id_vaca`.
+
+**Windows**
+
+```powershell
+py src/RETO_DATOS/get_data_sample.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/RETO_DATOS/get_data_sample.py
+```
+
+**Resultado esperado:** se genera `src/RETO_DATOS/dataset_vacas_muestra.csv`, conservando todas las columnas del conjunto integrado. La terminal muestra el tamaño de la muestra y cuántos estratos están representados.
+
+### 2. Separar los conjuntos de entrenamiento, validación y prueba
+
+Ejecuta `k_fold.py` para separar primero un 20% de la muestra como conjunto de prueba (`test`). Este conjunto queda fijo y **no participa en k-fold**. Con el 80% restante se generan cinco folds: en cada uno, una parte se usa para validación (`val`) y las otras cuatro para entrenamiento (`train`).
+
+**Windows**
+
+```powershell
+py src/DP/k_fold.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/DP/k_fold.py
+```
+
+**Resultado esperado:** la terminal muestra el número de registros de `train`, `val` y `test` en cada fold, además de las primeras cinco filas de los conjuntos del primer fold.
+
+Para obtener los conjuntos desde otro script, importa `get_k_folds` y selecciona un fold:
+
+```python
+from src.DP.k_fold import INPUT_DIR, get_k_folds
+
+dataset, folds = get_k_folds(INPUT_DIR)
+fold = folds[0]
+
+train = dataset.iloc[fold["train"]]
+val = dataset.iloc[fold["val"]]
+test = dataset.iloc[fold["test"]]
+```
+
+
 ## ¿Cómo acceder a los entregables?
 
 ### En GitHub
