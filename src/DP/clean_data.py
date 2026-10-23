@@ -14,6 +14,23 @@ def _a_nombre_columna(texto):
     sin_acentos = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
     return "_".join(sin_acentos.lower().split())
 
+def _es_ordeno(vacas):
+    """Máscara de las visitas que fueron ordeño: la categoría base, con todas las dummies accion_* en 0."""
+    return vacas[[c for c in vacas.columns if c.startswith("accion_")]].sum(axis=1) == 0
+
+def _mediana_previa(vacas, columna):
+    """Mediana de la vaca en `columna` con sus ordeños anteriores (estrictamente antes de `inicio`), para cada fila.
+
+    Solo usa el pasado de la misma vaca: no mezcla vacas ni mira el futuro, así que no filtra información
+    entre entrenamiento y validación, ni cronológica ni por vaca.
+    """
+    ordenos = vacas[_es_ordeno(vacas)].sort_values("inicio", kind="stable")
+    acumulada = ordenos[columna].groupby(ordenos["id_vaca"]).transform(lambda s: s.expanding().median())
+    historial = pd.DataFrame({"id_vaca": ordenos["id_vaca"], "inicio": ordenos["inicio"], "valor": acumulada}).dropna(subset=["valor"])
+    filas = vacas[["id_vaca", "inicio"]].reset_index().sort_values("inicio", kind="stable")
+    cruce = pd.merge_asof(filas, historial, on="inicio", by="id_vaca", direction="backward", allow_exact_matches=False)
+    return cruce.set_index("index")["valor"].reindex(vacas.index)
+
 
 def convertir_fechas_y_duraciones(vacas):
     """Acción 1: convierte hora de inicio, duración e intervalo a datetime y número."""
@@ -190,7 +207,7 @@ def corregir_intervalos(vacas, umbral_horas=48):
     pasan a NaN y quedan marcados con la bandera `regreso_tras_periodo_seco`.
     """
     vacas = vacas.copy()
-    es_ordeno = vacas[[c for c in vacas.columns if c.startswith("accion_")]].sum(axis=1) == 0
+    es_ordeno = _es_ordeno(vacas)
 
     # Intervalo calculado con el ordeño anterior de la misma vaca (los rechazos no cuentan como ordeño)
     ordenos = vacas[es_ordeno].sort_values(["id_vaca", "inicio"])
@@ -221,6 +238,105 @@ def corregir_intervalos(vacas, umbral_horas=48):
     vacas.loc[larga, "intervalo_horas"] = np.nan
     return vacas
 
+def tratar_nulos(vacas, cuartos=CUARTOS):
+    """Acción 8: trata los nulos sin usar información del futuro ni de otras vacas.
+
+    Solo se usa la misma visita o el pasado de la misma vaca; lo que no se puede resolver así queda en NaN para el pipeline
+    de cada modelo, que lo rellena con estadísticos de entrenamiento (ver rellenar_con_cero_y_bandera).
+    """
+    vacas = vacas.copy()
+    conductividad = [f"conductividad_ms_cm_{cuarto}" for cuarto in cuartos]
+    contadores = [c for c in vacas.columns if c.startswith("contadores_monitorizacion")]
+    es_ordeno = _es_ordeno(vacas)
+
+    # 1. Cuartos con producción nula: produjeron 0 kg (el total menos la suma de los otros cuartos da 0 en todos los casos).
+    #    Los cuartos sin leche ya vienen con 0 en producción, flujos y sangre; aquí se unifica esa convención.
+    produccion = vacas[[f"producciones_kg_{cuarto}" for cuarto in cuartos]]
+    verificado = es_ordeno & ((vacas["main_produccion_kg"] - produccion.sum(axis=1)).abs() <= 0.05)
+    print(f"[nulos] {(produccion.isna().any(axis=1) & es_ordeno).sum():,} ordeños con algún cuarto nulo: "
+          f"el total menos los otros cuartos da 0 kg en {(produccion.isna().any(axis=1) & verificado).sum():,}")
+    for cuarto in cuartos:
+        a_cero = vacas[f"producciones_kg_{cuarto}"].isna() & verificado
+        vacas.loc[a_cero, [f"{base}_{cuarto}" for base in ("producciones_kg", "media_de_los_flujos_kg_min", "flujos_maximos_kg_min", "sangre_ppm")]] = 0.0
+        print(f"[nulos] cuarto {cuarto.upper()}: {a_cero.sum():,} cuartos nulos pasan a 0 en producción, flujos y sangre")
+
+    # 2. Conductividad: promedio de los otros cuartos de la misma visita; si ninguno tiene lectura, mediana previa de la vaca.
+    #    `conductividad_estimada_<cuarto>` marca los valores estimados.
+    original = vacas[conductividad]
+    validos = original.notna()
+    suma = original.sum(axis=1)
+    n_validos = validos.sum(axis=1)
+    base = original.assign(id_vaca=vacas["id_vaca"], inicio=vacas["inicio"]).join(vacas.filter(like="accion_"))
+    for columna, cuarto in zip(conductividad, cuartos):
+        faltante = original[columna].isna() & es_ordeno
+        vacas[f"conductividad_estimada_{cuarto}"] = faltante.astype(int)
+        otros = (suma - original[columna].fillna(0)) / (n_validos - validos[columna]).replace(0, np.nan)
+        vacas.loc[faltante, columna] = otros[faltante]
+        sin_cuartos = faltante & otros.isna()
+        vacas.loc[sin_cuartos, columna] = _mediana_previa(base, columna)[sin_cuartos]
+        print(f"[nulos] {columna}: {faltante.sum():,} nulos -> {(faltante & otros.notna()).sum():,} con los otros cuartos de la visita, "
+              f"{(sin_cuartos & vacas[columna].notna()).sum():,} con la mediana previa de la vaca, {(faltante & vacas[columna].isna()).sum():,} sin historial")
+
+    # 3. MDI: bandera y mediana previa de la vaca. Los contadores no existen en el csv (se resuelven en el paso 5).
+    faltante = vacas["estado_mdi"].isna() & es_ordeno
+    vacas["mdi_faltante"] = faltante.astype(int)
+    vacas.loc[faltante, "estado_mdi"] = _mediana_previa(vacas, "estado_mdi")[faltante]
+    print(f"[nulos] estado_mdi: {faltante.sum():,} faltantes -> {(faltante & vacas['estado_mdi'].notna()).sum():,} con la mediana previa de la vaca")
+
+    # 4. Se quitan los ordeños que siguen sin dato por falta de historial. MDI y contadores solo cuentan en filas del xlsx:
+    #    en el csv esas columnas no existen (estructural).
+    solo_xlsx = ["estado_mdi"] + contadores
+    nulos = vacas[conductividad + solo_xlsx].isna()
+    nulos[solo_xlsx] = nulos[solo_xlsx].mul(vacas["fuente"] == "xlsx", axis=0)
+    sin_historial = es_ordeno & nulos.any(axis=1)
+    print(f"[nulos] {sin_historial.sum():,} ordeños sin historial previo se quitan ({vacas.loc[sin_historial, 'id_vaca'].nunique()} vacas): "
+          f"{ {c: int(n) for c, n in nulos[sin_historial].sum().items() if n} }")
+    vacas = vacas[~sin_historial].reset_index(drop=True)
+    es_ordeno = _es_ordeno(vacas)
+
+    # 5. Visitas sin ordeño: lo que no se ordeñó vale 0 y el destino de la leche es 'Sin ordeño'.
+    #    El nulo de misc_razon_de_la_desviacion significa que no hubo desvío.
+    ceros = ["main_produccion_kg", "estado_numero_de_ordeno", "estado_amd_ubre"] + [
+        f"{base}_{cuarto}" for base in ("producciones_kg", "media_de_los_flujos_kg_min", "flujos_maximos_kg_min", "sangre_ppm") for cuarto in cuartos]
+    vacas.loc[~es_ordeno, ceros] = vacas.loc[~es_ordeno, ceros].fillna(0)
+    vacas.loc[~es_ordeno, "misc_destino_leche"] = vacas.loc[~es_ordeno, "misc_destino_leche"].fillna("Sin ordeño")
+    vacas["misc_razon_de_la_desviacion"] = vacas["misc_razon_de_la_desviacion"].fillna("Sin desvío")
+    print(f"[nulos] {(~es_ordeno).sum():,} visitas sin ordeño: producción, flujos y sangre = 0; destino 'Sin ordeño'; desvío nulo = 'Sin desvío'")
+
+    # 6. Lo que falta en las visitas sin ordeño (y el intervalo): mediana previa de la vaca; sin historial queda en NaN.
+    for columna, bandera in [(c, f"conductividad_estimada_{q}") for c, q in zip(conductividad, cuartos)] + [("estado_mdi", "mdi_faltante"), ("intervalo_horas", None)]:
+        faltante = vacas[columna].isna()
+        if bandera:
+            vacas[bandera] = (vacas[bandera].astype(bool) | faltante).astype(int)
+        propia = _mediana_previa(vacas, columna)
+        vacas.loc[faltante, columna] = propia[faltante]
+        print(f"[nulos] {columna}: {faltante.sum():,} nulos -> {(faltante & propia.notna()).sum():,} con el historial de la vaca, {vacas[columna].isna().sum():,} sin historial quedan en NaN")
+
+    # 7. Contadores (no existen en el csv): 0 con bandera. Es una constante fija, no un estadístico de los datos.
+    vacas["contadores_faltante"] = vacas[contadores].isna().any(axis=1).astype(int)
+    vacas[contadores] = vacas[contadores].fillna(0)
+    print(f"[nulos] contadores: {vacas['contadores_faltante'].sum():,} visitas sin contadores pasan a 0, bandera 'contadores_faltante'")
+    return vacas
+
+
+def rellenar_con_cero_y_bandera(vacas, cuartos=CUARTOS):
+    """Cierre: los nulos que quedan (vacas sin historial) pasan a 0 con una bandera `*_sin_dato`.
+
+    Es una constante fija, no un estadístico de los datos, así que no filtra información. La bandera permite al modelo
+    distinguir el 0 de relleno de un valor real. Debe ser el último paso: los rezagos y promedios móviles se calculan antes,
+    con los NaN, para que el 0 no entre en ellos.
+    """
+    vacas = vacas.copy()
+    conductividad = [f"conductividad_ms_cm_{cuarto}" for cuarto in cuartos]
+    grupos = {"mdi_sin_dato": ["estado_mdi"], "intervalo_sin_dato": ["intervalo_horas"], "conductividad_sin_dato": conductividad}
+    for bandera, columnas in grupos.items():
+        faltante = vacas[columnas].isna().any(axis=1)
+        vacas[bandera] = faltante.astype(int)
+        vacas[columnas] = vacas[columnas].fillna(0)
+        print(f"[cierre] {bandera}: {faltante.sum():,} visitas con {', '.join(columnas[:2])}{'...' if len(columnas) > 2 else ''} = 0")
+    print(f"[cierre] nulos que quedan en todo el dataset: {int(vacas.isna().sum().sum()):,}")
+    return vacas
+
 
 if __name__ == "__main__":
     vacas = pd.read_csv(RUTA_VACAS, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
@@ -233,3 +349,6 @@ if __name__ == "__main__":
     vacas = alertas_a_banderas(vacas)
     vacas = conductividad_a_faltante(vacas)
     vacas = corregir_intervalos(vacas)
+    vacas = tratar_nulos(vacas)
+    # Debe ir al final: los rezagos y promedios móviles se calculan antes, con los NaN
+    vacas = rellenar_con_cero_y_bandera(vacas)
