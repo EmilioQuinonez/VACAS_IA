@@ -83,7 +83,7 @@ Esa comparación mide qué tanto se parecen dos reanálisis entre sí, no cuál 
 
 Lo que hay que tener presente al usar NASA POWER:
 
-1. **Desfase de una hora.** Contra la estación, la correlación horaria de la temperatura sube de 0.884 a 0.943 al correr la serie una hora hacia adelante (POWER entrega promedios horarios). Es decir, la fila etiquetada *t* corresponde al clima de *t* + 1 h. `descargar_clima.py` deja el CSV sin tocar, y la exploración (`cargar_clima` en `exploracion_datos.py`) corre el índice una hora al leerlo, de modo que la sesión de la hora *T* toma la fila *T* − 1 h.
+1. **Desfase de una hora.** Contra la estación, la correlación horaria de la temperatura sube de 0.884 a 0.943 al correr la serie una hora hacia adelante (POWER entrega promedios horarios). Es decir, la fila etiquetada *t* corresponde al clima de *t* + 1 h. `descargar_clima.py` deja el CSV sin tocar, y quien lo lee (`cargar_clima` en `src/DP/integrar_clima.py` y en el notebook de exploración) corre el índice una hora, de modo que la sesión de la hora *T* toma la fila *T* − 1 h.
 2. **Sesgo frío y celda gruesa.** El THI horario tiene un sesgo de −1.10 frente a la estación, y la celda de ≈ 55 × 65 km promedia una zona más alta que el establo (2,145 m contra 1,813 m de la estación). Los umbrales absolutos de la literatura (THI 68 o 72) se cruzan con algo menos de frecuencia que en la realidad.
 3. **La estación no es el establo.** Las métricas dicen qué tan bien cada fuente reproduce el clima regional medido en otro punto, no el microclima junto a las vacas.
 
@@ -93,9 +93,9 @@ La serie de POWER trae 13 variables por hora: temperatura, humedad, punto de roc
 
 ## 5. Tabla de clima integrada
 
-`descargar_clima.py` deja la tabla `Data/clima/clima_nasa_power_por_hora.csv` (fuera de Git): una fila por hora local (`America/Mexico_City`), del 13/07/2022 00:00 al 28/01/2026 23:00, con **31,104 horas** y las 13 variables de POWER en minúsculas (`t2m`, `rh2m`, `ws2m`, `prectotcorr`, `allsky_sfc_sw_dwn`, `cloud_amt`, …). Guarda además las respuestas originales por bloque anual y un manifiesto con la versión de la API (v2.10.2), la fecha de descarga (15/10/2026), las unidades y los faltantes.
+`descargar_clima.py` deja la tabla `Data/clima/clima_nasa_power_por_hora.csv` (fuera de Git): una fila por hora local (`America/Mexico_City`), del 11/07/2022 00:00 al 28/01/2026 23:00, con **31,152 horas** y las 13 variables de POWER en minúsculas (`t2m`, `rh2m`, `ws2m`, `prectotcorr`, `allsky_sfc_sw_dwn`, `cloud_amt`, …). La serie empieza dos días antes de la primera sesión (13/07/2022) para que, con el desfase de una hora, las primeras sesiones tengan clima y sus 24 h previas completas. Guarda además las respuestas originales por bloque anual y un manifiesto con la versión de la API (v2.10.3), la fecha de descarga (21/10/2026), las unidades y los faltantes. La descarga v2.10.3 es idéntica a la v2.10.2 del 15/10/2026 en las 31,104 horas que comparten.
 
-La exploración corrige el desfase de una hora (sección 4.3), calcula el THI con `THI = (1.8 T + 32) − (0.55 − 0.0055 · HR) · (1.8 T − 26)` y une cada sesión con su fila por la hora de inicio. Las horas repetidas por el cambio de horario de verano de octubre de 2022 se promedian. Falta confirmar con el socio formador si el reloj del sistema de ordeño siguió ese horario de verano (hasta el 30/10/2022). Las variables que solo usan información previa a la sesión (horas con THI alto en las 24 o 48 h previas, resumen del día anterior, rezagos de 1 a 4 días) se dejan para la fase de preparación de datos.
+La exploración corrige el desfase de una hora (sección 4.3), calcula el THI con `THI = (1.8 T + 32) − (0.55 − 0.0055 · HR) · (1.8 T − 26)` y une cada sesión con su fila por la hora de inicio. Las horas repetidas por el cambio de horario de verano de octubre de 2022 se promedian. Falta confirmar con el socio formador si el reloj del sistema de ordeño siguió ese horario de verano (hasta el 30/10/2022). Las variables que solo usan información previa a la sesión se construyen en la fase de preparación de datos: `src/DP/integrar_clima.py` agrega `t_sesion`, `thi_sesion` y las horas con THI ≥ 68 en las 24 h previas (`horas_thi_alto_24h`).
 
 ## 6. Riesgos y cómo mitigarlos
 
@@ -107,7 +107,7 @@ La exploración corrige el desfase de una hora (sección 4.3), calcula el THI co
 
 ## 7. Uso, citación y privacidad
 
-- **NASA POWER (fuente del proyecto).** En cualquier entregable: *"The data was obtained from the POWER Project's Hourly v2.10.2 version on 2026/10/15"*, más la referencia al proyecto POWER del Langley Research Center (texto vigente en la [página de referencias](https://power.larc.nasa.gov/docs/referencing/)). POWER pide avisar de las publicaciones a `larc-power-project@mail.nasa.gov`.
+- **NASA POWER (fuente del proyecto).** En cualquier entregable: *"The data was obtained from the POWER Project's Hourly v2.10.3 version on 2026/10/21"*, más la referencia al proyecto POWER del Langley Research Center (texto vigente en la [página de referencias](https://power.larc.nasa.gov/docs/referencing/)). POWER pide avisar de las publicaciones a `larc-power-project@mail.nasa.gov`.
 - **ERA5-Land y Open-Meteo (solo comparación).** Datos CC BY 4.0; se citan a Open-Meteo y a Copernicus/ERA5-Land si se muestran los resultados de la sección 4. Fecha de acceso: 13/10/2026.
 - **Estación de referencia.** Observaciones del archivo ASOS/METAR del Iowa Environmental Mesonet (Iowa State University), estación MMQT; fecha de acceso: 13/10/2026. Se usan solo para validar.
 - **Ubicación.** La política de uso de datos del CAETEC pide no divulgar ubicaciones. Las consultas usaron puntos de malla (celdas de 0.1° y de ½° × ⅝°), no la ubicación exacta del establo, y los documentos del repositorio no publican las coordenadas del rancho.
