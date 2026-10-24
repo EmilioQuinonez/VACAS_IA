@@ -1,7 +1,9 @@
 """
 Descarga el clima por hora de NASA POWER para las fechas de las sesiones de ordeno.
 
-Cubre desde el dato mas antiguo hasta el ultimo de las sesiones: del 13/07/2022 al 28/01/2026.
+Cubre desde dos dias antes del dato mas antiguo hasta el ultimo de las sesiones: del 11/07/2022
+al 28/01/2026. Los dos dias extra dan clima, con el desfase de una hora, a las primeras sesiones
+y completan sus 24 h previas.
 Requiere: numpy, pandas y requests (ver requirements.txt).
 
 Uso:
@@ -36,11 +38,11 @@ LONGITUD_CELDA = -100.0
 ZONA_HORARIA = "America/Mexico_City"
 COMUNIDAD = "AG"
 
-# Primera y ultima fecha (hora local) de las sesiones de ordeno
-INICIO_LOCAL = "2022-07-13"
+# Fechas en hora local: dos dias antes de la primera sesion (13/07/2022) y la ultima sesion
+INICIO_LOCAL = "2022-07-11"
 FIN_LOCAL = "2026-01-28"
 # NASA se pide en UTC: el ultimo dia local termina el 29/01 en UTC
-INICIO_UTC = "2022-07-13"
+INICIO_UTC = "2022-07-11"
 FIN_UTC = "2026-01-29"
 
 # Variables horarias de la comunidad AG
