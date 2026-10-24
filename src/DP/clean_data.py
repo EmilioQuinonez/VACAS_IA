@@ -383,6 +383,24 @@ def rellenar_con_cero_y_bandera(vacas):
     return vacas
 
 
+def categoricas_a_dummies(vacas, bases=None):
+    """Convierte las categóricas en dummies 0/1 (una categoría base por columna queda con todas en 0).
+
+    Los desvíos `Divert 1/2/3` se agrupan en `Divert`: Divert 1 y 2 tienen 7 visitas en total. `id_vaca` e `inicio` no se tocan:
+    son el identificador y el tiempo, no variables.
+    """
+    bases = bases or {"misc_eo_po": "7063e4b1", "misc_destino_leche": "Tanque", "misc_razon_de_la_desviacion": "Sin desvío", "fuente": "xlsx"}
+    vacas = vacas.copy()
+    vacas["misc_destino_leche"] = vacas["misc_destino_leche"].str.replace(r"^Divert \d$", "Divert", regex=True)
+    prefijo = {"misc_eo_po": "maquina", "misc_destino_leche": "destino", "misc_razon_de_la_desviacion": "desvio", "fuente": "fuente"}
+    for columna, base in bases.items():
+        dummies = pd.get_dummies(vacas[columna], dtype=int).drop(columns=base)
+        dummies.columns = [f"{prefijo[columna]}_{_a_nombre_columna(c)}" for c in dummies.columns]
+        vacas = pd.concat([vacas.drop(columns=columna), dummies], axis=1)
+        print(f"[dummies] {columna} (base '{base}') -> {dict(dummies.sum())}")
+    return vacas
+
+
 def limpiar_clima(clima, max_horas_faltantes=3):
     """Limpieza del clima de NASA POWER: orden, duplicados, rejilla horaria completa, códigos de faltante y rangos físicos.
 
@@ -418,6 +436,7 @@ if __name__ == "__main__":
     vacas = marcar_sangre(vacas)
     vacas = preparar_historial(vacas)
     vacas = rellenar_con_cero_y_bandera(vacas)
+    vacas = categoricas_a_dummies(vacas)
     clima = limpiar_clima(clima)
 
     vacas.to_csv(SALIDA_VACAS, index=False)
