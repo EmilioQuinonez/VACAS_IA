@@ -7,9 +7,10 @@ Ejecuta los siguientes pasos en orden para construir el conjunto de datos. Se as
 ### 1. Preparar los archivos y el entorno
 
 1. Descarga los datos de Google Drive.
-2. Crea la carpeta `Data/vacas/` en la raíz del repositorio.
-3. Copia a `Data/vacas/` los archivos `.xlsx` de `TEC-UAQ-UNAM` y los archivos `.csv` de `DATOS vacas en establo marzo_junio_2025` cuyo nombre sea un número, los demás puedes ignorarlos.
-4. Instala Python y las dependencias del proyecto:
+2. Crea las carpetas `Data/vacas/` y `Data/concentrado` en la raíz del repositorio.
+3. Copia a `Data/vacas/` los archivos `Producciones de leche por sesion XXXX.xlsx` de `TEC-UAQ-UNAM` y los archivos `.csv` de `DATOS vacas en establo marzo_junio_2025` cuyo nombre sea un número, los demás puedes ignorarlos.
+4. Copia a `Data/concentrado` los archivos `Concentrado consumido XXXX.xlsx` de `TEC-UAQ-UNAM`
+5. Instala Python y las dependencias del proyecto:
 
    **Windows (PowerShell)**
 
@@ -107,6 +108,27 @@ python3 src/DP/integrate_derivates.py
 
 **Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las variables derivadas y etiquetas de eventos, conservando las filas y columnas existentes, incluidas las de clima. La terminal muestra estadísticas de las sesiones y eventos.
 
+### 7. Construir, anonimizar e integrar el concentrado consumido
+
+
+**Windows**
+
+```powershell
+py src/scripts/generate_concentrado.py
+py src/scripts/anonymize_concentrado.py
+py src/DP/integrar_concentrado.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/scripts/generate_concentrado.py
+python3 src/scripts/anonymize_concentrado.py
+python3 src/DP/integrar_concentrado.py
+```
+
+**Resultado esperado:** se generan `Data/dataset_concentrado.csv` y `Data/dataset_concentrado_anonimo.csv`. El segundo usa los mismos hashes de vaca que ordeño, y el mapa no se modifica. Los archivos de `Data/` son locales y no se versionan en Git. `Data/dataset_vacas_integrado.csv` conserva todas sus filas y columnas previas, y añade las 4 variables definidas para el concentrado: `conc_sesion_previa`, `tope_sesion_previa`, `conc_d1` y `conc_media_7d`.
+
 ## Preparación para reto de datos.
 
 Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. 
@@ -180,16 +202,20 @@ La estructura del repositorio es:
   - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
     - Guía y archivo CSV de auditoría de registros.
     - [Investigación de la fuente de clima](docs/DU/Investigacion_Clima.md).
+  - **[`RETO_DATOS/`](docs/RETO_DATOS/)** — Preparación para el reto de datos.
+    - [Reporte del reto de datos](docs/RETO_DATOS/Reporte-RetoDatos.pdf).
 - **[`src/`](src/)** — Código fuente de apoyo.
   - **[`scripts/`](src/scripts/)** — Scripts de preparación de datos.
     - [`generate_data.py`](src/scripts/generate_data.py) — Procesa los archivos CSV y XLSX de cada vaca.
     - [`anonymize_data.py`](src/scripts/anonymize_data.py) — Anonimiza los identificadores de vaca y máquina.
     - [`descargar_clima.py`](src/scripts/descargar_clima.py) — Descarga el clima por hora de NASA POWER a `Data/clima/`.
+    - [`generate_concentrado.py`](src/scripts/generate_concentrado.py) y [`anonymize_concentrado.py`](src/scripts/anonymize_concentrado.py) — Consolidan y anonimizan los XLSX de concentrado.
   - **[`DU/`](src/DU/)** — Notebook de exploración para la fase *Data Understanding*.
     - [`final_data_understanding.ipynb`](src/DU/final_data_understanding.ipynb) — Reúne los análisis exploratorios del equipo sobre el dataset anonimizado, el clima de NASA POWER y el concentrado.
   - **[`DP/`](src/DP/)** — Scripts de la fase *Data Preparation*.
-    - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) en `Data/dataset_vacas_clima.csv`.
-    - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento en `Data/dataset_vacas_derivados.csv`.
+    - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) en `Data/dataset_vacas_integrado.csv`.
+    - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento a `Data/dataset_vacas_integrado.csv`.
+    - [`integrar_concentrado.py`](src/DP/integrar_concentrado.py) — Añade cuatro atributos históricos de concentrado a `Data/dataset_vacas_integrado.csv`.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 

@@ -1,4 +1,6 @@
 Fecha,Persona,dataset_id / versión,Acción,Propósito,Resultado,Observaciones
+
+22/10/2026 15:17,tuzobus,vacas/8.0,Integración,Integrar en un único dataset los datos de clima + atributos derivados + atributos de concentrado,Dataset con clima + atributos derivados + atributos de concentrado,
 22/10/2026 11:17,XMaster417, muestra_vacas/1.0, Creación de nuevo dataset muestral, Se creó un nuevo dataset con los datos de vacas muestrales, Archivo csv con los registros de vacas muestrales,
 22/10/2026 11:17,XMaster417, vacas/7.0, Exportación o acceso, Acceder a los datos para obtener una muestra representativa,Dataset con datos muestrales,  
 21/10/2026 19:52,XMaster417, vacas/7.0, Integración, Integrar en un unico dataset los datos de clima y atributos derivados, Dataset con clima y atributos derivados,
