@@ -202,6 +202,8 @@ La estructura del repositorio es:
   - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
     - Guía y archivo CSV de auditoría de registros.
     - [Investigación de la fuente de clima](docs/DU/Investigacion_Clima.md).
+  - **[`RETO_DATOS/`](docs/RETO_DATOS/)** — Preparación para el reto de datos.
+    - [Reporte del reto de datos](docs/RETO_DATOS/Reporte-RetoDatos.pdf).
 - **[`src/`](src/)** — Código fuente de apoyo.
   - **[`scripts/`](src/scripts/)** — Scripts de preparación de datos.
     - [`generate_data.py`](src/scripts/generate_data.py) — Procesa los archivos CSV y XLSX de cada vaca.
