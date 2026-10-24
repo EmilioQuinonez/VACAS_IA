@@ -9,6 +9,7 @@ Las cuatro etiquetas describen la sesión actual y pueden coexistir, salvo éxit
 Uso:
     python src/DP/integrate_derivates.py
 """
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -23,8 +24,9 @@ INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 OUTPUT_PATH = INPUT_PATH
 
 QUARTERS = ("di", "dd", "ti", "td")
-MDI_THRESHOLD = 1.4  # Alerta MDi >= 1.4.
-BLOOD_PPM_THRESHOLD = 0  # Presencia de sangre: cualquier cuarto > 0 ppm.
+# clean_data.py deja estado_mdi y sangre_ppm_* en logaritmo (log1p): los umbrales se convierten con la misma función.
+MDI_THRESHOLD = math.log1p(1.4)  # Alerta MDi >= 1.4 en la escala original.
+BLOOD_PPM_THRESHOLD = math.log1p(0)  # Presencia de sangre: cualquier cuarto > 0 ppm (log1p(0) = 0).
 AFTERNOON_START_HOUR = 13
 AFTERNOON_END_HOUR = 17  # Extremo excluido: [13:00, 17:00).
 

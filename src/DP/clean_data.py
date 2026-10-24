@@ -383,6 +383,21 @@ def rellenar_con_cero_y_bandera(vacas):
     return vacas
 
 
+def aplicar_logaritmo(vacas):
+    """Acción 10: logaritmo (`log1p`) en las variables de cola larga; no se elimina ningún atípico.
+
+    Es una función fija, no se ajusta con los datos. Va al final, después de las banderas que usan ppm. Los umbrales de los eventos
+    de integrate_derivates.py ya están convertidos: `sangre > 0` no cambia (log1p(0) = 0) y `MDI >= 1.4` es `MDI >= log1p(1.4)`.
+    Se invierte con `expm1`.
+    """
+    vacas = vacas.copy()
+    columnas = vacas.filter(regex=r"^(sangre_ppm_|contadores_monitorizacion_)").columns.tolist() + ["estado_mdi"]
+    antes = vacas[columnas].skew()
+    vacas[columnas] = np.log1p(vacas[columnas])
+    print(f"[logaritmo] log1p en {len(columnas)} columnas; asimetría {antes.min():.1f} a {antes.max():.1f} -> {vacas[columnas].skew().min():.1f} a {vacas[columnas].skew().max():.1f}")
+    return vacas
+
+
 def categoricas_a_dummies(vacas, bases=None):
     """Convierte las categóricas en dummies 0/1 (una categoría base por columna queda con todas en 0).
 
@@ -436,6 +451,7 @@ if __name__ == "__main__":
     vacas = marcar_sangre(vacas)
     vacas = preparar_historial(vacas)
     vacas = rellenar_con_cero_y_bandera(vacas)
+    vacas = aplicar_logaritmo(vacas)
     vacas = categoricas_a_dummies(vacas)
     clima = limpiar_clima(clima)
 
