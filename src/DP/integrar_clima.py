@@ -1,10 +1,10 @@
 """
 Agrega a las sesiones de ordeño los atributos de clima de NASA POWER (fase de Data Preparation).
 
-Lee Data/dataset_vacas_anonimo.csv (vacas/3.0) y Data/clima/clima_nasa_power_por_hora.csv
-(descargar_clima.py) y le agrega a cada sesion la temperatura y el THI de la hora en que inicia
-y las horas con THI alto de las 24 h previas. Las sesiones no se limpian ni se modifican: solo
-se agregan esas tres columnas. Guarda Data/dataset_vacas_integrado.csv.
+Lee Data/dataset_vacas_limpio.csv y Data/clima/clima_nasa_power_limpio.csv (ambos de clean_data.py)
+y le agrega a cada sesion la temperatura y el THI de la hora en que inicia y las horas con THI alto
+de las 24 h previas. Las sesiones no se modifican: solo se agregan esas tres columnas.
+Guarda Data/dataset_vacas_integrado.csv.
 
 Uso:
     python src/DP/integrar_clima.py
@@ -14,34 +14,13 @@ from pathlib import Path
 import pandas as pd
 
 raiz = Path(__file__).resolve().parent.parent.parent
-ORIGEN = raiz / "Data" / "dataset_vacas_anonimo.csv"
-CLIMA = raiz / "Data" / "clima" / "clima_nasa_power_por_hora.csv"
+ORIGEN = raiz / "Data" / "dataset_vacas_limpio.csv"
+CLIMA = raiz / "Data" / "clima" / "clima_nasa_power_limpio.csv"
 SALIDA = raiz / "Data" / "dataset_vacas_integrado.csv"
 
 # NASA POWER etiqueta cada hora una hora antes del clima que describe
 DESFASE_POWER_H = 1
 UMBRAL_THI = 68
-
-
-def hora_de_inicio(texto):
-    """
-        Convierte main_hora_de_inicio a fecha y hora. generate_data.py unio en un solo CSV las filas
-        de los CSV crudos (mar-jul 2025) y de los xlsx crudos (2022-2026), y cada fila conserva el
-        formato de su origen: "dd/mm/aaaa hh:mm a. m." (22 caracteres) o "aaaa-mm-dd hh:mm:ss".
-
-        Args:
-            texto (Series): Columna main_hora_de_inicio.
-
-        Returns:
-            Series: Fecha y hora de inicio de cada sesion.
-    """
-    de_csv = texto.str.len() == 22
-    inicio = pd.Series(pd.NaT, index=texto.index, dtype="datetime64[ns]")
-    inicio[de_csv] = pd.to_datetime(
-        texto[de_csv].str.replace("a. m.", "AM", regex=False).str.replace("p. m.", "PM", regex=False),
-        format="%d/%m/%Y %I:%M %p")
-    inicio[~de_csv] = pd.to_datetime(texto[~de_csv], format="%Y-%m-%d %H:%M:%S")
-    return inicio
 
 
 def cargar_clima(ruta):
@@ -73,7 +52,7 @@ def agregar_clima(sesiones, clima):
         de POWER (viento, radiacion, lluvia, nubosidad...) no se usan en el modelo y no se agregan.
 
         Args:
-            sesiones (DataFrame): Dataset anonimizado de sesiones.
+            sesiones (DataFrame): Dataset limpio de sesiones, con la columna inicio como fecha y hora.
             clima (DataFrame): Serie horaria de cargar_clima.
 
         Returns:
@@ -82,12 +61,12 @@ def agregar_clima(sesiones, clima):
     clima = clima.asfreq("h")
     clima["horas_thi_alto_24h"] = (clima["thi"] >= UMBRAL_THI).astype(float).where(clima["thi"].notna()).shift(1).rolling(24).sum()
     clima = clima[["t2m", "thi", "horas_thi_alto_24h"]].rename(columns={"t2m": "t_sesion", "thi": "thi_sesion"})
-    hora = hora_de_inicio(sesiones["main_hora_de_inicio"]).dt.floor("h")
+    hora = sesiones["inicio"].dt.floor("h")
     return sesiones.join(clima.reindex(hora).set_axis(sesiones.index))
 
 
 def main():
-    sesiones = pd.read_csv(ORIGEN, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
+    sesiones = pd.read_csv(ORIGEN, dtype={"id_vaca": str}, parse_dates=["inicio"], low_memory=False)
     integrado = agregar_clima(sesiones, cargar_clima(CLIMA))
     integrado.to_csv(SALIDA, index=False)
 
