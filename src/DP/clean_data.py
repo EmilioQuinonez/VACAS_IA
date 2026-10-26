@@ -253,13 +253,16 @@ def tratar_nulos(vacas, cuartos=CUARTOS):
     es_ordeno = _es_ordeno(vacas)
 
     # 1. Cuartos con producción nula: produjeron 0 kg (el total menos la suma de los otros cuartos da 0 en todos los casos).
-    #    Los cuartos sin leche ya vienen con 0 en producción, flujos y sangre; aquí se unifica esa convención.
+    #    Los fallos del robot ya vienen con 0 en producción, flujos y sangre; los inactivos se pasan a 0 y se marcan aparte.
     produccion = vacas[[f"producciones_kg_{cuarto}" for cuarto in cuartos]]
     verificado = es_ordeno & ((vacas["main_produccion_kg"] - produccion.sum(axis=1)).abs() <= 0.05)
     print(f"[nulos] {(produccion.isna().any(axis=1) & es_ordeno).sum():,} ordeños con algún cuarto nulo: "
           f"el total menos los otros cuartos da 0 kg en {(produccion.isna().any(axis=1) & verificado).sum():,}")
+    # Dos casos distintos con 0 kg: el robot no encontró el pezón (viene en 0 con alerta: fallo mecánico) y el cuarto está
+    # dañado o inactivo (viene nulo, sin alertas, en casi todos los ordeños de la vaca). `cuarto_inactivo_<cuarto>` conserva esa diferencia.
     for cuarto in cuartos:
         a_cero = vacas[f"producciones_kg_{cuarto}"].isna() & verificado
+        vacas[f"cuarto_inactivo_{cuarto}"] = a_cero.astype(int)
         vacas.loc[a_cero, [f"{base}_{cuarto}" for base in ("producciones_kg", "media_de_los_flujos_kg_min", "flujos_maximos_kg_min", "sangre_ppm")]] = 0.0
         print(f"[nulos] cuarto {cuarto.upper()}: {a_cero.sum():,} cuartos nulos pasan a 0 en producción, flujos y sangre")
 

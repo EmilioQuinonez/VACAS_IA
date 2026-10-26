@@ -97,6 +97,7 @@ python3 src/DP/clean_data.py
 - Unifica fechas, duraciones e intervalos del CSV y del XLSX, y quita las sesiones repetidas entre ambas fuentes.
 - Convierte las alertas de texto (`DI,TD`, `Todos`) en banderas 0/1 por cuarto y las categóricas en dummies.
 - Pasa a faltante la conductividad en 0 y trata los nulos usando solo la misma visita o el pasado de la misma vaca. Los valores estimados quedan marcados con banderas (`*_faltante`, `*_estimada_*`, `*_sin_dato`).
+- Pasa a 0 kg los cuartos con producción nula (verificado contra el total del ordeño) y los marca con `cuarto_inactivo_<cuarto>`: un cuarto dañado viene nulo y sin alertas, mientras que un fallo del robot viene en 0 con alerta, y los dos casos deben seguir distinguiéndose.
 - Marca, sin eliminar, los ordeños con 0 kg, los de suma de cuartos distinta del total y los picos de sangre por máquina.
 - Excluye las vacas con menos de 30 registros y agrega `bloque_historial`, que cambia tras 45 días de ausencia.
 - Deja `sangre_ppm_*`, `estado_mdi` y `contadores_monitorizacion_*` en logaritmo (`log1p`). Los umbrales de `integrate_derivates.py` ya están convertidos a esa escala.
@@ -131,7 +132,7 @@ py src/DP/integrate_derivates.py
 python3 src/DP/integrate_derivates.py
 ```
 
-**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las variables derivadas y etiquetas de eventos, conservando las filas y columnas existentes, incluidas las de clima. Los rechazos y las echadas sin ordeñar no reciben etiqueta de evento. La terminal muestra estadísticas de las sesiones y eventos.
+**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las variables derivadas y etiquetas de eventos, conservando las filas y columnas existentes, incluidas las de clima. Los rechazos y las echadas sin ordeñar no reciben etiqueta de evento, y `fme_milk_production` no cuenta los cuartos marcados como inactivos (`cuarto_inactivo_*`). La terminal muestra estadísticas de las sesiones y eventos.
 
 ### 8. Construir, anonimizar e integrar el concentrado consumido
 

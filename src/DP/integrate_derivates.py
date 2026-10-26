@@ -79,6 +79,7 @@ def add_derived_features(
         "estado_mdi", "estado_amd_ubre", "accion_rechazada", "accion_echada_sin_ordenar",
         *[f"{status}_{quarter}" for status in STATUSES for quarter in QUARTERS],
         *[f"producciones_kg_{quarter}" for quarter in QUARTERS],
+        *[f"cuarto_inactivo_{quarter}" for quarter in QUARTERS],
         *[f"sangre_ppm_{quarter}" for quarter in QUARTERS],
     }
     missing_columns = required_columns.difference(milky_sessions.columns)
@@ -108,8 +109,10 @@ def add_derived_features(
     # fme_connection: presencia de algún pezón no encontrado.
     current_features["fme_connection"] = status["pezones_no_encontrados"].any(axis=1).astype(int)
 
-    # fme_milk_production: alguna producción por cuarto exactamente igual a cero (solo ordeños).
-    current_features["fme_milk_production"] = (quarter_yields.eq(0).any(axis=1) & is_milking).astype(int)
+    # fme_milk_production: alguna producción por cuarto exactamente igual a cero (solo ordeños). Los cuartos
+    # inactivos (dañados, sin alertas, nulos en el dato original) también valen 0 pero no son un fallo mecánico.
+    inactive = base[[f"cuarto_inactivo_{quarter}" for quarter in QUARTERS]].eq(1).to_numpy()
+    current_features["fme_milk_production"] = ((quarter_yields.eq(0).to_numpy() & ~inactive).any(axis=1) & is_milking).astype(int)
 
     # fme_incomplete: estado de ordeño incompleto activo.
     current_features["fme_incomplete"] = status["incompleto"].any(axis=1).astype(int)
