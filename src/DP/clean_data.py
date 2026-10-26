@@ -404,14 +404,17 @@ def aplicar_logaritmo(vacas):
 def categoricas_a_dummies(vacas, bases=None):
     """Convierte las categóricas en dummies 0/1 (una categoría base por columna queda con todas en 0).
 
+    La base de `misc_eo_po` (máquina) es su categoría más frecuente: el hash depende de COWSKEY y no puede escribirse a mano.
+
     Los desvíos `Divert 1/2/3` se agrupan en `Divert`: Divert 1 y 2 tienen 7 visitas en total. `id_vaca` e `inicio` no se tocan:
     son el identificador y el tiempo, no variables.
     """
-    bases = bases or {"misc_eo_po": "7063e4b1", "misc_destino_leche": "Tanque", "misc_razon_de_la_desviacion": "Sin desvío", "fuente": "xlsx"}
+    bases = bases or {"misc_eo_po": None, "misc_destino_leche": "Tanque", "misc_razon_de_la_desviacion": "Sin desvío", "fuente": "xlsx"}
     vacas = vacas.copy()
     vacas["misc_destino_leche"] = vacas["misc_destino_leche"].str.replace(r"^Divert \d$", "Divert", regex=True)
     prefijo = {"misc_eo_po": "maquina", "misc_destino_leche": "destino", "misc_razon_de_la_desviacion": "desvio", "fuente": "fuente"}
     for columna, base in bases.items():
+        base = base or vacas[columna].mode()[0]                         # sin base indicada: la categoría más frecuente
         dummies = pd.get_dummies(vacas[columna], dtype=int).drop(columns=base)
         dummies.columns = [f"{prefijo[columna]}_{_a_nombre_columna(c)}" for c in dummies.columns]
         vacas = pd.concat([vacas.drop(columns=columna), dummies], axis=1)
