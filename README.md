@@ -76,7 +76,33 @@ python3 src/scripts/descargar_clima.py
 
 **Resultado esperado:** se crea `Data/clima/clima_nasa_power_por_hora.csv`, junto con las respuestas originales y un manifiesto en `Data/clima/`. La terminal muestra la cita de la fuente y una fila para la bitácora de auditoría.
 
-### 5. Integrar el clima
+### 5. Limpiar los datos
+
+Ejecuta este paso después de anonimizar los datos (paso 3) y descargar el clima (paso 4).
+
+**Windows**
+
+```powershell
+py src/DP/clean_data.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/DP/clean_data.py
+```
+
+**Resultado esperado:** se generan `Data/dataset_vacas_limpio.csv` y `Data/clima/clima_nasa_power_limpio.csv`. La terminal muestra un resumen de cada paso de la limpieza. El dataset de vacas queda sin nulos y con estos cambios principales:
+
+- Unifica fechas, duraciones e intervalos del CSV y del XLSX, y quita las sesiones repetidas entre ambas fuentes.
+- Convierte las alertas de texto (`DI,TD`, `Todos`) en banderas 0/1 por cuarto y las categóricas en dummies.
+- Pasa a faltante la conductividad en 0 y trata los nulos usando solo la misma visita o el pasado de la misma vaca. Los valores estimados quedan marcados con banderas (`*_faltante`, `*_estimada_*`, `*_sin_dato`).
+- Pasa a 0 kg los cuartos con producción nula (verificado contra el total del ordeño) y los marca con `cuarto_inactivo_<cuarto>`: un cuarto dañado viene nulo y sin alertas, mientras que un fallo del robot viene en 0 con alerta, y los dos casos deben seguir distinguiéndose.
+- Marca, sin eliminar, los ordeños con 0 kg, los de suma de cuartos distinta del total y los picos de sangre por máquina.
+- Excluye las vacas con menos de 30 registros y agrega `bloque_historial`, que cambia tras 45 días de ausencia.
+- Deja `sangre_ppm_*`, `estado_mdi` y `contadores_monitorizacion_*` en logaritmo (`log1p`). Los umbrales de `integrate_derivates.py` ya están convertidos a esa escala.
+
+### 6. Integrar el clima
 
 **Windows**
 
@@ -90,9 +116,9 @@ py src/DP/integrar_clima.py
 python3 src/DP/integrar_clima.py
 ```
 
-**Resultado esperado:** se genera `Data/dataset_vacas_integrado.csv` a partir de los datos anonimizados, con temperatura y THI de la sesión y horas con THI alto en las 24 horas previas.
+**Resultado esperado:** se genera `Data/dataset_vacas_integrado.csv` a partir de los datasets limpios, con temperatura y THI de la sesión y horas con THI alto en las 24 horas previas.
 
-### 6. Integrar las variables derivadas
+### 7. Integrar las variables derivadas
 
 **Windows**
 
@@ -106,9 +132,9 @@ py src/DP/integrate_derivates.py
 python3 src/DP/integrate_derivates.py
 ```
 
-**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las variables derivadas y etiquetas de eventos, conservando las filas y columnas existentes, incluidas las de clima. La terminal muestra estadísticas de las sesiones y eventos.
+**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las variables derivadas y etiquetas de eventos, conservando las filas y columnas existentes, incluidas las de clima. Los rechazos y las echadas sin ordeñar no reciben etiqueta de evento, y `fme_milk_production` no cuenta los cuartos marcados como inactivos (`cuarto_inactivo_*`). La terminal muestra estadísticas de las sesiones y eventos.
 
-### 7. Construir, anonimizar e integrar el concentrado consumido
+### 8. Construir, anonimizar e integrar el concentrado consumido
 
 
 **Windows**
@@ -213,7 +239,8 @@ La estructura del repositorio es:
   - **[`DU/`](src/DU/)** — Notebook de exploración para la fase *Data Understanding*.
     - [`final_data_understanding.ipynb`](src/DU/final_data_understanding.ipynb) — Reúne los análisis exploratorios del equipo sobre el dataset anonimizado, el clima de NASA POWER y el concentrado.
   - **[`DP/`](src/DP/)** — Scripts de la fase *Data Preparation*.
-    - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) en `Data/dataset_vacas_integrado.csv`.
+    - [`clean_data.py`](src/DP/clean_data.py) — Limpia el dataset anonimizado de vacas y el clima de NASA POWER, y genera `Data/dataset_vacas_limpio.csv` y `Data/clima/clima_nasa_power_limpio.csv`.
+    - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones limpias los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) y crea `Data/dataset_vacas_integrado.csv`.
     - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento a `Data/dataset_vacas_integrado.csv`.
     - [`integrar_concentrado.py`](src/DP/integrar_concentrado.py) — Añade cuatro atributos históricos de concentrado a `Data/dataset_vacas_integrado.csv`.
 
