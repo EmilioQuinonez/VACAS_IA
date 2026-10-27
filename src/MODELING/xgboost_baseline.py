@@ -1,20 +1,15 @@
 """
-Primera iteración de modelado: un XGBoost binario por cada evento de ordeño.
+XGBoost base: un clasificador binario por evento de ordeño, con los valores por defecto
+de la librería y sin regularización (se agrega solo si aparece sobreajuste).
 
-Lee Data/dataset_vacas_integrado.csv (limpieza, clima, derivados y concentrado) y entrena
-un clasificador por evento con los valores por defecto de XGBoost, sin regularización:
-solo se agrega cuando la brecha entre train y val muestre sobreajuste. Los atributos son
-únicamente los que se conocen cuando la vaca entra al robot; las mediciones de la sesión
-actual son consecuencia del evento y se excluyen.
+Usa únicamente atributos conocidos al entrar al robot; las mediciones de la sesión actual
+son consecuencia del evento y se excluyen. Split cronológico 70/10/20: el modelo de train
+elige en val el umbral de recall y el modelo final, reentrenado con train + val, se evalúa
+en test. Modelos y métricas van a Data/modelos/xgboost_base/ (fuera de Git).
 
-El split es cronológico (70 % más antiguo train, 10 % val, 20 % más reciente test). Los
-modelos y las métricas se guardan en Data/modelos/xgboost_base/, fuera de Git.
+El log imprime cada árbol como una época de Keras (verbose=2) para el panel /entrenamiento.
 
-Cada árbol se imprime como una época de Keras (verbose=2), con loss/accuracy de train y
-val, para seguir el entrenamiento con el mismo formato que las redes del equipo. Las
-épocas se numeran seguidas entre los tres eventos (1 a 300).
-
-Uso (con -u la salida llega al log al momento):
+Uso:
     python -u src/MODELING/xgboost_baseline.py >| Data/modelos/xgboost_base/xgboost_baseline.log 2>&1
 """
 
@@ -35,15 +30,15 @@ ROOT = Path(__file__).resolve().parents[2]
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 OUTPUT_DIR = ROOT / "Data" / "modelos" / "xgboost_base"
 
-EVENTOS = [
+EVENTS = [
     "mechanical_connection_failure_event", "health_anomaly_event",
     "behavior_interruption_event",
 ]
-CUARTOS = ("di", "dd", "ti", "td")
-# Atributos disponibles al inicio de la sesión: historial de la vaca, clima y concentrado.
-ATRIBUTOS = [
+QUARTERS = ("di", "dd", "ti", "td")
+# Disponibles al inicio de la sesión: historial de la vaca, clima y concentrado.
+FEATURES = [
     "fme_connection", "fme_milk_production", "fme_incomplete", "kicks_ratio_7d",
-    *[f"blood_diff_{cuarto}" for cuarto in CUARTOS],
+    *[f"blood_diff_{quarter}" for quarter in QUARTERS],
     "box_time_to_yield_ratio", "flies_proxy",
     "t_sesion", "thi_sesion", "horas_thi_alto_24h",
     "conc_sesion_previa", "tope_sesion_previa", "conc_d1", "conc_media_7d",
@@ -51,239 +46,181 @@ ATRIBUTOS = [
 ]
 VAL_SIZE = 0.1
 TEST_SIZE = 0.2
-RECALL_OBJETIVO = 0.80  # Criterio de negocio: detectar al menos 80 % de las anomalías.
-N_ARBOLES = 100  # Valor por defecto de XGBoost; se fija para numerar las épocas del log.
+TARGET_RECALL = 0.80  # Criterio de negocio: detectar al menos 80 % de las anomalías.
+N_TREES = 100  # Valor por defecto de XGBoost; fijo para numerar las épocas del log.
 RANDOM_STATE = 42
 
 
-class LogEstiloKeras(TrainingCallback):
-    """
-    Imprime cada árbol como una época de Keras con verbose=2:
-    "Epoch n/total" y "1/1 - Xs - Yms/step - accuracy: … - loss: … - val_accuracy: … - val_loss: …".
+class KerasStyleLog(TrainingCallback):
+    """Imprime cada árbol como época de Keras; sin val, solo accuracy y loss."""
 
-    Args:
-        epoca_inicial (int): Épocas ya impresas por los eventos anteriores.
-
-        total_epocas (int): Épocas de todo el script (N_ARBOLES por evento).
-    """
-
-    def __init__(self, epoca_inicial, total_epocas):
+    def __init__(self, first_epoch, total_epochs):
         super().__init__()
-        self.epoca_inicial = epoca_inicial
-        self.total_epocas = total_epocas
-        self.mejor = float("inf")
-        self.transcurrido = 0.0
-        self.impreso = 0
+        self.first_epoch = first_epoch
+        self.total_epochs = total_epochs
+        self.best = float("inf")
+        self.elapsed = 0.0
+        self.printed = 0
 
     def before_iteration(self, model, epoch, evals_log):
-        self.inicio = time.perf_counter()
+        self.start = time.perf_counter()
         return False
 
     def after_iteration(self, model, epoch, evals_log):
-        duracion = time.perf_counter() - self.inicio
-        # Keras imprime segundos enteros: se acumula el resto para que la suma sea el tiempo real.
-        self.transcurrido += duracion
-        segundos = int(self.transcurrido) - self.impreso
-        self.impreso += segundos
+        duration = time.perf_counter() - self.start
+        # Keras imprime segundos enteros: se arrastra el resto para que la suma sea el tiempo real.
+        self.elapsed += duration
+        seconds = int(self.elapsed) - self.printed
+        self.printed += seconds
 
-        train, val = evals_log["validation_0"], evals_log["validation_1"]
-        numero = self.epoca_inicial + epoch + 1
-        print(f"Epoch {numero}/{self.total_epocas}")
-        print(f"1/1 - {segundos}s - {int(duracion * 1000)}ms/step - "
-              f"accuracy: {1 - train['error'][-1]:.4f} - loss: {train['logloss'][-1]:.4f} - "
-              f"val_accuracy: {1 - val['error'][-1]:.4f} - val_loss: {val['logloss'][-1]:.4f}")
-        if val["logloss"][-1] < self.mejor:
-            print(f"Epoch {numero}: val_loss improved from {self.mejor:.5f} to {val['logloss'][-1]:.5f}")
-            self.mejor = val["logloss"][-1]
+        train, val = evals_log["validation_0"], evals_log.get("validation_1")
+        number = self.first_epoch + epoch + 1
+        summary = (f"1/1 - {seconds}s - {int(duration * 1000)}ms/step - "
+                   f"accuracy: {1 - train['error'][-1]:.4f} - loss: {train['logloss'][-1]:.4f}")
+        if val:
+            summary += f" - val_accuracy: {1 - val['error'][-1]:.4f} - val_loss: {val['logloss'][-1]:.4f}"
+        print(f"Epoch {number}/{self.total_epochs}")
+        print(summary)
+        if val and val["logloss"][-1] < self.best:
+            print(f"Epoch {number}: val_loss improved from {self.best:.5f} to {val['logloss'][-1]:.5f}")
+            self.best = val["logloss"][-1]
 
         return False
 
 
-def cargar_sesiones(ruta):
+def load_sessions(path):
     """
-    Lee el dataset integrado y deja solo los ordeños.
-
-    Args:
-        ruta (Path): Ruta a dataset_vacas_integrado.csv.
-
-    Returns:
-        pd.DataFrame: Sesiones de ordeño con inicio como fecha y hora. Los rechazos
-            y echadas sin ordeñar se quitan porque integrate_derivates.py les pone
-            las etiquetas en 0 y entrarían como ordeños sin evento.
+    Lee el dataset integrado y deja solo los ordeños: integrate_derivates.py pone las
+    etiquetas en 0 a rechazos y echadas, que entrarían como ordeños sin evento.
     """
-    sesiones = pd.read_csv(ruta, dtype={"id_vaca": str}, parse_dates=["inicio"], low_memory=False)
-    no_ordeno = sesiones[["accion_rechazada", "accion_echada_sin_ordenar"]].eq(1).any(axis=1)
-    print(f"[datos] {len(sesiones):,} visitas; se quitan {no_ordeno.sum():,} rechazos y echadas sin ordeñar")
+    sessions = pd.read_csv(path, dtype={"id_vaca": str}, parse_dates=["inicio"], low_memory=False)
+    not_milking = sessions[["accion_rechazada", "accion_echada_sin_ordenar"]].eq(1).any(axis=1)
+    print(f"[data] {len(sessions):,} visits; {not_milking.sum():,} rejections and lie-downs removed")
 
-    return sesiones[~no_ordeno].reset_index(drop=True)
+    return sessions[~not_milking].reset_index(drop=True)
 
 
-def construir_atributos(sesiones):
+def build_features(sessions):
     """
-    Arma la matriz de atributos y las etiquetas de los tres eventos.
-
-    Args:
-        sesiones (pd.DataFrame): Salida de cargar_sesiones.
-
-    Returns:
-        tuple[pd.DataFrame, pd.DataFrame]:
-            X: ATRIBUTOS, las dummies maquina_*, la hora de inicio (0 a 23) y las
-                banderas <atributo>_sin_dato de clean_data.py que marcan un 0 de
-                relleno. Los NaN se dejan para que XGBoost los maneje.
-
-            y: Una columna 0/1 por evento de EVENTOS.
+    Devuelve X (FEATURES, dummies maquina_*, hora de inicio y banderas <atributo>_sin_dato
+    que marcan un 0 de relleno) e y (una columna 0/1 por evento). Los NaN se conservan.
     """
-    maquinas = [columna for columna in sesiones.columns if columna.startswith("maquina_")]
-    banderas = [f"{columna}_sin_dato" for columna in ATRIBUTOS if f"{columna}_sin_dato" in sesiones]
+    machines = [column for column in sessions.columns if column.startswith("maquina_")]
+    flags = [f"{column}_sin_dato" for column in FEATURES if f"{column}_sin_dato" in sessions]
 
-    X = sesiones[ATRIBUTOS + maquinas + banderas].copy()
-    X["hora"] = sesiones["inicio"].dt.hour
-    print(f"[atributos] {X.shape[1]} columnas: {len(maquinas)} máquinas y banderas {banderas}")
+    X = sessions[FEATURES + machines + flags].copy()
+    X["start_hour"] = sessions["inicio"].dt.hour
+    print(f"[features] {X.shape[1]} columns: {len(machines)} machines, flags {flags}")
 
-    return X, sesiones[EVENTOS]
+    return X, sessions[EVENTS]
 
 
-def separar_por_tiempo(inicio, val_size=VAL_SIZE, test_size=TEST_SIZE):
-    """
-    Separa las sesiones en train, val y test por orden cronológico.
-
-    Args:
-        inicio (pd.Series): Fecha y hora de inicio de cada sesión.
-
-        val_size (float): Fracción para validación, justo después de train.
-
-        test_size (float): Fracción más reciente, reservada para test.
-
-    Returns:
-        dict[str, numpy.ndarray]: Posiciones de las filas de "train", "val" y "test".
-    """
-    orden = np.argsort(inicio.to_numpy(), kind="stable")
-    fin_train = int(len(orden) * (1 - val_size - test_size))
-    fin_val = int(len(orden) * (1 - test_size))
-    idx = {
-        "train": orden[:fin_train],
-        "val": orden[fin_train:fin_val],
-        "test": orden[fin_val:],
-    }
-    for nombre, filas in idx.items():
-        fechas = inicio.iloc[filas]
-        print(f"[split] {nombre}: {len(filas):,} sesiones, {fechas.min():%d/%m/%Y} a {fechas.max():%d/%m/%Y}")
+def split_by_time(start, val_size=VAL_SIZE, test_size=TEST_SIZE):
+    """Posiciones de train, val y test en orden cronológico (test es lo más reciente)."""
+    order = np.argsort(start.to_numpy(), kind="stable")
+    train_end = int(len(order) * (1 - val_size - test_size))
+    val_end = int(len(order) * (1 - test_size))
+    idx = {"train": order[:train_end], "val": order[train_end:val_end], "test": order[val_end:]}
+    for name, rows in idx.items():
+        dates = start.iloc[rows]
+        print(f"[split] {name}: {len(rows):,} sessions, {dates.min():%d/%m/%Y} to {dates.max():%d/%m/%Y}")
 
     return idx
 
 
-def entrenar_evento(X, y, idx, epoca_inicial=0):
+def train_event(X, y, rows, val_rows=None, first_epoch=0):
     """
-    Entrena un XGBoost binario con los valores por defecto de la librería.
-
-    Args:
-        X (pd.DataFrame): Atributos de todas las sesiones.
-
-        y (pd.Series): Etiqueta 0/1 del evento.
-
-        idx (dict[str, numpy.ndarray]): Posiciones de separar_por_tiempo.
-
-        epoca_inicial (int): Épocas ya impresas en el log por los eventos anteriores.
-
-    Returns:
-        XGBClassifier: Modelo entrenado con train. scale_pos_weight (negativos /
-            positivos de train) compensa el desbalance del evento. Val solo se
-            evalúa para el log; no detiene ni cambia el entrenamiento.
+    Entrena un XGBoost con valores por defecto; scale_pos_weight compensa el desbalance.
+    val_rows solo se evalúa para el log: no detiene ni cambia el entrenamiento.
     """
-    X_train, y_train = X.iloc[idx["train"]], y.iloc[idx["train"]]
-    modelo = XGBClassifier(
+    X_fit, y_fit = X.iloc[rows], y.iloc[rows]
+    eval_set = [(X_fit, y_fit)]
+    if val_rows is not None:
+        eval_set.append((X.iloc[val_rows], y.iloc[val_rows]))
+    model = XGBClassifier(
         objective="binary:logistic",
-        n_estimators=N_ARBOLES,
-        scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum(),
+        n_estimators=N_TREES,
+        scale_pos_weight=(y_fit == 0).sum() / (y_fit == 1).sum(),
         eval_metric=["error", "logloss"],
-        callbacks=[LogEstiloKeras(epoca_inicial, N_ARBOLES * len(EVENTOS))],
+        callbacks=[KerasStyleLog(first_epoch, 2 * N_TREES * len(EVENTS))],
         random_state=RANDOM_STATE,
     )
 
-    return modelo.fit(
-        X_train, y_train,
-        eval_set=[(X_train, y_train), (X.iloc[idx["val"]], y.iloc[idx["val"]])],
-        verbose=False,
-    )
+    return model.fit(X_fit, y_fit, eval_set=eval_set, verbose=False)
 
 
-def evaluar(modelo, X, y, idx):
+def choose_threshold(model, X, y, val_rows):
+    """Mayor umbral que en val alcanza TARGET_RECALL."""
+    probability = model.predict_proba(X.iloc[val_rows])[:, 1]
+    # El recall baja al subir el umbral; recall[:-1] corresponde a cada umbral.
+    _, recall, thresholds = precision_recall_curve(y.iloc[val_rows], probability)
+
+    return float(thresholds[recall[:-1] >= TARGET_RECALL].max())
+
+
+def evaluate(model, X, y, sets, recall_threshold):
     """
-    Calcula las métricas del modelo en train, val y test con dos umbrales.
-
-    Args:
-        modelo (XGBClassifier): Modelo de entrenar_evento.
-
-        X (pd.DataFrame): Atributos de todas las sesiones.
-
-        y (pd.Series): Etiqueta 0/1 del evento.
-
-        idx (dict[str, numpy.ndarray]): Posiciones de separar_por_tiempo.
-
-    Returns:
-        dict: Por conjunto, la prevalencia, la accuracy de responder siempre
-            "sin evento", ROC-AUC, PR-AUC y, por umbral, accuracy, precisión,
-            recall y F1. Los umbrales son 0.5 y el mayor que en val alcanza
-            RECALL_OBJETIVO.
+    Por conjunto: prevalencia, accuracy de responder siempre "sin evento", ROC-AUC, PR-AUC
+    y accuracy, precisión, recall y F1 con umbral 0.5 y con recall_threshold.
     """
-    probabilidades = {nombre: modelo.predict_proba(X.iloc[filas])[:, 1] for nombre, filas in idx.items()}
-    reales = {nombre: y.iloc[filas].to_numpy() for nombre, filas in idx.items()}
-
-    # recall baja al subir el umbral; recall[:-1] corresponde a cada umbral.
-    _, recall, umbrales = precision_recall_curve(reales["val"], probabilidades["val"])
-    umbral_recall = float(umbrales[recall[:-1] >= RECALL_OBJETIVO].max())
-
-    metricas = {"umbral_recall_val": umbral_recall}
-    for nombre in idx:
-        real, probabilidad = reales[nombre], probabilidades[nombre]
-        metricas[nombre] = {
-            "prevalencia": float(real.mean()),
-            "accuracy_sin_evento": float(1 - real.mean()),
-            "roc_auc": float(roc_auc_score(real, probabilidad)),
-            "pr_auc": float(average_precision_score(real, probabilidad)),
+    metrics = {}
+    for name, rows in sets.items():
+        actual = y.iloc[rows].to_numpy()
+        probability = model.predict_proba(X.iloc[rows])[:, 1]
+        metrics[name] = {
+            "prevalence": float(actual.mean()),
+            "accuracy_no_event": float(1 - actual.mean()),
+            "roc_auc": float(roc_auc_score(actual, probability)),
+            "pr_auc": float(average_precision_score(actual, probability)),
         }
-        for etiqueta, umbral in [("umbral_0.5", 0.5), ("umbral_recall", umbral_recall)]:
-            prediccion = (probabilidad >= umbral).astype(int)
-            metricas[nombre][etiqueta] = {
-                "accuracy": float(accuracy_score(real, prediccion)),
-                "precision": float(precision_score(real, prediccion, zero_division=0)),
-                "recall": float(recall_score(real, prediccion)),
-                "f1": float(f1_score(real, prediccion)),
+        for label, threshold in [("threshold_0.5", 0.5), ("threshold_recall", recall_threshold)]:
+            prediction = (probability >= threshold).astype(int)
+            metrics[name][label] = {
+                "accuracy": float(accuracy_score(actual, prediction)),
+                "precision": float(precision_score(actual, prediction, zero_division=0)),
+                "recall": float(recall_score(actual, prediction)),
+                "f1": float(f1_score(actual, prediction)),
             }
 
-    return metricas
+    return metrics
 
 
 def main():
-    """
-    Entrena y evalúa un modelo por evento, guarda modelos y métricas e imprime un resumen.
-    """
-    sesiones = cargar_sesiones(INPUT_PATH)
-    X, etiquetas = construir_atributos(sesiones)
-    idx = separar_por_tiempo(sesiones["inicio"])
+    """Por evento: train y umbral en val, modelo final con train + val evaluado en test."""
+    sessions = load_sessions(INPUT_PATH)
+    X, labels = build_features(sessions)
+    idx = split_by_time(sessions["inicio"])
+    final_rows = np.concatenate([idx["train"], idx["val"]])
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    resultados = {}
-    for numero, evento in enumerate(EVENTOS):
-        print(f"\n[entrenamiento] {evento}")
-        modelo = entrenar_evento(X, etiquetas[evento], idx, numero * N_ARBOLES)
-        modelo.save_model(OUTPUT_DIR / f"{evento}.json")
-        resultados[evento] = evaluar(modelo, X, etiquetas[evento], idx)
+    results = {}
+    for number, event in enumerate(EVENTS):
+        y = labels[event]
+        print(f"\n[training] {event}: train, validating on val")
+        model = train_event(X, y, idx["train"], idx["val"], 2 * number * N_TREES)
+        threshold = choose_threshold(model, X, y, idx["val"])
+        results[event] = {"threshold_recall_val": threshold}
+        results[event].update(evaluate(model, X, y, {"train": idx["train"], "val": idx["val"]}, threshold))
 
-        print(f"\n{evento} (umbral para recall >= {RECALL_OBJETIVO:.0%} en val: "
-              f"{resultados[evento]['umbral_recall_val']:.3f})")
-        for nombre in idx:
-            m = resultados[evento][nombre]
-            print(f"  {nombre:5}: prevalencia {m['prevalencia']:.1%} | ROC-AUC {m['roc_auc']:.3f} | "
-                  f"PR-AUC {m['pr_auc']:.3f} | accuracy sin evento {m['accuracy_sin_evento']:.1%}")
-            for etiqueta in ("umbral_0.5", "umbral_recall"):
-                u = m[etiqueta]
-                print(f"         {etiqueta:13}: accuracy {u['accuracy']:.1%} | precisión {u['precision']:.1%} | "
-                      f"recall {u['recall']:.1%} | F1 {u['f1']:.3f}")
+        print(f"\n[training] {event}: final model on train + val")
+        final = train_event(X, y, final_rows, first_epoch=(2 * number + 1) * N_TREES)
+        final.save_model(OUTPUT_DIR / f"{event}.json")
+        results[event].update(evaluate(final, X, y, {"train_val": final_rows, "test": idx["test"]}, threshold))
 
-    with open(OUTPUT_DIR / "metricas.json", "w", encoding="utf-8") as archivo:
-        json.dump(resultados, archivo, indent=2, ensure_ascii=False)
-    print(f"\nModelos y métricas en {OUTPUT_DIR.relative_to(ROOT)}")
+        print(f"\n{event} (threshold for recall >= {TARGET_RECALL:.0%} on val: {threshold:.3f}; "
+              f"train and val with the train model, train_val and test with the final one)")
+        for name in ("train", "val", "train_val", "test"):
+            m = results[event][name]
+            print(f"  {name:9}: prevalence {m['prevalence']:.1%} | ROC-AUC {m['roc_auc']:.3f} | "
+                  f"PR-AUC {m['pr_auc']:.3f} | accuracy no event {m['accuracy_no_event']:.1%}")
+            for label in ("threshold_0.5", "threshold_recall"):
+                t = m[label]
+                print(f"             {label:16}: accuracy {t['accuracy']:.1%} | precision {t['precision']:.1%} | "
+                      f"recall {t['recall']:.1%} | F1 {t['f1']:.3f}")
+
+    with open(OUTPUT_DIR / "metrics.json", "w", encoding="utf-8") as file:
+        json.dump(results, file, indent=2)
+    print(f"\nModels and metrics in {OUTPUT_DIR.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":
