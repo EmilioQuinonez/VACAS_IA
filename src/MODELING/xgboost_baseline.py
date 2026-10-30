@@ -194,7 +194,7 @@ def evaluate(model, X, y, sets, recall_threshold):
 def cross_validate_by_cow(X, y, cows, recall_threshold, first_epoch):
     """
     GroupKFold por vaca: cada fold entrena sin un 20 % de las vacas y se evalúa en ellas.
-    Devuelve media y desviación por fold de las métricas sin umbral y con recall_threshold.
+    Devuelve media, desviación y valores por fold de las métricas sin umbral y con recall_threshold.
     """
     folds = []
     for number, (train_rows, test_rows) in enumerate(GroupKFold(n_splits=N_FOLDS).split(X, y, cows)):
@@ -206,7 +206,7 @@ def cross_validate_by_cow(X, y, cows, recall_threshold, first_epoch):
         })
     folds = pd.DataFrame(folds)
 
-    return {"mean": folds.mean().to_dict(), "std": folds.std().to_dict()}
+    return {"mean": folds.mean().to_dict(), "std": folds.std().to_dict(), "folds": folds.to_dict("records")}
 
 
 def main():
