@@ -1,0 +1,254 @@
+"""
+Gráficas del XGBoost base; cada función devuelve la figura y plot_results.py la guarda.
+
+Editar: títulos y etiquetas dentro de cada función; nombres de los eventos en EVENT_NAMES;
+colores en SERIES (papel de cada serie, igual en todas las gráficas), INK, MUTED, GRID,
+SURFACE y REFERENCE.
+"""
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.calibration import calibration_curve
+from sklearn.metrics import precision_recall_curve, roc_auc_score, roc_curve
+
+from dataset import EVENT_KEYS, EVENTS
+
+EVENT_NAMES = ["Falla mecánica", "Salud", "Conducta"]
+TOP_FEATURES = 10
+MIN_WEEK_SESSIONS = 1000  # semanas incompletas (inicio y fin del test) se omiten
+
+# Paleta validada (skill dataviz, modo claro): el color marca el papel de la serie, no el evento.
+SERIES = {"train": "#2a78d6", "val": "#eb6834", "cows": "#1baf7a"}
+INK, MUTED, GRID, SURFACE, REFERENCE = "#0b0b0b", "#52514e", "#e6e5e0", "#fcfcfb", "#9a9890"
+
+plt.rcParams.update({
+    "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
+    "axes.edgecolor": GRID, "axes.labelcolor": MUTED, "axes.titlecolor": INK,
+    "xtick.color": MUTED, "ytick.color": MUTED, "text.color": INK,
+    "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.8,
+    "axes.spines.top": False, "axes.spines.right": False,
+    "font.size": 10, "axes.titlesize": 11, "lines.linewidth": 2,
+    "legend.frameon": False,
+})
+
+
+def label_line_end(ax, x, y, text, color):
+    """Etiqueta directa al final de la línea (el aqua no llega a 3:1 de contraste)."""
+    ax.annotate(text, (x, y), xytext=(4, 0), textcoords="offset points",
+                va="center", fontsize=9, color=MUTED)
+    ax.plot([x], [y], "o", color=color, markersize=4)
+
+
+def learning_curves(log, n_trees):
+    """1. Log loss por árbol: train y val del corte cronológico y, si hay, vacas fuera (media de los folds)."""
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4), sharey=True)
+    for event, ax in enumerate(axes):
+        chrono = log[(log["event"] == event) & (log["block"] == 0)]
+        by_cow = log[(log["event"] == event) & (log["block"] >= 2)]
+        series = [
+            ("Train", chrono["tree"], chrono["loss"], SERIES["train"]),
+            ("Val (jul–sep 2025)", chrono["tree"], chrono["val_loss"], SERIES["val"]),
+        ]
+        if len(by_cow):
+            folds = by_cow.groupby("tree")["val_loss"].mean()
+            n_folds = by_cow["block"].nunique()
+            series.append((f"Vacas fuera (media {n_folds} folds)", folds.index, folds, SERIES["cows"]))
+        for name, x, y, color in series:
+            x, y = x.to_numpy(), y.to_numpy()
+            ax.plot(x, y, color=color, label=name)
+            label_line_end(ax, x[-1], y[-1], f"{y[-1]:.3f}", color)
+        ax.set_title(EVENT_NAMES[event], loc="left")
+        ax.set_xlabel("Árbol")
+        ax.set_xlim(0, n_trees + 14)
+    axes[0].set_ylabel("Log loss")
+    axes[0].legend(loc="upper right")
+    fig.suptitle("Curvas de aprendizaje: log loss por árbol (menor es mejor)",
+                 x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def roc_pr(y, probabilities, metrics):
+    """2. Curvas ROC y PR en test con el punto del umbral elegido en val."""
+    fig, axes = plt.subplots(2, 3, figsize=(13, 8))
+    for i, event in enumerate(EVENTS):
+        actual, p, m = y[event].to_numpy(), probabilities[i], metrics[event]
+        threshold = m["threshold_recall_val"]
+        predicted = p >= threshold
+        fpr_t = (predicted & (actual == 0)).sum() / (actual == 0).sum()
+        tpr_t = (predicted & (actual == 1)).sum() / (actual == 1).sum()
+        precision_t = (predicted & (actual == 1)).sum() / predicted.sum()
+
+        ax = axes[0, i]
+        fpr, tpr, _ = roc_curve(actual, p)
+        ax.plot([0, 1], [0, 1], color=REFERENCE, linestyle="--", linewidth=1, label="Azar / prevalencia")
+        ax.plot(fpr, tpr, color=SERIES["train"], label="Modelo")
+        ax.plot(fpr_t, tpr_t, "o", color=SERIES["val"], markersize=8, label="Umbral elegido en val")
+        ax.set_title(f"{EVENT_NAMES[i]}\nROC-AUC {m['test']['roc_auc']:.3f} · umbral {threshold:.2f}", loc="left")
+        ax.set_xlabel("Falsos positivos (1 − especificidad)")
+
+        ax = axes[1, i]
+        precision, recall, _ = precision_recall_curve(actual, p)
+        ax.axhline(actual.mean(), color=REFERENCE, linestyle="--", linewidth=1)
+        ax.plot(recall, precision, color=SERIES["train"])
+        ax.plot(tpr_t, precision_t, "o", color=SERIES["val"], markersize=8)
+        ax.set_title(f"PR-AUC {m['test']['pr_auc']:.3f} · prevalencia {actual.mean():.1%}\n"
+                     f"en el umbral: recall {tpr_t:.0%}, precisión {precision_t:.0%}", loc="left")
+        ax.set_xlabel("Recall (sensibilidad)")
+        ax.set_ylim(0, 1)
+    axes[0, 0].set_ylabel("Verdaderos positivos (recall)")
+    axes[1, 0].set_ylabel("Precisión")
+    fig.legend(*axes[0, 0].get_legend_handles_labels(), loc="upper right", ncol=3)
+    fig.suptitle("Curvas ROC (arriba) y PR (abajo) en test, oct 2025–ene 2026", x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def calibration(y, probabilities, metrics):
+    """3. Probabilidad predicha contra frecuencia real en test."""
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5), sharey=True)
+    for i, event in enumerate(EVENTS):
+        actual, p, ax = y[event].to_numpy(), probabilities[i], axes[i]
+        observed, predicted = calibration_curve(actual, p, n_bins=10)
+        constant = actual.mean() * (1 - actual.mean())
+        ax.plot([0, 1], [0, 1], color=REFERENCE, linestyle="--", linewidth=1, label="Calibración perfecta")
+        ax.plot(predicted, observed, "o-", color=SERIES["train"], markersize=5, label="Modelo")
+        ax.set_title(f"{EVENT_NAMES[i]}\nBrier {metrics[event]['test']['brier']:.3f} (constante {constant:.3f})", loc="left")
+        ax.set_xlabel("Probabilidad predicha")
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+    axes[0].set_ylabel("Frecuencia real del evento")
+    axes[0].legend(loc="upper left")
+    fig.suptitle("Calibración en test: bajo la diagonal, el modelo sobrestima la probabilidad",
+                 x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def probability_distributions(y, probabilities, metrics):
+    """4. Distribución de la probabilidad en test por clase real."""
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+    bins = np.linspace(0, 1, 41)
+    for i, event in enumerate(EVENTS):
+        actual, p, ax = y[event].to_numpy(), probabilities[i], axes[i]
+        ax.hist(p[actual == 0], bins=bins, density=True, histtype="step", linewidth=2,
+                color=SERIES["train"], label="Sin evento")
+        ax.hist(p[actual == 1], bins=bins, density=True, histtype="step", linewidth=2,
+                color=SERIES["val"], label="Con evento")
+        threshold = metrics[event]["threshold_recall_val"]
+        ax.axvline(threshold, color=REFERENCE, linestyle="--", linewidth=1)
+        ax.annotate(f"umbral {threshold:.2f}", (threshold, ax.get_ylim()[1] * 0.95), xytext=(4, 0),
+                    textcoords="offset points", fontsize=9, color=MUTED, va="top")
+        ax.set_title(EVENT_NAMES[i], loc="left")
+        ax.set_xlabel("Probabilidad predicha")
+    axes[0].set_ylabel("Densidad")
+    axes[0].legend(loc="upper right")
+    fig.suptitle("Probabilidades en test: a la derecha del umbral se emite alerta", x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def gain_importance(models):
+    """5. Los atributos con más gain de cada modelo final."""
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.8))
+    for i, model in enumerate(models):
+        gain = pd.Series(model.get_booster().get_score(importance_type="gain"))
+        share = (gain / gain.sum()).sort_values(ascending=False).head(TOP_FEATURES)[::-1]
+        ax = axes[i]
+        ax.barh(share.index, share.to_numpy(), color=SERIES["train"], height=0.6)
+        for y_pos, value in enumerate(share.to_numpy()):
+            ax.annotate(f"{value:.0%}", (value, y_pos), xytext=(3, 0), textcoords="offset points",
+                        va="center", fontsize=9, color=MUTED)
+        ax.set_title(EVENT_NAMES[i], loc="left")
+        ax.set_xlabel("Proporción del gain total")
+        ax.set_xlim(0, share.max() * 1.2)
+        ax.grid(axis="y", visible=False)
+    fig.suptitle(f"Importancia por gain: los {TOP_FEATURES} atributos que más usa cada modelo final",
+                 x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def model_vs_feature(X, y, probabilities):
+    """6. ROC del modelo contra la tasa del evento de la vaca en 30 días usada sola."""
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5), sharey=True)
+    for i, event in enumerate(EVENTS):
+        feature = f"{EVENT_KEYS[i]}_vaca_30d"
+        known = X[feature].notna().to_numpy()
+        actual, p, f = y[event].to_numpy()[known], probabilities[i][known], X[feature].to_numpy()[known]
+        ax = axes[i]
+        ax.plot([0, 1], [0, 1], color=REFERENCE, linestyle="--", linewidth=1, label="Azar")
+        for name, score, color in [("Modelo", p, SERIES["train"]), (feature, f, SERIES["val"])]:
+            fpr, tpr, _ = roc_curve(actual, score)
+            ax.plot(fpr, tpr, color=color, label=f"{name} (AUC {roc_auc_score(actual, score):.3f})")
+        ax.set_title(EVENT_NAMES[i], loc="left")
+        ax.set_xlabel("Falsos positivos")
+        ax.legend(loc="lower right")
+    axes[0].set_ylabel("Verdaderos positivos")
+    fig.suptitle("Modelo contra una sola variable en test (sesiones con tasa a 30 días): "
+                 "en mecánico y conducta la iguala; en salud el modelo sí aporta",
+                 x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def by_cow(metrics):
+    """7. Métricas de cada fold por vaca, su media y el test cronológico como referencia."""
+    names = {"roc_auc": "ROC-AUC", "pr_auc": "PR-AUC", "recall": "Recall"}
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.2), sharey=True)
+    for i, event in enumerate(EVENTS):
+        folds, ax = pd.DataFrame(metrics[event]["by_cow"]["folds"]), axes[i]
+        test = metrics[event]["test"]
+        chrono = {"roc_auc": test["roc_auc"], "pr_auc": test["pr_auc"],
+                  "recall": test["threshold_recall"]["recall"]}
+        for x, key in enumerate(names):
+            jitter = np.linspace(-0.12, 0.12, len(folds))
+            ax.plot(x + jitter, folds[key], "o", color=SERIES["cows"], markersize=6, alpha=0.8,
+                    label="Fold por vaca" if x == 0 else None)
+            ax.plot([x - 0.22, x + 0.22], [folds[key].mean()] * 2, color=SERIES["cows"], linewidth=2.5,
+                    label="Media de los folds" if x == 0 else None)
+            ax.plot(x + 0.32, chrono[key], "D", color=SERIES["val"], markersize=7,
+                    label="Test cronológico" if x == 0 else None)
+            ax.annotate(f"{folds[key].mean():.2f}", (x - 0.22, folds[key].mean()), xytext=(-4, 0),
+                        textcoords="offset points", ha="right", va="center", fontsize=9, color=MUTED)
+        ax.set_xticks(range(len(names)), names.values())
+        ax.set_xlim(-0.6, len(names) - 0.4)
+        ax.set_ylim(0.3, 1)
+        ax.set_title(EVENT_NAMES[i], loc="left")
+        ax.grid(axis="x", visible=False)
+    axes[1].legend(loc="lower left")
+    fig.suptitle(f"Corte por vaca ({len(folds)} folds): el modelo rinde parecido con vacas que no vio",
+                 x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def weekly_performance(y, start, probabilities, metrics):
+    """8. Recall, precisión y prevalencia por semana en test."""
+    week = start.dt.to_period("W-SUN").dt.start_time.to_numpy()
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.2), sharey=True)
+    for i, event in enumerate(EVENTS):
+        frame = pd.DataFrame({
+            "week": week, "actual": y[event].to_numpy(),
+            "alert": probabilities[i] >= metrics[event]["threshold_recall_val"],
+        })
+        frame["hit"] = frame["actual"].eq(1) & frame["alert"]
+        weekly = frame.groupby("week").agg(n=("actual", "size"), events=("actual", "sum"),
+                                           alerts=("alert", "sum"), hits=("hit", "sum"))
+        weekly = weekly[weekly["n"] >= MIN_WEEK_SESSIONS]
+        series = [
+            ("Recall", weekly["hits"] / weekly["events"], SERIES["train"], "-"),
+            ("Precisión", weekly["hits"] / weekly["alerts"], SERIES["val"], "-"),
+            ("Prevalencia", weekly["events"] / weekly["n"], REFERENCE, "--"),
+        ]
+        ax = axes[i]
+        for name, values, color, style in series:
+            ax.plot(values.index, values * 100, style, color=color, marker="o", markersize=4, label=name)
+            ax.annotate(f"{name} {values.mean():.0%}", (values.index[-1], values.iloc[-1] * 100), xytext=(4, 0),
+                        textcoords="offset points", va="center", fontsize=8, color=MUTED)
+        ax.set_title(EVENT_NAMES[i], loc="left")
+        ax.set_ylim(0, 100)
+        ax.tick_params(axis="x", labelrotation=45)
+        ax.margins(x=0.25)
+    axes[0].set_ylabel("%")
+    axes[0].legend(loc="center left")
+    fig.suptitle(f"Desempeño semanal en test con el umbral de val (semanas con ≥ {MIN_WEEK_SESSIONS:,} ordeños; "
+                 "promedio en la etiqueta)", x=0.01, ha="left", fontsize=12)
+    return fig
