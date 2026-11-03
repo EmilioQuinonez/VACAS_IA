@@ -13,7 +13,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.calibration import calibration_curve
-from sklearn.metrics import precision_recall_curve, roc_auc_score, roc_curve
+from sklearn.metrics import (
+    average_precision_score, brier_score_loss, precision_recall_curve, precision_score,
+    recall_score, roc_auc_score, roc_curve,
+)
 
 from dataset import EVENT_KEYS, EVENTS
 
@@ -23,6 +26,9 @@ MIN_WEEK_SESSIONS = 1000  # semanas incompletas (inicio y fin del test) se omite
 
 # Paleta validada (skill dataviz, modo claro): el color marca el papel de la serie, no el evento.
 SERIES = {"train": "#2a78d6", "val": "#eb6834", "cows": "#1baf7a"}
+# Grupo de la vaca en test según dónde apareció antes (ver plot_results.load_test).
+COW_GROUPS = {"Conocida": SERIES["train"], "Solo en val": SERIES["cows"], "Nueva": SERIES["val"]}
+DAY_BINS = ["0–30", "31–90", "> 90"]  # días en el hato; 0–7 tiene muy pocas sesiones y va en 0–30
 INK, MUTED, GRID, SURFACE, REFERENCE = "#0b0b0b", "#52514e", "#e6e5e0", "#fcfcfb", "#9a9890"
 
 plt.rcParams.update({
@@ -251,4 +257,110 @@ def weekly_performance(y, start, probabilities, metrics):
     axes[0].legend(loc="center left")
     fig.suptitle(f"Desempeño semanal en test con el umbral de val (semanas con ≥ {MIN_WEEK_SESSIONS:,} ordeños; "
                  "promedio en la etiqueta)", x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def metrics_by_cow_group(y, probabilities, groups, metrics):
+    """9. ROC-AUC, PR-AUC y, con el umbral de val, recall y precisión en test por grupo de vaca."""
+    names = ["ROC-AUC", "PR-AUC", "Recall", "Precisión"]
+    width = 0.26
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.4), sharey=True)
+    for i, event in enumerate(EVENTS):
+        ax, threshold = axes[i], metrics[event]["threshold_recall_val"]
+        for j, (group, color) in enumerate(COW_GROUPS.items()):
+            rows = groups == group
+            actual, p = y[event].to_numpy()[rows], probabilities[i][rows]
+            alert = p >= threshold
+            values = [roc_auc_score(actual, p), average_precision_score(actual, p),
+                      recall_score(actual, alert), precision_score(actual, alert)]
+            x = np.arange(len(names)) + (j - 1) * width
+            ax.bar(x, values, width, color=color, label=f"{group} ({rows.sum():,} ordeños)")
+            for xi, value in zip(x, values):
+                ax.annotate(f"{value:.2f}", (xi, value), xytext=(0, 2), textcoords="offset points",
+                            ha="center", fontsize=7, color=MUTED)
+        ax.set_xticks(range(len(names)), names)
+        ax.set_ylim(0, 1.05)
+        ax.set_title(EVENT_NAMES[i], loc="left")
+        ax.grid(axis="x", visible=False)
+    axes[0].set_ylabel("Valor en test")
+    fig.legend(*axes[0].get_legend_handles_labels(), loc="upper right", ncol=3)
+    fig.suptitle("Desempeño en test por grupo de vaca", x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def new_cow_ramp(y, probabilities, days_in_herd, groups, metrics):
+    """
+    10. Recall, precisión y prevalencia de las vacas que no estuvieron en train según sus días en el
+    hato; la línea punteada es el valor de las vacas conocidas.
+    """
+    new = groups != "Conocida"
+    day_bin = pd.cut(days_in_herd[new], [-np.inf, 30, 90, np.inf], labels=DAY_BINS)
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.4), sharey=True)
+    for i, event in enumerate(EVENTS):
+        actual, alert = y[event].to_numpy(), probabilities[i] >= metrics[event]["threshold_recall_val"]
+        frame = pd.DataFrame({"bin": day_bin, "actual": actual[new], "alert": alert[new]})
+        frame["hit"] = frame["actual"].eq(1) & frame["alert"]
+        by_bin = frame.groupby("bin", observed=False).agg(n=("actual", "size"), events=("actual", "sum"),
+                                                          alerts=("alert", "sum"), hits=("hit", "sum"))
+        known_actual, known_alert = actual[~new] == 1, alert[~new]
+        series = [
+            ("Recall", by_bin["hits"] / by_bin["events"], SERIES["train"], "-",
+             (known_actual & known_alert).sum() / known_actual.sum()),
+            ("Precisión", by_bin["hits"] / by_bin["alerts"], SERIES["val"], "-",
+             (known_actual & known_alert).sum() / known_alert.sum()),
+            ("Prevalencia", by_bin["events"] / by_bin["n"], REFERENCE, "--", known_actual.mean()),
+        ]
+        ax, x = axes[i], np.arange(len(DAY_BINS))
+        for name, values, color, style, known in series:
+            ax.plot(x, values * 100, style, color=color, marker="o", markersize=5, label=name)
+            ax.axhline(known * 100, color=color, linestyle=":", linewidth=1.2)
+            for xi, value in zip(x, values):
+                ax.annotate(f"{value:.0%}", (xi, value * 100), xytext=(6, 0), textcoords="offset points",
+                            va="center", fontsize=8, color=MUTED)
+        ax.set_xticks(x, [f"{label}\n{n:,} ordeños" for label, n in zip(DAY_BINS, by_bin["n"])])
+        ax.set_xlim(-0.3, len(DAY_BINS) - 0.5)
+        ax.set_ylim(0, 100)
+        ax.set_xlabel("Días en el hato")
+        ax.set_title(EVENT_NAMES[i], loc="left")
+    axes[0].plot([], [], ":", color=MUTED, label="Vacas conocidas")
+    axes[0].set_ylabel("%")
+    axes[0].legend(loc="center left")
+    fig.suptitle(f"Vacas que no estuvieron en train ({new.sum():,} ordeños de test) según sus días en el hato, "
+                 "con el umbral de val", x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def probabilities_by_cow_group(y, probabilities, groups, metrics):
+    """
+    11. Calibración en test (arriba) y probabilidad de los ordeños con evento (abajo) de las vacas
+    conocidas y de las que no estuvieron en train.
+    """
+    bins = np.linspace(0, 1, 26)
+    sets = [("Conocidas", groups == "Conocida", SERIES["train"]),
+            ("No vistas en train", groups != "Conocida", SERIES["val"])]
+    fig, axes = plt.subplots(2, 3, figsize=(13, 8))
+    for i, event in enumerate(EVENTS):
+        actual, p = y[event].to_numpy(), probabilities[i]
+        threshold = metrics[event]["threshold_recall_val"]
+        top, bottom = axes[0, i], axes[1, i]
+        top.plot([0, 1], [0, 1], color=REFERENCE, linestyle="--", linewidth=1)
+        for name, rows, color in sets:
+            observed, predicted = calibration_curve(actual[rows], p[rows], n_bins=10)
+            top.plot(predicted, observed, "o-", color=color, markersize=4,
+                     label=f"{name} (Brier {brier_score_loss(actual[rows], p[rows]):.3f})")
+            events = p[rows & (actual == 1)]
+            bottom.hist(events, bins=bins, density=True, histtype="step", linewidth=2, color=color,
+                        label=f"{name}: {(events < threshold).mean():.0%} bajo el umbral")
+        top.set_title(EVENT_NAMES[i], loc="left")
+        top.set_xlabel("Probabilidad predicha")
+        top.set_xlim(0, 1)
+        top.set_ylim(0, 1)
+        top.legend(loc="upper left", fontsize=8)
+        bottom.axvline(threshold, color=REFERENCE, linestyle="--", linewidth=1, label=f"Umbral {threshold:.2f}")
+        bottom.set_xlabel("Probabilidad predicha (solo ordeños con evento)")
+        bottom.legend(loc="upper left", fontsize=8)
+    axes[0, 0].set_ylabel("Frecuencia real del evento")
+    axes[1, 0].set_ylabel("Densidad")
+    fig.suptitle("Vacas conocidas frente a no vistas en train: calibración (arriba) y probabilidad de los "
+                 "ordeños con evento (abajo)", x=0.01, ha="left", fontsize=12)
     return fig

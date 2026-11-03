@@ -12,6 +12,7 @@ import json
 import re
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from xgboost import XGBClassifier
 
@@ -47,7 +48,10 @@ def read_log(path, fits_per_event, chrono_fits):
 
 
 def load_test():
-    """Atributos, etiquetas, inicio y probabilidades de los modelos guardados en test; fechas de val."""
+    """
+    Atributos, etiquetas, inicio y probabilidades de los modelos guardados en test; fechas de val y
+    grupo de la vaca de cada sesión de test (Conocida si estuvo en train, Solo en val o Nueva).
+    """
     sessions = load_sessions(INPUT_PATH)
     X, labels = build_features(sessions)
     idx = split_by_time(sessions["inicio"], TRAIN_FRACTION, VAL_FRACTION)
@@ -60,8 +64,12 @@ def load_test():
         probabilities.append(model.predict_proba(X.iloc[test])[:, 1])
 
     val_label = f"Val ({val_dates.min():%d/%m/%Y}–{val_dates.max():%d/%m/%Y})"
+    cows = sessions["id_vaca"]
+    test_cows = cows.iloc[test]
+    groups = np.select([test_cows.isin(cows.iloc[idx["train"]]), test_cows.isin(cows.iloc[idx["val"]])],
+                       ["Conocida", "Solo en val"], default="Nueva")
 
-    return X.iloc[test], labels.iloc[test], sessions["inicio"].iloc[test], models, probabilities, val_label
+    return X.iloc[test], labels.iloc[test], sessions["inicio"].iloc[test], models, probabilities, val_label, groups
 
 
 def save(fig, name):
@@ -77,7 +85,7 @@ def main():
     chrono_fits = 1 + ("train_val" in metrics[EVENTS[0]])
     fits_per_event = chrono_fits + (len(metrics[EVENTS[0]]["by_cow"]["folds"]) if has_by_cow else 0)
 
-    X, y, start, models, probabilities, val_label = load_test()
+    X, y, start, models, probabilities, val_label, groups = load_test()
     log = read_log(LOG_PATH, fits_per_event, chrono_fits)
     save(plots.learning_curves(log, N_TREES, val_label), "curvas_aprendizaje.png")
     test_period = f"{start.min():%d/%m/%Y}–{start.max():%d/%m/%Y}"
@@ -89,6 +97,10 @@ def main():
     if has_by_cow:
         save(plots.by_cow(metrics), "corte_por_vaca.png")
     save(plots.weekly_performance(y, start, probabilities, metrics), "desempeno_semanal_test.png")
+    save(plots.metrics_by_cow_group(y, probabilities, groups, metrics), "vacas_nuevas_metricas.png")
+    save(plots.new_cow_ramp(y, probabilities, X["dias_en_hato"].to_numpy(), groups, metrics),
+         "vacas_nuevas_arranque.png")
+    save(plots.probabilities_by_cow_group(y, probabilities, groups, metrics), "vacas_nuevas_probabilidades.png")
     print(f"Figures in {FIGURES_DIR}")
 
 
