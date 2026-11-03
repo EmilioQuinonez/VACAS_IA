@@ -7,14 +7,14 @@ ordeños (sin rechazos ni echadas). Se conservan todas las filas; si las columna
 se reemplazan.
 
 Uso:
-    python src/DP/build_history_features.py
+    python src/MODELING/XGBoost/build_history_features.py
 """
 
 from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 OUTPUT_PATH = INPUT_PATH
 

@@ -16,7 +16,7 @@ FEATURES = [
     "fme_connection", "fme_milk_production", "fme_incomplete", "kicks_ratio_7d",
     *[f"blood_diff_{quarter}" for quarter in QUARTERS],
     "box_time_to_yield_ratio", "flies_proxy",
-    # Creadas por src/DP/build_history_features.py.
+    # Creadas por src/MODELING/XGBoost/build_history_features.py.
     "dias_en_leche", "dias_en_hato", "mes", "hora", "dia_semana",
     *[f"{key}_vaca_30d" for key in EVENT_KEYS], *[f"{key}_hato_7d" for key in EVENT_KEYS],
     "vacas_activas_7d", *[f"{key}_previo" for key in EVENT_KEYS],
