@@ -221,3 +221,6 @@ __marimo__/
 /Data/
 
 .DS_Store
+
+src\MODELING\logistic\artifacts
+src\MODELING\logistic\results
