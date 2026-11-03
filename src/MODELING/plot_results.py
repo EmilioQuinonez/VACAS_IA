@@ -17,13 +17,16 @@ from xgboost import XGBClassifier
 
 import plots
 from dataset import EVENTS, build_features, load_sessions, split_by_time
-from main import INPUT_PATH, LOG_PATH, N_TREES, OUTPUT_DIR, TRAIN_END, VAL_END
+from main import INPUT_PATH, LOG_PATH, N_TREES, OUTPUT_DIR, TRAIN_FRACTION, VAL_FRACTION
 
 FIGURES_DIR = OUTPUT_DIR / "graficas"
 
 
-def read_log(path, fits_per_event):
-    """Log loss de train y val por época; block 0 = modelo de train, 1 = final, 2+ = folds por vaca."""
+def read_log(path, fits_per_event, chrono_fits):
+    """
+    Log loss de train y val por época; block 0 = modelo de train, 1 = final (si se reentrenó con
+    train + val) y los siguientes (by_cow) = folds por vaca.
+    """
     rows, epoch = [], None
     for line in path.read_text(encoding="utf-8").splitlines():
         header = re.match(r"^Epoch (\d+)/\d+$", line)
@@ -38,15 +41,17 @@ def read_log(path, fits_per_event):
     log["event"] = fit_number // fits_per_event
     log["block"] = fit_number % fits_per_event
     log["tree"] = (log["epoch"] - 1) % N_TREES + 1
+    log["by_cow"] = log["block"] >= chrono_fits
 
     return log
 
 
 def load_test():
-    """Atributos, etiquetas, inicio y probabilidades de los modelos finales en test."""
+    """Atributos, etiquetas, inicio y probabilidades de los modelos guardados en test; fechas de val."""
     sessions = load_sessions(INPUT_PATH)
     X, labels = build_features(sessions)
-    test = split_by_time(sessions["inicio"], TRAIN_END, VAL_END)["test"]
+    idx = split_by_time(sessions["inicio"], TRAIN_FRACTION, VAL_FRACTION)
+    test, val_dates = idx["test"], sessions["inicio"].iloc[idx["val"]]
     models, probabilities = [], []
     for event in EVENTS:
         model = XGBClassifier()
@@ -54,7 +59,9 @@ def load_test():
         models.append(model)
         probabilities.append(model.predict_proba(X.iloc[test])[:, 1])
 
-    return X.iloc[test], labels.iloc[test], sessions["inicio"].iloc[test], models, probabilities
+    val_label = f"Val ({val_dates.min():%d/%m/%Y}–{val_dates.max():%d/%m/%Y})"
+
+    return X.iloc[test], labels.iloc[test], sessions["inicio"].iloc[test], models, probabilities, val_label
 
 
 def save(fig, name):
@@ -67,11 +74,14 @@ def main():
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     metrics = json.loads((OUTPUT_DIR / "metrics.json").read_text(encoding="utf-8"))
     has_by_cow = all("by_cow" in metrics[event] for event in EVENTS)
-    fits_per_event = 2 + (len(metrics[EVENTS[0]]["by_cow"]["folds"]) if has_by_cow else 0)
+    chrono_fits = 1 + ("train_val" in metrics[EVENTS[0]])
+    fits_per_event = chrono_fits + (len(metrics[EVENTS[0]]["by_cow"]["folds"]) if has_by_cow else 0)
 
-    save(plots.learning_curves(read_log(LOG_PATH, fits_per_event), N_TREES), "curvas_aprendizaje.png")
-    X, y, start, models, probabilities = load_test()
-    save(plots.roc_pr(y, probabilities, metrics), "roc_pr_test.png")
+    X, y, start, models, probabilities, val_label = load_test()
+    log = read_log(LOG_PATH, fits_per_event, chrono_fits)
+    save(plots.learning_curves(log, N_TREES, val_label), "curvas_aprendizaje.png")
+    test_period = f"{start.min():%d/%m/%Y}–{start.max():%d/%m/%Y}"
+    save(plots.roc_pr(y, probabilities, metrics, test_period), "roc_pr_test.png")
     save(plots.calibration(y, probabilities, metrics), "calibracion_test.png")
     save(plots.probability_distributions(y, probabilities, metrics), "distribucion_probabilidades.png")
     save(plots.gain_importance(models), "importancia_gain.png")

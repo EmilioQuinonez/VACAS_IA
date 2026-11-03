@@ -43,15 +43,15 @@ def label_line_end(ax, x, y, text, color):
     ax.plot([x], [y], "o", color=color, markersize=4)
 
 
-def learning_curves(log, n_trees):
+def learning_curves(log, n_trees, val_label):
     """1. Log loss por árbol: train y val del corte cronológico y, si hay, vacas fuera (media de los folds)."""
     fig, axes = plt.subplots(1, 3, figsize=(13, 4), sharey=True)
     for event, ax in enumerate(axes):
         chrono = log[(log["event"] == event) & (log["block"] == 0)]
-        by_cow = log[(log["event"] == event) & (log["block"] >= 2)]
+        by_cow = log[(log["event"] == event) & log["by_cow"]]
         series = [
             ("Train", chrono["tree"], chrono["loss"], SERIES["train"]),
-            ("Val (jul–sep 2025)", chrono["tree"], chrono["val_loss"], SERIES["val"]),
+            (val_label, chrono["tree"], chrono["val_loss"], SERIES["val"]),
         ]
         if len(by_cow):
             folds = by_cow.groupby("tree")["val_loss"].mean()
@@ -71,7 +71,7 @@ def learning_curves(log, n_trees):
     return fig
 
 
-def roc_pr(y, probabilities, metrics):
+def roc_pr(y, probabilities, metrics, test_period):
     """2. Curvas ROC y PR en test con el punto del umbral elegido en val."""
     fig, axes = plt.subplots(2, 3, figsize=(13, 8))
     for i, event in enumerate(EVENTS):
@@ -102,7 +102,7 @@ def roc_pr(y, probabilities, metrics):
     axes[0, 0].set_ylabel("Verdaderos positivos (recall)")
     axes[1, 0].set_ylabel("Precisión")
     fig.legend(*axes[0, 0].get_legend_handles_labels(), loc="upper right", ncol=3)
-    fig.suptitle("Curvas ROC (arriba) y PR (abajo) en test, oct 2025–ene 2026", x=0.01, ha="left", fontsize=12)
+    fig.suptitle(f"Curvas ROC (arriba) y PR (abajo) en test, {test_period}", x=0.01, ha="left", fontsize=12)
     return fig
 
 

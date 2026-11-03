@@ -45,8 +45,13 @@ def build_features(sessions):
     return X, sessions[EVENTS]
 
 
-def split_by_time(start, train_end, val_end):
-    """Posiciones de train (antes de train_end), val (hasta val_end) y test (desde val_end)."""
+def split_by_time(start, train_fraction, val_fraction):
+    """
+    Posiciones de train (las sesiones más antiguas, train_fraction del total), val (las
+    siguientes, val_fraction) y test (el resto, las más recientes).
+    """
+    train_end = start.quantile(train_fraction)
+    val_end = start.quantile(train_fraction + val_fraction)
     idx = {
         "train": np.flatnonzero(start < train_end),
         "val": np.flatnonzero((start >= train_end) & (start < val_end)),

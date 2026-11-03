@@ -6,6 +6,8 @@ from xgboost import XGBClassifier
 from xgboost.callback import TrainingCallback
 
 
+# Nota: esta clase es solo estética. Imprime el avance con el formato de Keras y no cambia el
+# entrenamiento, el modelo ni las métricas (after_iteration siempre devuelve False, así que no lo detiene).
 class KerasStyleLog(TrainingCallback):
     """
     Imprime cada árbol como una época de Keras (verbose=2) para el panel /entrenamiento;
