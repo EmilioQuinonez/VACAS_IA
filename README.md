@@ -258,95 +258,95 @@ Los entregables de las siguientes fases se incorporarán a esta estructura confo
 
 ### En Google Drive
 
-El reporte está en un solo documento con una pestaña por fase. Algunas secciones enlazan a archivos externos.
+El reporte está en un solo documento con una pestaña por fase. Los números de página son los del índice de cada pestaña.
 
 #### [Reporte: Entendimiento del negocio](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.0)
 
 <pre>
-<strong>Adaptaciones de la metodología CRISP-DM</strong>
-<strong>Antecedentes</strong>
-<strong>Objetivo de negocio</strong>
-    Criterios de éxito de negocio
-<strong>Objetivo de minería de datos</strong>
-    Criterios de éxito de minería de datos
-<strong>Requerimientos del proyecto</strong>
-<strong><a href="https://docs.google.com/spreadsheets/d/1cll5V8mhmh2yNx-Pf1LDWkmkLIdHjaAfX-hKlmNiJMg/edit?usp=sharing">Plan de valor ganado</a></strong>
-<strong>Supuestos del proyecto</strong>
-<strong>Limitaciones del proyecto</strong>
-<strong><a href="https://docs.google.com/spreadsheets/d/1WDTALeblrlLVCPUdWbw-YFCtojI6zTDLFODQ9f9Gr6Y/edit?usp=sharing">Inventario de recursos</a></strong>
-<strong><a href="https://docs.google.com/document/d/1eC2AxkIQMhPYsphopbgM1sPM5fT8XvkHgX1WiRlCP2M/edit?usp=sharing">Análisis de costo y beneficio</a></strong>
-<strong><a href="https://docs.google.com/spreadsheets/d/15yn73QzDFNr9cexEtcF1Ktdak3ik_enyfIcaNqOjK60/edit?usp=sharing">Matriz de riesgos</a></strong>
-<strong>Glosario de terminología</strong>
-<strong>Referencias</strong>
+<strong>Adaptaciones de la metodología CRISP-DM.................1</strong>
+<strong>Antecedentes............................................1</strong>
+<strong>Objetivo de negocio.....................................2</strong>
+    Criterios de éxito de negocio.......................3
+<strong>Objetivo de minería de datos............................3</strong>
+    Criterios de éxito de minería de datos..............3
+<strong>Requerimientos del proyecto.............................3</strong>
+<strong><a href="https://docs.google.com/spreadsheets/d/1cll5V8mhmh2yNx-Pf1LDWkmkLIdHjaAfX-hKlmNiJMg/edit?usp=sharing">Plan de valor ganado</a>....................................4</strong>
+<strong>Supuestos del proyecto..................................4</strong>
+<strong>Limitaciones del proyecto...............................4</strong>
+<strong><a href="https://docs.google.com/spreadsheets/d/1WDTALeblrlLVCPUdWbw-YFCtojI6zTDLFODQ9f9Gr6Y/edit?usp=sharing">Inventario de recursos</a>..................................5</strong>
+<strong><a href="https://docs.google.com/document/d/1eC2AxkIQMhPYsphopbgM1sPM5fT8XvkHgX1WiRlCP2M/edit?usp=sharing">Análisis de costo y beneficio</a>...........................5</strong>
+<strong><a href="https://docs.google.com/spreadsheets/d/15yn73QzDFNr9cexEtcF1Ktdak3ik_enyfIcaNqOjK60/edit?usp=sharing">Matriz de riesgos</a>.......................................5</strong>
+<strong>Glosario de terminología................................5</strong>
+<strong>Referencias.............................................7</strong>
 </pre>
 
 #### [Reporte: Entendimiento de los datos](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.vtkudwv13p69)
 
 <pre>
-<strong>Resumen</strong>
-<strong>1. Adaptaciones de la metodología CRISP-DM</strong>
-<strong>2. Recolección de datos iniciales</strong>
-    2.1 Ubicación y obtención
-    2.2 Problemas encontrados y soluciones
-<strong>3. Descripción de los datos</strong>
-    3.1 Fuentes
-    3.2 Formato y tipos de datos
-    3.3 Descripción de columnas del dataset
-    3.4 Características del dataset
-    3.5 Clima
-<strong>4. Satisfacción de los requerimientos</strong>
-<strong>5. Exploración de los datos</strong>
-    5.1 Visualizar y consultar los datos
-    5.2 Patrones y distribuciones
-    5.3 Problema de cola
-    5.4 Clima integrado
-    5.5 Hipótesis iniciales
-<strong>6. Calidad de los datos</strong>
-    6.1 Análisis de la calidad
-    6.2 Datos atípicos
-    6.3 Métodos de limpieza recomendados
-<strong>7. Implicaciones para el modelado</strong>
-    Anexo: calidad por columna de los historiales CSV
-<strong>8. Glosario</strong>
+<strong>Resumen..................................................1</strong>
+<strong>1. Adaptaciones de la metodología CRISP-DM...............2</strong>
+<strong>2. Recolección de datos iniciales........................2</strong>
+    2.1 Ubicación y obtención............................2
+    2.2 Problemas encontrados y soluciones...............3
+<strong>3. Descripción de los datos..............................3</strong>
+    3.1 Fuentes..........................................3
+    3.2 Formato y tipos de datos.........................4
+    3.3 Descripción de columnas del dataset..............5
+    3.4 Características del dataset......................6
+    3.5 Clima............................................7
+<strong>4. Satisfacción de los requerimientos....................7</strong>
+<strong>5. Exploración de los datos..............................9</strong>
+    5.1 Visualizar y consultar los datos.................10
+    5.2 Patrones y distribuciones........................11
+    5.3 Problema de cola.................................14
+    5.4 Clima integrado..................................16
+    5.5 Hipótesis iniciales..............................18
+<strong>6. Calidad de los datos..................................18</strong>
+    6.1 Análisis de la calidad...........................18
+    6.2 Datos atípicos...................................20
+    6.3 Métodos de limpieza recomendados.................21
+<strong>7. Implicaciones para el modelado........................22</strong>
+    Anexo: calidad por columna de los historiales CSV....22
+<strong>8. Glosario..............................................24</strong>
 </pre>
 
 #### [Reporte: Preparación de los datos](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.dll5kcgopm0k)
 
 <pre>
-<strong>Adaptaciones de la metodología CRISP-DM</strong>
-<strong>Reporte de limpieza de datos</strong>
-<strong>Reporte de construcción e integración de datos</strong>
-    Integración del clima con las sesiones de ordeño
-    Construcción de los atributos de temperatura
-    Construcción de los atributos derivados
-    Construcción de los atributos de concentrado
-<strong>Reporte de formato de datos</strong>
-    Investigar posibles modelos en base a los datos
-<strong>Reporte de selección del modelo</strong>
-    Técnica seleccionada de los modelos
-    Supuestos de los modelos
-    Técnica de modelado y comparación justa entre modelos
-    Ajustes a la preparación de los datos requeridos por los modelos
-<strong>Reporte de selección de datos</strong>
-<strong>Glosario de terminología</strong>
-<strong>Fuentes bibliográficas</strong>
+<strong>Adaptaciones de la metodología CRISP-DM.................................1</strong>
+<strong>Reporte de limpieza de datos............................................2</strong>
+<strong>Reporte de construcción e integración de datos..........................4</strong>
+    Integración del clima con las sesiones de ordeño....................4
+    Construcción de los atributos de temperatura........................4
+    Construcción de los atributos derivados.............................5
+    Construcción de los atributos de concentrado........................9
+<strong>Reporte de formato de datos.............................................12</strong>
+    Investigar posibles modelos en base a los datos.....................12
+<strong>Reporte de selección del modelo.........................................14</strong>
+    Técnica seleccionada de los modelos.................................14
+    Supuestos de los modelos............................................15
+    Técnica de modelado y comparación justa entre modelos...............17
+    Ajustes a la preparación de los datos requeridos por los modelos....18
+<strong>Reporte de selección de datos...........................................19</strong>
+<strong>Glosario de terminología................................................26</strong>
+<strong>Fuentes bibliográficas..................................................28</strong>
 </pre>
 
 #### [Reporte: Modelado de los datos](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.7tfnlrrsx4yq)
 
 <pre>
-<strong>Adaptaciones de la metodología CRISP-DM</strong>
-<strong>Construcción del modelo de regresión logística</strong> (pendiente)
-<strong>Construcción del modelo XGBoost</strong>
-    Hiperparámetros usados
-    Evaluación del desempeño del modelo
-        Falla mecánica
-        Anomalía de salud
-        Interrupción por conducta
-        Criterios del BU en test
-        Gráficos
-    Interpretación de los resultados
-    Dificultades identificadas
-<strong>Construcción del modelo LSTM</strong>
-<strong>Reporte de diseño de pruebas</strong>
+<strong>Adaptaciones de la metodología CRISP-DM.......................1</strong>
+<strong>Construcción del modelo de regresión logística (pendiente)....1</strong>
+<strong>Construcción del modelo XGBoost...............................1</strong>
+    Hiperparámetros usados....................................1
+    Evaluación del desempeño del modelo.......................2
+        Falla mecánica........................................2
+        Anomalía de salud.....................................3
+        Interrupción por conducta.............................3
+        Criterios del BU en test..............................4
+        Gráficos..............................................5
+    Interpretación de los resultados..........................8
+    Dificultades identificadas................................9
+<strong>Construcción del modelo LSTM..................................9</strong>
+<strong>Reporte de diseño de pruebas..................................10</strong>
 </pre>
