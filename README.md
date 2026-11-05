@@ -76,7 +76,36 @@ python3 src/scripts/descargar_clima.py
 
 **Resultado esperado:** se crea `Data/clima/clima_nasa_power_por_hora.csv`, junto con las respuestas originales y un manifiesto en `Data/clima/`. La terminal muestra la cita de la fuente y una fila para la bitácora de auditoría.
 
-### 5. Integrar el clima
+### 5. Limpiar los datos
+
+Ejecuta este paso después de anonimizar los datos (paso 3) y descargar el clima (paso 4).
+
+**Windows**
+
+```powershell
+py src/DP/clean_data.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/DP/clean_data.py
+```
+
+**Resultado esperado:** se generan `Data/dataset_vacas_limpio.csv` y `Data/clima/clima_nasa_power_limpio.csv`. La terminal muestra un resumen de cada paso de la limpieza. El dataset de vacas queda sin nulos y con estos cambios principales:
+
+- Unifica fechas, duraciones e intervalos del CSV y del XLSX, y quita las sesiones repetidas entre ambas fuentes.
+- Convierte las alertas de texto (`DI,TD`, `Todos`) en banderas 0/1 por cuarto y las categóricas en dummies. Cada categórica conserva una categoría base (todas sus dummies en 0): `Ordeño` para la acción, `Tanque` para el destino de la leche, `Sin desvío` para la razón de desviación, `xlsx` para la fuente y, para la máquina, su categoría más frecuente (la moda), porque su hash depende de `COWSKEY`.
+- Deja fuera las máquinas con menos de 100 registros.
+- Pasa a faltante la conductividad en 0 y trata los nulos usando solo la misma visita o el pasado de la misma vaca. Los nulos que quedan (vacas sin historial) pasan a 0. Los valores estimados o rellenados quedan marcados con banderas (`*_faltante`, `*_estimada_*`, `*_sin_dato`).
+- Pasa a 0 kg los cuartos con producción nula (verificado contra el total del ordeño) y los marca con `cuarto_inactivo_<cuarto>`: un cuarto dañado viene nulo y sin alertas, mientras que un fallo del robot viene en 0 con alerta, y los dos casos deben seguir distinguiéndose.
+- Marca, sin eliminar, los ordeños con 0 kg, los de suma de cuartos distinta del total y los picos de sangre por máquina.
+- Excluye las vacas con menos de 30 registros y agrega `bloque_historial`, que cambia tras 45 días de ausencia.
+- Deja `sangre_ppm_*`, `estado_mdi` y `contadores_monitorizacion_*` en logaritmo (`log1p`). Los umbrales de `integrate_derivates.py` ya están convertidos a esa escala.
+
+En el clima, quita las horas duplicadas, completa la serie hora por hora, pasa a faltante los códigos de NASA POWER (`-999`), limita la humedad relativa y la nubosidad al rango de 0 a 100 e interpola los huecos de hasta 3 horas.
+
+### 6. Integrar el clima
 
 **Windows**
 
@@ -90,9 +119,9 @@ py src/DP/integrar_clima.py
 python3 src/DP/integrar_clima.py
 ```
 
-**Resultado esperado:** se genera `Data/dataset_vacas_integrado.csv` a partir de los datos anonimizados, con temperatura y THI de la sesión y horas con THI alto en las 24 horas previas.
+**Resultado esperado:** se genera `Data/dataset_vacas_integrado.csv` a partir de los datasets limpios, con temperatura y THI de la sesión y horas con THI alto en las 24 horas previas.
 
-### 6. Integrar las variables derivadas
+### 7. Integrar las variables derivadas
 
 **Windows**
 
@@ -106,9 +135,9 @@ py src/DP/integrate_derivates.py
 python3 src/DP/integrate_derivates.py
 ```
 
-**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las variables derivadas y etiquetas de eventos, conservando las filas y columnas existentes, incluidas las de clima. La terminal muestra estadísticas de las sesiones y eventos.
+**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las variables derivadas y etiquetas de eventos, conservando las filas y columnas existentes, incluidas las de clima. Los rechazos y las echadas sin ordeñar no reciben etiqueta de evento, y `fme_milk_production` no cuenta los cuartos marcados como inactivos (`cuarto_inactivo_*`). La terminal muestra estadísticas de las sesiones y eventos.
 
-### 7. Construir, anonimizar e integrar el concentrado consumido
+### 8. Construir, anonimizar e integrar el concentrado consumido
 
 
 **Windows**
@@ -184,6 +213,8 @@ val = dataset.iloc[fold["val"]]
 test = dataset.iloc[fold["test"]]
 ```
 
+> **Nota:** esta separación al azar corresponde al reto de datos. Para el modelado, el [Reporte de diseño de pruebas](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.7tfnlrrsx4yq) define un corte cronológico 70/15/15: el 70 % más antiguo para entrenamiento, el 15 % siguiente para validación y el 15 % más reciente para prueba.
+
 
 ## ¿Cómo acceder a los entregables?
 
@@ -200,10 +231,10 @@ La estructura del repositorio es:
     - One Page.
     - WBS y su archivo fuente.
   - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
-    - Guía y archivo CSV de auditoría de registros.
     - [Investigación de la fuente de clima](docs/DU/Investigacion_Clima.md).
   - **[`RETO_DATOS/`](docs/RETO_DATOS/)** — Preparación para el reto de datos.
     - [Reporte del reto de datos](docs/RETO_DATOS/Reporte-RetoDatos.pdf).
+  - [`guide_audit_logs.md`](docs/guide_audit_logs.md) y [`data_audit_logs.csv`](docs/data_audit_logs.csv) — Guía y bitácora de auditoría de registros.
 - **[`src/`](src/)** — Código fuente de apoyo.
   - **[`scripts/`](src/scripts/)** — Scripts de preparación de datos.
     - [`generate_data.py`](src/scripts/generate_data.py) — Procesa los archivos CSV y XLSX de cada vaca.
@@ -213,21 +244,29 @@ La estructura del repositorio es:
   - **[`DU/`](src/DU/)** — Notebook de exploración para la fase *Data Understanding*.
     - [`final_data_understanding.ipynb`](src/DU/final_data_understanding.ipynb) — Reúne los análisis exploratorios del equipo sobre el dataset anonimizado, el clima de NASA POWER y el concentrado.
   - **[`DP/`](src/DP/)** — Scripts de la fase *Data Preparation*.
-    - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) en `Data/dataset_vacas_integrado.csv`.
+    - [`clean_data.py`](src/DP/clean_data.py) — Limpia el dataset anonimizado de vacas y el clima de NASA POWER, y genera `Data/dataset_vacas_limpio.csv` y `Data/clima/clima_nasa_power_limpio.csv`.
+    - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones limpias los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) y crea `Data/dataset_vacas_integrado.csv`.
     - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento a `Data/dataset_vacas_integrado.csv`.
     - [`integrar_concentrado.py`](src/DP/integrar_concentrado.py) — Añade cuatro atributos históricos de concentrado a `Data/dataset_vacas_integrado.csv`.
+    - [`k_fold.py`](src/DP/k_fold.py) — Separa la muestra en un conjunto de prueba fijo y cinco folds de entrenamiento y validación.
+  - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
+    - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
+    - [`dataset_vacas_muestra.csv`](src/RETO_DATOS/dataset_vacas_muestra.csv) — Muestra generada por el script anterior.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
 
 ### En Google Drive
 
-####  [Reporte: Entendimiento de los datos](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.0)
+El reporte está en un solo documento con una pestaña por fase. Los números de página son los del índice de cada pestaña.
+
+#### [Reporte: Entendimiento del negocio](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.0)
 
 <pre>
+<strong>Adaptaciones de la metodología CRISP-DM.................1</strong>
 <strong>Antecedentes............................................1</strong>
 <strong>Objetivo de negocio.....................................2</strong>
-    Criterios de éxito de negocio.......................2
+    Criterios de éxito de negocio.......................3
 <strong>Objetivo de minería de datos............................3</strong>
     Criterios de éxito de minería de datos..............3
 <strong>Requerimientos del proyecto.............................3</strong>
@@ -239,25 +278,75 @@ Los entregables de las siguientes fases se incorporarán a esta estructura confo
 <strong><a href="https://docs.google.com/spreadsheets/d/15yn73QzDFNr9cexEtcF1Ktdak3ik_enyfIcaNqOjK60/edit?usp=sharing">Matriz de riesgos</a>.......................................5</strong>
 <strong>Glosario de terminología................................5</strong>
 <strong>Referencias.............................................7</strong>
-<strong>Adaptaciones de la metodología CRISP-DM.................7</strong>
 </pre>
 
 #### [Reporte: Entendimiento de los datos](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.vtkudwv13p69)
 
 <pre>
-<strong>Reporte de recolección de datos iniciales...............1</strong>
-    Ubicación y obtención de los datos..................1
-    Problemas encontrados al obtener los datos..........2
-    Soluciones a los problemas encontrados..............3
-<strong>Reporte de descripción de los datos.....................4</strong>
-    Formato y tipo de los datos.........................4
-        Tipos de variable...............................5
-    Particularidades de formato que requieren limpieza..5
-    Características de los datos........................6
-        Volumen y cobertura.............................6
-        Distribución por vaca...........................6
-        Clima (descarga exploratoria, aún sin integrar).6
-<strong>Satisfacción de los requerimientos de los datos.........7</strong>
-<strong>Conclusión sobre la calidad de los datos................8</strong>
-<strong>Adaptaciones de la metodología CRISP-DM.................8</strong>
+<strong>Resumen..................................................1</strong>
+<strong>1. Adaptaciones de la metodología CRISP-DM...............2</strong>
+<strong>2. Recolección de datos iniciales........................2</strong>
+    2.1 Ubicación y obtención............................2
+    2.2 Problemas encontrados y soluciones...............3
+<strong>3. Descripción de los datos..............................3</strong>
+    3.1 Fuentes..........................................3
+    3.2 Formato y tipos de datos.........................4
+    3.3 Descripción de columnas del dataset..............5
+    3.4 Características del dataset......................6
+    3.5 Clima............................................7
+<strong>4. Satisfacción de los requerimientos....................7</strong>
+<strong>5. Exploración de los datos..............................9</strong>
+    5.1 Visualizar y consultar los datos.................10
+    5.2 Patrones y distribuciones........................11
+    5.3 Problema de cola.................................14
+    5.4 Clima integrado..................................16
+    5.5 Hipótesis iniciales..............................18
+<strong>6. Calidad de los datos..................................18</strong>
+    6.1 Análisis de la calidad...........................18
+    6.2 Datos atípicos...................................20
+    6.3 Métodos de limpieza recomendados.................21
+<strong>7. Implicaciones para el modelado........................22</strong>
+    Anexo: calidad por columna de los historiales CSV....22
+<strong>8. Glosario..............................................24</strong>
+</pre>
+
+#### [Reporte: Preparación de los datos](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.dll5kcgopm0k)
+
+<pre>
+<strong>Adaptaciones de la metodología CRISP-DM.................................1</strong>
+<strong>Reporte de limpieza de datos............................................2</strong>
+<strong>Reporte de construcción e integración de datos..........................4</strong>
+    Integración del clima con las sesiones de ordeño....................4
+    Construcción de los atributos de temperatura........................4
+    Construcción de los atributos derivados.............................5
+    Construcción de los atributos de concentrado........................9
+<strong>Reporte de formato de datos.............................................12</strong>
+    Investigar posibles modelos en base a los datos.....................12
+<strong>Reporte de selección del modelo.........................................14</strong>
+    Técnica seleccionada de los modelos.................................14
+    Supuestos de los modelos............................................15
+    Técnica de modelado y comparación justa entre modelos...............17
+    Ajustes a la preparación de los datos requeridos por los modelos....18
+<strong>Reporte de selección de datos...........................................19</strong>
+<strong>Glosario de terminología................................................26</strong>
+<strong>Fuentes bibliográficas..................................................28</strong>
+</pre>
+
+#### [Reporte: Modelado de los datos](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.7tfnlrrsx4yq)
+
+<pre>
+<strong>Adaptaciones de la metodología CRISP-DM.......................1</strong>
+<strong>Construcción del modelo de regresión logística (pendiente)....1</strong>
+<strong>Construcción del modelo XGBoost...............................1</strong>
+    Hiperparámetros usados....................................1
+    Evaluación del desempeño del modelo.......................2
+        Falla mecánica........................................2
+        Anomalía de salud.....................................3
+        Interrupción por conducta.............................3
+        Criterios del BU en test..............................4
+        Gráficos..............................................5
+    Interpretación de los resultados..........................8
+    Dificultades identificadas................................9
+<strong>Construcción del modelo LSTM..................................9</strong>
+<strong>Reporte de diseño de pruebas..................................10</strong>
 </pre>

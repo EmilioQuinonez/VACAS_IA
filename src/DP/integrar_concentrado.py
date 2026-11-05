@@ -1,6 +1,7 @@
 """Agrega cuatro atributos históricos de concentrado a dataset_vacas_integrado.csv.
 
-Requiere el concentrado anonimizado con la misma COWSKEY que el ordeño.
+Requiere el concentrado anonimizado con la misma COWSKEY que el ordeño y las sesiones del dataset
+limpio (clean_data.py), que traen `inicio` como fecha y hora y `fuente_csv`.
 Las fechas originales y todas las columnas existentes se conservan.
 """
 
@@ -8,11 +9,6 @@ from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
-
-try:
-    from .integrar_clima import hora_de_inicio
-except ImportError:
-    from integrar_clima import hora_de_inicio
 
 
 RAIZ = Path(__file__).resolve().parents[2]
@@ -24,7 +20,7 @@ TOPE_KG = 2.5
 
 def agregar_concentrado(sesiones, consumo):
     """Construye atributos disponibles antes de la hora de inicio de cada sesión."""
-    faltantes = {"id_vaca", "main_hora_de_inicio", "main_produccion_kg"}.difference(
+    faltantes = {"id_vaca", "inicio", "fuente_csv", "main_produccion_kg"}.difference(
         sesiones.columns
     )
     faltantes_consumo = {"id_vaca", "hora_evento", "consumido"}.difference(
@@ -43,7 +39,7 @@ def agregar_concentrado(sesiones, consumo):
         sesiones = sesiones.drop(columns=ATRIBUTOS)
 
     base = sesiones.reset_index(drop=True)
-    inicio = hora_de_inicio(base["main_hora_de_inicio"])
+    inicio = pd.to_datetime(base["inicio"])
     if base["id_vaca"].isna().any() or inicio.isna().any():
         raise ValueError("Hay sesiones sin ID o con fecha de inicio inválida")
     eventos = consumo.copy().drop_duplicates()
@@ -62,15 +58,15 @@ def agregar_concentrado(sesiones, consumo):
     # puede estar redondeado a la hora posterior al inicio. En cada caso se
     # exige una sola sesión candidata para no repartir un consumo ambiguo.
     horas_sesion = inicio.dt.floor("h")
-    # El dataset conserva sesiones repetidas entre CSV y XLSX. Si coinciden
-    # vaca, minuto y producción, representan una sola visita para el emparejamiento.
+    # El dataset limpio ya no repite sesiones entre CSV y XLSX (clean_data.py las quita); esta
+    # unificación se conserva por si se integra un dataset que aún las tenga.
     canonica = pd.Series(base.index, index=base.index)
     equivalencias = pd.DataFrame(
         {
             "vaca": base["id_vaca"],
             "minuto": inicio.dt.floor("min"),
             "produccion": pd.to_numeric(base["main_produccion_kg"], errors="coerce"),
-            "csv": base["main_hora_de_inicio"].str.len().eq(22),
+            "csv": base["fuente_csv"].eq(1),
         }
     )
     claves = ["vaca", "minuto", "produccion"]
@@ -209,7 +205,7 @@ def agregar_concentrado(sesiones, consumo):
 
 def main():
     sesiones = pd.read_csv(
-        ORIGEN, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False
+        ORIGEN, dtype={"id_vaca": str}, parse_dates=["inicio"], low_memory=False
     )
     consumo = pd.read_csv(CONCENTRADO, dtype={"id_vaca": str}, low_memory=False)
     integrado, estadisticas = agregar_concentrado(sesiones, consumo)

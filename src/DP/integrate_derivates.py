@@ -1,30 +1,30 @@
 """
-Lee Data/dataset_vacas_integrado.csv, generado primero por `integrar_clima.py`,
-y agrega los atributos y eventos guardando el resultado sobre ese mismo archivo.
+Lee Data/dataset_vacas_integrado.csv, generado primero por `integrar_clima.py` a partir del dataset
+limpio de `clean_data.py`, y agrega los atributos y eventos guardando el resultado sobre ese mismo archivo.
 Conserva todas las filas, su orden y sus columnas originales, incluidas las de clima.
 Los FME, diferencias de sangre y tiempo/producción usan
-la sesión anterior de cada vaca; la tasa de patadas usa [inicio - 7 días, inicio).
-Las cuatro etiquetas describen la sesión actual y pueden coexistir, salvo éxito.
+la sesión anterior de cada vaca dentro de su bloque de historial (se reinicia tras 45 días de ausencia);
+la tasa de patadas usa [inicio - 7 días, inicio). Las cuatro etiquetas describen la sesión actual y pueden
+coexistir, salvo éxito; los rechazos y echadas sin ordeñar no son ordeño, así que no tienen etiqueta.
 
 Uso:
     python src/DP/integrate_derivates.py
 """
+import math
 from pathlib import Path
 
 import pandas as pd
-
-try:
-    from .integrar_clima import hora_de_inicio
-except ImportError:
-    from integrar_clima import hora_de_inicio
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 OUTPUT_PATH = INPUT_PATH
 
 QUARTERS = ("di", "dd", "ti", "td")
-MDI_THRESHOLD = 1.4  # Alerta MDi >= 1.4.
-BLOOD_PPM_THRESHOLD = 0  # Presencia de sangre: cualquier cuarto > 0 ppm.
+# Banderas 0/1 por cuarto de clean_data.py: <estado>_<cuarto>.
+STATUSES = ("patada", "incompleto", "pezones_no_encontrados", "amd_pezon")
+# clean_data.py deja estado_mdi y sangre_ppm_* en logaritmo (log1p): los umbrales se convierten con la misma función.
+MDI_THRESHOLD = math.log1p(1.4)  # Alerta MDi >= 1.4 en la escala original.
+BLOOD_PPM_THRESHOLD = math.log1p(0)  # Presencia de sangre: cualquier cuarto > 0 ppm (log1p(0) = 0).
 AFTERNOON_START_HOUR = 13
 AFTERNOON_END_HOUR = 17  # Extremo excluido: [13:00, 17:00).
 
@@ -39,61 +39,6 @@ EVENTS = [
     "mechanical_connection_failure_event", "health_anomaly_event",
     "behavior_interruption_event", "successful_milking_event",
 ]
-
-def is_status_active(status):
-    """
-    Identifica estados activos; vacío o cero significa ausencia de evento.
-
-    Args:
-        status (pd.Series): Estados originales, numéricos o listas de cuartos.
-            Los valores faltantes y las cadenas vacías se consideran inactivos.
-
-    Returns:
-        pd.Series: Serie booleana con el mismo índice; True indica estado activo.
-    """
-    text = status.fillna("").astype(str).str.strip()
-    number = pd.to_numeric(text, errors="coerce")
-
-    return text.ne("") & number.ne(0)
-
-def count_kicked_quarters(kicks):
-    """
-    Cuenta los cuartos distintos afectados por patadas en cada sesión.
-
-    Args:
-        kicks (pd.Series): Columna estado_patada; contiene listas como 'DI,TD',
-            'Todos', valores vacíos o ceros. 'Todos' representa cuatro cuartos.
-
-    Returns:
-        pd.Series: Número entero de cuartos afectados por sesión, de 0 a 4,
-            conservando el índice original.
-    """
-    text = kicks.fillna("").astype(str).str.strip().str.upper()
-    count = pd.DataFrame({
-        quarter: text.str.contains(rf"\b{quarter.upper()}\b", regex=True)
-        for quarter in QUARTERS
-    }).sum(axis=1)
-    # Se conserva 'TODOS' porque es un valor del dataset de entrada.
-    count = count.mask(text.eq("TODOS"), 4)
-
-    return count
-
-def parse_duration_seconds(duration):
-    """
-    Convierte las duraciones mm:ss y hh:mm:ss a segundos.
-
-    Args:
-        duration (pd.Series): Columna main_duracion_mm_ss con las duraciones
-            originales; puede contener valores faltantes.
-
-    Returns:
-        pd.Series: Duración numérica en segundos, con el mismo índice.
-            Se conservan las fracciones de segundo y los valores nulos.
-    """
-    duration = duration.astype("string").str.strip()
-    duration = duration.where(duration.str.count(":").ne(1), "00:" + duration)
-    
-    return pd.to_timedelta(duration).dt.total_seconds()
 
 def add_derived_features(
         milky_sessions, 
@@ -112,9 +57,10 @@ def add_derived_features(
     La ventana cuenta todas las filas anteriores, sin eliminar duplicados.
 
     Args:
-        milky_sessions (pd.DataFrame): Sesiones con sus columnas originales en español
-            y t_sesion en grados Celsius. Debe incluir identificación, inicio, 
-            duración, producción, estados y sangre.
+        milky_sessions (pd.DataFrame): Sesiones del dataset limpio (clean_data.py) con
+            t_sesion en grados Celsius. Debe incluir identificación, inicio (fecha y hora),
+            duración en segundos, producción, banderas por cuarto de cada estado y sangre.
+            La sangre y el MDI vienen en logaritmo (log1p), igual que los umbrales.
 
         mdi_threshold (float): Límite inclusivo del índice MDI que activa la
             etiqueta de salud; por defecto, MDI >= 1.4.
@@ -129,10 +75,11 @@ def add_derived_features(
             flies_proxy combina la temperatura anterior con la hora actual.
     """
     required_columns = {
-        "id_vaca", "main_hora_de_inicio", "main_duracion_mm_ss", "main_produccion_kg",
-        "t_sesion", "estado_patada", "estado_incompleto", "estado_pezones_no_encontrados",
-        "estado_mdi", "estado_amd_ubre", "estado_amd_pezon",
+        "id_vaca", "inicio", "bloque_historial", "duracion_seg", "main_produccion_kg", "t_sesion",
+        "estado_mdi", "estado_amd_ubre", "accion_rechazada", "accion_echada_sin_ordenar",
+        *[f"{status}_{quarter}" for status in STATUSES for quarter in QUARTERS],
         *[f"producciones_kg_{quarter}" for quarter in QUARTERS],
+        *[f"cuarto_inactivo_{quarter}" for quarter in QUARTERS],
         *[f"sangre_ppm_{quarter}" for quarter in QUARTERS],
     }
     missing_columns = required_columns.difference(milky_sessions.columns)
@@ -145,26 +92,30 @@ def add_derived_features(
 
     # Índice posicional interno para conservar incluso índices originales repetidos.
     base = milky_sessions.reset_index(drop=True)
-    start_time = hora_de_inicio(base["main_hora_de_inicio"])
+    start_time = pd.to_datetime(base["inicio"])
+    is_milking = base[["accion_rechazada", "accion_echada_sin_ordenar"]].eq(0).all(axis=1)
     if base["id_vaca"].isna().any() or start_time.isna().any():
         raise ValueError("Each session must have id_vaca and a valid start time.")
 
     quarter_yields = base[[f"producciones_kg_{quarter}" for quarter in QUARTERS]].apply(pd.to_numeric)
     blood = base[[f"sangre_ppm_{quarter}" for quarter in QUARTERS]].apply(pd.to_numeric).fillna(0)
     total_yield = pd.to_numeric(base["main_produccion_kg"])
-    kicked_quarters = count_kicked_quarters(base["estado_patada"])
+    status = {name: base[[f"{name}_{quarter}" for quarter in QUARTERS]].eq(1) for name in STATUSES}
+    kicked_quarters = status["patada"].sum(axis=1)
 
     # Primero se calculan los valores de cada sesión, después se desfasan por vaca.
     current_features = pd.DataFrame(index=base.index)
 
     # fme_connection: presencia de algún pezón no encontrado.
-    current_features["fme_connection"] = is_status_active(base["estado_pezones_no_encontrados"]).astype(int)
+    current_features["fme_connection"] = status["pezones_no_encontrados"].any(axis=1).astype(int)
 
-    # fme_milk_production: alguna producción por cuarto exactamente igual a cero.
-    current_features["fme_milk_production"] = quarter_yields.eq(0).any(axis=1).astype(int)
+    # fme_milk_production: alguna producción por cuarto exactamente igual a cero (solo ordeños). Los cuartos
+    # inactivos (dañados, sin alertas, nulos en el dato original) también valen 0 pero no son un fallo mecánico.
+    inactive = base[[f"cuarto_inactivo_{quarter}" for quarter in QUARTERS]].eq(1).to_numpy()
+    current_features["fme_milk_production"] = ((quarter_yields.eq(0).to_numpy() & ~inactive).any(axis=1) & is_milking).astype(int)
 
     # fme_incomplete: estado de ordeño incompleto activo.
-    current_features["fme_incomplete"] = is_status_active(base["estado_incompleto"]).astype(int)
+    current_features["fme_incomplete"] = status["incompleto"].any(axis=1).astype(int)
 
     # blood_diff_di/dd/ti/td: sangre del cuarto menos la media de los cuatro cuartos.
     blood_differences = blood.sub(blood.mean(axis=1), axis=0)
@@ -172,16 +123,19 @@ def add_derived_features(
 
     # box_time_to_yield_ratio: duración en segundos / producción total en kg (s/kg).
     current_features["box_time_to_yield_ratio"] = (
-        parse_duration_seconds(base["main_duracion_mm_ss"])
+        pd.to_numeric(base["duracion_seg"])
         / total_yield.where(total_yield.gt(0))
     )
 
     derived_features = pd.DataFrame(index=base.index, columns=FEATURES, dtype=float)
     previous_temperature = pd.Series(float("nan"), index=base.index, dtype=float)
-    session_order = pd.DataFrame({"cow_id": base["id_vaca"], "start_time": start_time})
+    session_order = pd.DataFrame({
+        "cow_id": base["id_vaca"], "block": base["bloque_historial"], "start_time": start_time
+    })
     session_order = session_order.sort_values(["cow_id", "start_time"], kind="stable")
-    
-    for _, group in session_order.groupby("cow_id", sort=False):
+
+    # El historial se reinicia en cada bloque: tras 45 días de ausencia no hay sesión anterior.
+    for _, group in session_order.groupby(["cow_id", "block"], sort=False):
         rows = group.index
         # Desfase de FME, blood_diff_*, box_time_to_yield_ratio y temperatura:
         # sesión previa de la misma vaca con un inicio estrictamente anterior.
@@ -251,15 +205,18 @@ def add_derived_features(
     events[EVENTS[1]] = (
         blood.gt(blood_threshold).any(axis=1)
         | pd.to_numeric(base["estado_mdi"]).ge(mdi_threshold)
-        | is_status_active(base["estado_amd_ubre"])
-        | is_status_active(base["estado_amd_pezon"])
+        | pd.to_numeric(base["estado_amd_ubre"]).gt(0)
+        | status["amd_pezon"].any(axis=1)
     )
 
     # behavior_interruption_event: al menos un cuarto afectado por patada.
     events[EVENTS[2]] = kicked_quarters.gt(0)
 
-    # successful_milking_event: ausencia de los tres eventos anteriores.
-    events[EVENTS[3]] = ~events.any(axis=1)
+    # Los rechazos y echadas sin ordeñar no son ordeño: no tienen etiqueta (sus mediciones son de relleno).
+    events = events.mask(~is_milking, False)
+
+    # successful_milking_event: ordeño sin ninguno de los tres eventos anteriores.
+    events[EVENTS[3]] = is_milking & ~events.any(axis=1)
 
     result = milky_sessions.copy()
     result[FEATURES] = derived_features.to_numpy()
@@ -273,7 +230,7 @@ def main():
     Lee las sesiones, agrega atributos y eventos, guarda el CSV e imprime un 
     resumen.
     """
-    milky_sessions = pd.read_csv(INPUT_PATH, dtype={"id_vaca": str, "misc_eo_po": str}, low_memory=False)
+    milky_sessions = pd.read_csv(INPUT_PATH, dtype={"id_vaca": str}, parse_dates=["inicio"], low_memory=False)
     integrated = add_derived_features(milky_sessions)
     integrated.to_csv(OUTPUT_PATH, index=False)
 
