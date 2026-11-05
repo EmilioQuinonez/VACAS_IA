@@ -222,5 +222,5 @@ __marimo__/
 
 .DS_Store
 
-src\MODELING\logistic\artifacts
-src\MODELING\logistic\results
+/src/MODELING/logistic/artifacts/
+/src/MODELING/logistic/results/
