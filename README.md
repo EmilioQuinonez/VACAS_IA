@@ -155,6 +155,64 @@ python3 src/DP/integrar_concentrado.py
 
 **Resultado esperado:** se generan `Data/dataset_concentrado.csv` y `Data/dataset_concentrado_anonimo.csv`. El segundo usa los mismos hashes de vaca que ordeño, y el mapa no se modifica. Los archivos de `Data/` son locales y no se versionan en Git. `Data/dataset_vacas_integrado.csv` conserva todas sus filas y columnas previas, y añade las 4 variables definidas para el concentrado: `conc_sesion_previa`, `tope_sesion_previa`, `conc_d1` y `conc_media_7d`.
 
+## Modelo LSTM
+
+Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. Ejecuta los siguientes comandos desde la raíz del repositorio.
+
+### 1. Agregar las variables de historial
+
+**Windows**
+
+```powershell
+py src/MODELING/LSTM/build_history_features.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/MODELING/LSTM/build_history_features.py
+```
+
+**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con el calendario (`mes`, `hora`, `dia_semana`, `dias_en_leche`, `dias_en_hato`), los valores del ordeño previo (`{evento}_previo`, `mdi_previo`, `conductividad_max_previa`, `produccion_previa`, `cuarto_inactivo_previo`) y las tasas de la vaca y del hato.
+
+### 2. Entrenar la LSTM
+
+**Windows**
+
+```powershell
+mkdir Data/modelos/lstm_base
+py -u src/MODELING/LSTM/main.py > Data/modelos/lstm_base/lstm_base.log 2>&1
+```
+
+**macOS y Linux**
+
+```bash
+mkdir -p Data/modelos/lstm_base
+python3 -u src/MODELING/LSTM/main.py >| Data/modelos/lstm_base/lstm_base.log 2>&1
+```
+
+**Resultado esperado:** se generan en `Data/modelos/lstm_base/` el modelo (`lstm.keras`), las métricas por evento (`metrics.json`), las curvas de pérdida (`history.json`) y el log del entrenamiento. La red es multitarea, con una salida para cada evento y otra para `alguna_anomalia` (lo contrario de `successful_milking_event`):
+
+- Lee la secuencia de las 20 sesiones previas de la vaca. Cada paso tiene los valores de esa sesión: FME, `blood_diff_*`, `box_time_to_yield_ratio`, producción, MDI, conductividad máxima, cuarto inactivo, eventos y horas desde el ordeño anterior.
+- Después de la capa LSTM se agrega el contexto de la sesión a predecir: intervalo, máquina, clima, sangre por máquina, calendario y carga del hato.
+- Usa un corte cronológico 70/15/15 sin espacio entre periodos. Con val se detiene el entrenamiento y se elige el umbral para un recall ≥ 80 %. Las métricas se calculan en train, val, test y en las sesiones de test de vacas que no están en train (`test_vacas_nuevas`).
+
+### 3. Generar las gráficas
+
+**Windows**
+
+```powershell
+py -u src/MODELING/LSTM/plot_results.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 -u src/MODELING/LSTM/plot_results.py
+```
+
+**Resultado esperado:** se generan en `Data/modelos/lstm_base/graficas/` ocho gráficas a partir del modelo guardado, sin reentrenar: curvas de aprendizaje, ROC y precisión-recall, calibración, matrices de confusión, distribución de probabilidades y desempeño semanal en test; métricas de vacas conocidas contra vacas nuevas; e importancia por permutación en val (caída del PR-AUC al revolver cada variable).
+
 ## Preparación para reto de datos.
 
 Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. 
@@ -243,6 +301,11 @@ La estructura del repositorio es:
     - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones limpias los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) y crea `Data/dataset_vacas_integrado.csv`.
     - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento a `Data/dataset_vacas_integrado.csv`.
     - [`integrar_concentrado.py`](src/DP/integrar_concentrado.py) — Añade cuatro atributos históricos de concentrado a `Data/dataset_vacas_integrado.csv`.
+  - **[`MODELING/`](src/MODELING/)** — Scripts de la fase *Modeling*.
+    - [`LSTM/build_history_features.py`](src/MODELING/LSTM/build_history_features.py) — Agrega las variables de calendario, ordeño previo y tasas de la vaca y del hato a `Data/dataset_vacas_integrado.csv`.
+    - [`LSTM/dataset.py`](src/MODELING/LSTM/dataset.py) — Carga los ordeños, hace el corte cronológico y arma las secuencias y el contexto de la LSTM.
+    - [`LSTM/main.py`](src/MODELING/LSTM/main.py) — Entrena y evalúa la LSTM base y guarda el modelo y las métricas en `Data/modelos/lstm_base/`.
+    - [`LSTM/plot_results.py`](src/MODELING/LSTM/plot_results.py) — Genera las gráficas de evaluación y de importancia de la LSTM en `Data/modelos/lstm_base/graficas/`.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
