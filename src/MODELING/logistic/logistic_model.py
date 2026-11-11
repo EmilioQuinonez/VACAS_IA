@@ -26,7 +26,7 @@ LOGISTIC_CONFIG = {
 class CowPreprocessor:
     """Completa faltantes con cero y bandera; ajusta escala y referencia solo en train."""
 
-    def fit(self, X):
+    def prepare(self, X):
         self.columns = list(X.columns)
         self.binary = binary_features(self.columns)
         self.continuous = [c for c in self.columns if c not in self.binary]

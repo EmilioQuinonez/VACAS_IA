@@ -27,15 +27,6 @@ INPUT_PATH = MODULE_DIR.parents[2] / "Data" / "dataset_vacas_integrado.csv"
 TRAIN_FRACTION, VAL_FRACTION, TARGET_RECALL = 0.70, 0.15, 0.80
 
 
-def fit_model(event, transformed, labels, parts, config):
-    """Un único entrenamiento incremental del evento con historial por época."""
-    print(f"[fit] {event}; configuración global={config}", flush=True)
-    actual = {name: labels[event].iloc[rows].to_numpy() for name, rows in parts.items()}
-    model, details, history = train_event(transformed, actual, config)
-    print(f"  épocas={details['iterations']}; motivo de parada={details['stop_reason']}", flush=True)
-    return model, details, history
-
-
 def print_summary(event, results, threshold):
     def number(value):
         return "no calculable" if value is None else f"{value:.4f}"
@@ -96,7 +87,7 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
     X = build_features(sessions)
     cows = sessions["id_vaca"]
     train = parts["train"]
-    preprocessor = CowPreprocessor().fit(X.iloc[train])
+    preprocessor = CowPreprocessor().prepare(X.iloc[train])
     matrix = preprocessor.transform(X)
     transformed = {name: matrix[rows] for name, rows in parts.items()}
     print(f"[features] {X.shape[1]} predictores; {matrix.shape[1]} columnas con indicadores", flush=True)
@@ -113,7 +104,17 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
     }
     models, thresholds, predictions = {}, {}, []
     for event in EVENTS:
-        model, parameters, history = fit_model(event, transformed, labels, parts, config)
+        print(f"[train] {event}; configuración global={config}", flush=True)
+        actual = {
+            name: labels[event].iloc[rows].to_numpy()
+            for name, rows in parts.items()
+        }
+        model, parameters, history = train_event(transformed, actual, config)
+        print(
+            f"  épocas={parameters['iterations']}; "
+            f"motivo de parada={parameters['stop_reason']}",
+            flush=True,
+        )
         if not parameters["converged"]:
             metrics["status"] = "incomplete_convergence"
             metrics[event] = {"parameters": parameters}
