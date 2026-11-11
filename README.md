@@ -180,22 +180,22 @@ python3 src/MODELING/LSTM/build_history_features.py
 **Windows**
 
 ```powershell
-mkdir Data/modelos/lstm_base
-py -u src/MODELING/LSTM/main.py > Data/modelos/lstm_base/lstm_base.log 2>&1
+mkdir src/MODELING/LSTM/modelos/lstm_base
+py -u src/MODELING/LSTM/main.py > src/MODELING/LSTM/modelos/lstm_base/lstm_base.log 2>&1
 ```
 
 **macOS y Linux**
 
 ```bash
-mkdir -p Data/modelos/lstm_base
-python3 -u src/MODELING/LSTM/main.py >| Data/modelos/lstm_base/lstm_base.log 2>&1
+mkdir -p src/MODELING/LSTM/modelos/lstm_base
+python3 -u src/MODELING/LSTM/main.py >| src/MODELING/LSTM/modelos/lstm_base/lstm_base.log 2>&1
 ```
 
-**Resultado esperado:** se generan en `Data/modelos/lstm_base/` el modelo (`lstm.keras`), las métricas por evento (`metrics.json`), las curvas de pérdida (`history.json`) y el log del entrenamiento. La red es multitarea, con una salida para cada evento y otra para `alguna_anomalia` (lo contrario de `successful_milking_event`):
+**Resultado esperado:** se generan en `src/MODELING/LSTM/modelos/lstm_base/` el modelo (`lstm.keras`), las métricas por evento (`metrics.json`), las curvas de pérdida (`history.json`) y el log del entrenamiento. La red es multitarea, con una salida para cada evento y otra para `alguna_anomalia` (lo contrario de `successful_milking_event`):
 
 - Lee la secuencia de las 20 sesiones previas de la vaca. Cada paso tiene los valores de esa sesión: FME, `blood_diff_*`, `box_time_to_yield_ratio`, producción, MDI, conductividad máxima, cuarto inactivo, eventos y horas desde el ordeño anterior.
 - Después de la capa LSTM se agrega el contexto de la sesión a predecir: intervalo, máquina, clima, sangre por máquina, calendario y carga del hato.
-- Usa un corte cronológico 70/15/15 sin espacio entre periodos. Con val se detiene el entrenamiento y se elige el umbral para un recall ≥ 80 %. Las métricas se calculan en train, val, test y en las sesiones de test de vacas que no están en train (`test_vacas_nuevas`).
+- Usa un corte cronológico 70/15/15 sin espacio entre periodos. Con val se detiene el entrenamiento y se elige el umbral para un recall ≥ 80 %. Las métricas se calculan en train, val, test y en test separado por vaca, con los mismos grupos que XGBoost y la regresión logística: conocidas (estuvieron en train, `test_vacas_conocidas`), solo en val (`test_vacas_solo_val`) y nuevas (su primer ordeño es en test, `test_vacas_nuevas`).
 
 ### 3. Generar las gráficas
 
@@ -211,7 +211,7 @@ py -u src/MODELING/LSTM/plot_results.py
 python3 -u src/MODELING/LSTM/plot_results.py
 ```
 
-**Resultado esperado:** se generan en `Data/modelos/lstm_base/graficas/` ocho gráficas a partir del modelo guardado, sin reentrenar: curvas de aprendizaje, ROC y precisión-recall, calibración, matrices de confusión, distribución de probabilidades y desempeño semanal en test; métricas de vacas conocidas contra vacas nuevas; e importancia por permutación en val (caída del PR-AUC al revolver cada variable).
+**Resultado esperado:** se generan en `src/MODELING/LSTM/modelos/lstm_base/graficas/` ocho gráficas a partir del modelo guardado, sin reentrenar: curvas de aprendizaje, ROC y precisión-recall, calibración, matrices de confusión, distribución de probabilidades y desempeño semanal en test; métricas de vacas conocidas, solo en val y nuevas; e importancia por permutación en val (caída del PR-AUC al revolver cada variable).
 
 ## Preparación para reto de datos.
 
@@ -304,8 +304,8 @@ La estructura del repositorio es:
   - **[`MODELING/`](src/MODELING/)** — Scripts de la fase *Modeling*.
     - [`LSTM/build_history_features.py`](src/MODELING/LSTM/build_history_features.py) — Agrega las variables de calendario, ordeño previo y tasas de la vaca y del hato a `Data/dataset_vacas_integrado.csv`.
     - [`LSTM/dataset.py`](src/MODELING/LSTM/dataset.py) — Carga los ordeños, hace el corte cronológico y arma las secuencias y el contexto de la LSTM.
-    - [`LSTM/main.py`](src/MODELING/LSTM/main.py) — Entrena y evalúa la LSTM base y guarda el modelo y las métricas en `Data/modelos/lstm_base/`.
-    - [`LSTM/plot_results.py`](src/MODELING/LSTM/plot_results.py) — Genera las gráficas de evaluación y de importancia de la LSTM en `Data/modelos/lstm_base/graficas/`.
+    - [`LSTM/main.py`](src/MODELING/LSTM/main.py) — Entrena y evalúa la LSTM base y guarda el modelo y las métricas en `src/MODELING/LSTM/modelos/lstm_base/`.
+    - [`LSTM/plot_results.py`](src/MODELING/LSTM/plot_results.py) — Genera las gráficas de evaluación y de importancia de la LSTM en `src/MODELING/LSTM/modelos/lstm_base/graficas/`.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
