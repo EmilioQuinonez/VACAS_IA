@@ -73,16 +73,6 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
     sessions = load_sessions(input_path)
     labels = get_labels(sessions)
     parts, split = split_by_time(sessions["inicio"], TRAIN_FRACTION, VAL_FRACTION)
-    # Un resultado que todavía no terminó al corte no puede entrenar ni elegir umbrales.
-    completion = sessions["inicio"] + pd.to_timedelta(sessions["duracion_seg"], unit="s")
-    split["unavailable_labels_purged"] = {}
-    for name, boundary in (("train", split["train_end"]), ("val", split["val_end"])):
-        rows = parts[name]
-        available = completion.iloc[rows].lt(pd.Timestamp(boundary)).to_numpy()
-        split["unavailable_labels_purged"][name] = int((~available).sum())
-        parts[name] = rows[available]
-        print(f"[split] {name}: {len(parts[name]):,} etiquetas disponibles; {int((~available).sum())} aún sin terminar al corte", flush=True)
-    split["counts"] = {name: len(rows) for name, rows in parts.items()}
     print("[features] Reutilizando atributos de DP y construyendo historial adicional", flush=True)
     X = build_features(sessions)
     cows = sessions["id_vaca"]
