@@ -5,9 +5,9 @@ import pandas as pd
 
 EVENTS = [
     "mechanical_connection_failure_event", "health_anomaly_event",
-    "behavior_interruption_event",
+    "behavior_interruption_event", "alguna_anomalia",
 ]
-EVENT_KEYS = ("mecanico", "salud", "conducta")
+EVENT_KEYS = ("mecanico", "salud", "conducta")  # solo nombran atributos: alguna_anomalia no tiene
 QUARTERS = ("di", "dd", "ti", "td")
 # Tabla de selección de datos del Doc, columna XGBoost; las máquinas (maquina_*) se agregan aparte.
 FEATURES = [
@@ -37,12 +37,17 @@ def load_sessions(path):
 
 
 def build_features(sessions):
-    """X (FEATURES y dummies maquina_*; los NaN se conservan) e y (una columna 0/1 por evento)."""
+    """
+    X (FEATURES y dummies maquina_*; los NaN se conservan) e y (una columna 0/1 por evento y
+    alguna_anomalia, que es lo contrario de successful_milking_event).
+    """
     machines = [column for column in sessions.columns if column.startswith("maquina_")]
     X = sessions[FEATURES + machines]
     print(f"[features] {X.shape[1]} columns ({len(machines)} machines)")
 
-    return X, sessions[EVENTS]
+    labels = sessions[EVENTS[:3]].assign(alguna_anomalia=1 - sessions["successful_milking_event"])
+
+    return X, labels
 
 
 def split_by_time(start, train_fraction, val_fraction):

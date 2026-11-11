@@ -19,9 +19,9 @@ from sklearn.metrics import (
     precision_score, recall_score, roc_auc_score, roc_curve,
 )
 
-from dataset import EVENT_KEYS, EVENTS
+from dataset import EVENTS
 
-EVENT_NAMES = ["Falla mecánica", "Salud", "Conducta"]
+EVENT_NAMES = ["Falla mecánica", "Salud", "Conducta", "Alguna anomalía"]
 TOP_FEATURES = 10
 MIN_WEEK_SESSIONS = 1000  # semanas incompletas (inicio y fin del test) se omiten
 
@@ -53,7 +53,7 @@ def label_line_end(ax, x, y, text, color):
 
 def learning_curves(log, n_trees, val_label):
     """1. Log loss por árbol: train y val del corte cronológico y, si hay, vacas fuera (media de los folds)."""
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4), sharey=True)
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4), sharey=True)
     for event, ax in enumerate(axes):
         chrono = log[(log["event"] == event) & (log["block"] == 0)]
         by_cow = log[(log["event"] == event) & log["by_cow"]]
@@ -81,7 +81,7 @@ def learning_curves(log, n_trees, val_label):
 
 def roc_pr(y, probabilities, metrics, test_period):
     """2. Curvas ROC y PR en test con el punto del umbral elegido en val."""
-    fig, axes = plt.subplots(2, 3, figsize=(13, 8))
+    fig, axes = plt.subplots(2, len(EVENTS), figsize=(17.5, 8))
     for i, event in enumerate(EVENTS):
         actual, p, m = y[event].to_numpy(), probabilities[i], metrics[event]
         threshold = m["threshold_recall_val"]
@@ -116,7 +116,7 @@ def roc_pr(y, probabilities, metrics, test_period):
 
 def calibration(y, probabilities, metrics):
     """3. Probabilidad predicha contra frecuencia real en test."""
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5), sharey=True)
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4.5), sharey=True)
     for i, event in enumerate(EVENTS):
         actual, p, ax = y[event].to_numpy(), probabilities[i], axes[i]
         observed, predicted = calibration_curve(actual, p, n_bins=10)
@@ -136,7 +136,7 @@ def calibration(y, probabilities, metrics):
 
 def probability_distributions(y, probabilities, metrics):
     """4. Distribución de la probabilidad en test por clase real."""
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4))
     bins = np.linspace(0, 1, 41)
     for i, event in enumerate(EVENTS):
         actual, p, ax = y[event].to_numpy(), probabilities[i], axes[i]
@@ -158,7 +158,7 @@ def probability_distributions(y, probabilities, metrics):
 
 def gain_importance(models):
     """5. Los atributos con más gain de cada modelo final."""
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.8))
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.8))
     for i, model in enumerate(models):
         gain = pd.Series(model.get_booster().get_score(importance_type="gain"))
         share = (gain / gain.sum()).sort_values(ascending=False).head(TOP_FEATURES)[::-1]
@@ -176,13 +176,16 @@ def gain_importance(models):
     return fig
 
 
-def model_vs_feature(X, y, probabilities):
-    """6. ROC del modelo contra la tasa del evento de la vaca en 30 días usada sola."""
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5), sharey=True)
+def model_vs_feature(rates, y, probabilities):
+    """
+    6. ROC del modelo contra la tasa del evento de la vaca en 30 días usada sola; rates trae una
+    columna por salida, en el orden de EVENTS.
+    """
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4.5), sharey=True)
     for i, event in enumerate(EVENTS):
-        feature = f"{EVENT_KEYS[i]}_vaca_30d"
-        known = X[feature].notna().to_numpy()
-        actual, p, f = y[event].to_numpy()[known], probabilities[i][known], X[feature].to_numpy()[known]
+        feature = rates.columns[i]
+        known = rates[feature].notna().to_numpy()
+        actual, p, f = y[event].to_numpy()[known], probabilities[i][known], rates[feature].to_numpy()[known]
         ax = axes[i]
         ax.plot([0, 1], [0, 1], color=REFERENCE, linestyle="--", linewidth=1, label="Azar")
         for name, score, color in [("Modelo", p, SERIES["train"]), (feature, f, SERIES["val"])]:
@@ -193,7 +196,7 @@ def model_vs_feature(X, y, probabilities):
         ax.legend(loc="lower right")
     axes[0].set_ylabel("Verdaderos positivos")
     fig.suptitle("Modelo contra una sola variable en test (sesiones con tasa a 30 días): "
-                 "en mecánico y conducta la iguala; en salud el modelo sí aporta",
+                 "en mecánica y conducta la iguala; en salud y alguna anomalía el modelo sí aporta",
                  x=0.01, ha="left", fontsize=12)
     return fig
 
@@ -201,7 +204,7 @@ def model_vs_feature(X, y, probabilities):
 def by_cow(metrics):
     """7. Métricas de cada fold por vaca, su media y el test cronológico como referencia."""
     names = {"roc_auc": "ROC-AUC", "pr_auc": "PR-AUC", "recall": "Recall"}
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.2), sharey=True)
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4.2), sharey=True)
     for i, event in enumerate(EVENTS):
         folds, ax = pd.DataFrame(metrics[event]["by_cow"]["folds"]), axes[i]
         test = metrics[event]["test"]
@@ -231,7 +234,7 @@ def by_cow(metrics):
 def weekly_performance(y, start, probabilities, metrics):
     """8. Recall, precisión y prevalencia por semana en test."""
     week = start.dt.to_period("W-SUN").dt.start_time.to_numpy()
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.2), sharey=True)
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.2), sharey=True)
     for i, event in enumerate(EVENTS):
         frame = pd.DataFrame({
             "week": week, "actual": y[event].to_numpy(),
@@ -266,7 +269,7 @@ def metrics_by_cow_group(y, probabilities, groups, metrics):
     """9. ROC-AUC, PR-AUC y, con el umbral de val, recall y precisión en test por grupo de vaca."""
     names = ["ROC-AUC", "PR-AUC", "Recall", "Precisión"]
     width = 0.26
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.4), sharey=True)
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.4), sharey=True)
     for i, event in enumerate(EVENTS):
         ax, threshold = axes[i], metrics[event]["threshold_recall_val"]
         for j, (group, color) in enumerate(COW_GROUPS.items()):
@@ -297,7 +300,7 @@ def new_cow_ramp(y, probabilities, days_in_herd, groups, metrics):
     """
     new = groups != "Conocida"
     day_bin = pd.cut(days_in_herd[new], [-np.inf, 30, 90, np.inf], labels=DAY_BINS)
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.4), sharey=True)
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.4), sharey=True)
     for i, event in enumerate(EVENTS):
         actual, alert = y[event].to_numpy(), probabilities[i] >= metrics[event]["threshold_recall_val"]
         frame = pd.DataFrame({"bin": day_bin, "actual": actual[new], "alert": alert[new]})
@@ -340,7 +343,7 @@ def probabilities_by_cow_group(y, probabilities, groups, metrics):
     bins = np.linspace(0, 1, 26)
     sets = [("Conocidas", groups == "Conocida", SERIES["train"]),
             ("No vistas en train", groups != "Conocida", SERIES["val"])]
-    fig, axes = plt.subplots(2, 3, figsize=(13, 8))
+    fig, axes = plt.subplots(2, len(EVENTS), figsize=(17.5, 8))
     for i, event in enumerate(EVENTS):
         actual, p = y[event].to_numpy(), probabilities[i]
         threshold = metrics[event]["threshold_recall_val"]
@@ -372,7 +375,7 @@ def confusion_matrices(y, probabilities, metrics):
     """12. Matriz de confusión en test con el umbral elegido en val; el color es el % de cada fila."""
     cmap = LinearSegmentedColormap.from_list("azul", [SURFACE, *SEQUENTIAL])
     rows, columns = ["Sin evento", "Con evento"], ["Sin alerta", "Alerta"]
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.2))
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4.2))
     for i, event in enumerate(EVENTS):
         actual, ax = y[event].to_numpy(), axes[i]
         threshold = metrics[event]["threshold_recall_val"]

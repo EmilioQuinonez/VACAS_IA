@@ -1,8 +1,9 @@
 """
-XGBoost base: un clasificador binario por evento de ordeño, con los valores por defecto de la
-librería y sin regularización (se agrega solo si aparece sobreajuste).
+XGBoost base: un clasificador binario por evento de ordeño y uno para "alguna anomalía" (el
+ordeño no fue exitoso), con los valores por defecto de la librería y sin regularización (se
+agrega solo si aparece sobreajuste).
 
-Por evento:
+Por cada una de las 4 salidas:
 - Corte cronológico 70/15/15 (las sesiones más antiguas a train, las más recientes a test): el
   modelo de train elige en val el umbral de recall. Con RETRAIN_WITH_VAL, el modelo final se
   reentrena con train + val y es el que se evalúa en test; si no, se evalúa el de train.

@@ -18,7 +18,7 @@ import pandas as pd
 from xgboost import XGBClassifier
 
 import plots
-from dataset import EVENTS, build_features, load_sessions, split_by_time
+from dataset import EVENT_KEYS, EVENTS, build_features, load_sessions, split_by_time
 from main import INPUT_PATH, LOG_PATH, N_TREES, OUTPUT_DIR, TRAIN_FRACTION, VAL_FRACTION
 
 FIGURES_DIR = Path(__file__).resolve().parent / "img"
@@ -51,7 +51,8 @@ def read_log(path, fits_per_event, chrono_fits):
 def load_test():
     """
     Atributos, etiquetas, inicio y probabilidades de los modelos guardados en test; fechas de val y
-    grupo de la vaca de cada sesión de test (Conocida si estuvo en train, Solo en val o Nueva).
+    grupo de la vaca de cada sesión de test (Conocida si estuvo en train, Solo en val o Nueva) y
+    tasa de cada salida de la vaca a 30 días.
     """
     sessions = load_sessions(INPUT_PATH)
     X, labels = build_features(sessions)
@@ -70,7 +71,23 @@ def load_test():
     groups = np.select([test_cows.isin(cows.iloc[idx["train"]]), test_cows.isin(cows.iloc[idx["val"]])],
                        ["Conocida", "Solo en val"], default="Nueva")
 
-    return X.iloc[test], labels.iloc[test], sessions["inicio"].iloc[test], models, probabilities, val_label, groups
+    return (X.iloc[test], labels.iloc[test], sessions["inicio"].iloc[test], models, probabilities, val_label, groups,
+            cow_rates(sessions, X, labels).iloc[test])
+
+
+def cow_rates(sessions, X, labels):
+    """
+    Tasa de cada salida de la vaca en los 30 días previos, en el orden de EVENTS: la de los eventos
+    es su *_vaca_30d; la de alguna anomalía se calcula igual que en build_history_features.py
+    (ventana [inicio - 30 d, inicio) por vaca) y solo sirve para la gráfica 6, no entra al modelo.
+    """
+    m = pd.DataFrame({"id_vaca": sessions["id_vaca"], "inicio": sessions["inicio"],
+                      "anomaly": labels["alguna_anomalia"]}).sort_values(["id_vaca", "inicio"], kind="stable")
+    rate = m.set_index("inicio").groupby("id_vaca")["anomaly"].rolling("30D", closed="left").mean()
+    rates = X[[f"{key}_vaca_30d" for key in EVENT_KEYS]].copy()
+    rates["alguna_anomalia_vaca_30d"] = pd.Series(rate.to_numpy(), index=m.index)
+
+    return rates
 
 
 def save(fig, name):
@@ -86,7 +103,7 @@ def main():
     chrono_fits = 1 + ("train_val" in metrics[EVENTS[0]])
     fits_per_event = chrono_fits + (len(metrics[EVENTS[0]]["by_cow"]["folds"]) if has_by_cow else 0)
 
-    X, y, start, models, probabilities, val_label, groups = load_test()
+    X, y, start, models, probabilities, val_label, groups, rates = load_test()
     log = read_log(LOG_PATH, fits_per_event, chrono_fits)
     save(plots.learning_curves(log, N_TREES, val_label), "curvas_aprendizaje.png")
     test_period = f"{start.min():%d/%m/%Y}–{start.max():%d/%m/%Y}"
@@ -94,7 +111,7 @@ def main():
     save(plots.calibration(y, probabilities, metrics), "calibracion_test.png")
     save(plots.probability_distributions(y, probabilities, metrics), "distribucion_probabilidades.png")
     save(plots.gain_importance(models), "importancia_gain.png")
-    save(plots.model_vs_feature(X, y, probabilities), "modelo_vs_una_variable.png")
+    save(plots.model_vs_feature(rates, y, probabilities), "modelo_vs_una_variable.png")
     if has_by_cow:
         save(plots.by_cow(metrics), "corte_por_vaca.png")
     save(plots.weekly_performance(y, start, probabilities, metrics), "desempeno_semanal_test.png")
