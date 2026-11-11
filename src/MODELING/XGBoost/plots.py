@@ -55,7 +55,7 @@ def learning_curves(log, n_trees, val_label):
     """1. Log loss por árbol: train y val del corte cronológico."""
     fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4), sharey=True)
     for event, ax in enumerate(axes):
-        chrono = log[(log["event"] == event) & (log["block"] == 0)]
+        chrono = log[log["event"] == event]
         series = [
             ("Train", chrono["tree"], chrono["loss"], SERIES["train"]),
             (val_label, chrono["tree"], chrono["val_loss"], SERIES["val"]),
@@ -152,7 +152,7 @@ def probability_distributions(y, probabilities, metrics):
 
 
 def gain_importance(models):
-    """5. Los atributos con más gain de cada modelo final."""
+    """5. Los atributos con más gain de cada modelo."""
     fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.8))
     for i, model in enumerate(models):
         gain = pd.Series(model.get_booster().get_score(importance_type="gain"))
@@ -166,7 +166,7 @@ def gain_importance(models):
         ax.set_xlabel("Proporción del gain total")
         ax.set_xlim(0, share.max() * 1.2)
         ax.grid(axis="y", visible=False)
-    fig.suptitle(f"Importancia por gain: los {TOP_FEATURES} atributos que más usa cada modelo final",
+    fig.suptitle(f"Importancia por gain: los {TOP_FEATURES} atributos que más usa cada modelo",
                  x=0.01, ha="left", fontsize=12)
     return fig
 

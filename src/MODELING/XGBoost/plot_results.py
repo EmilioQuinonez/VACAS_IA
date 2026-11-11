@@ -1,5 +1,5 @@
 """
-Genera las gráficas del XGBoost base a partir de lo que guardó main.py (modelos finales,
+Genera las gráficas del XGBoost base a partir de lo que guardó main.py (modelos,
 metrics.json y el log), sin reentrenar. Solo cifras agregadas, sin datos por vaca.
 
 Las figuras van a FIGURES_DIR (src/MODELING/XGBoost/img), que sí se versiona.
@@ -24,8 +24,8 @@ from main import INPUT_PATH, LOG_PATH, MODELS_DIR, N_TREES, OUTPUT_DIR, TRAIN_FR
 FIGURES_DIR = Path(__file__).resolve().parent / "img"
 
 
-def read_log(path, fits_per_event):
-    """Log loss de train y val por época; block 0 = modelo de train, 1 = final (si se reentrenó con train + val)."""
+def read_log(path):
+    """Log loss de train y val por época de cada evento."""
     rows, epoch = [], None
     for line in path.read_text(encoding="utf-8").splitlines():
         header = re.match(r"^Epoch (\d+)/\d+$", line)
@@ -36,9 +36,7 @@ def read_log(path, fits_per_event):
             rows.append({"epoch": epoch, "loss": float(metrics["loss"]),
                          "val_loss": float(metrics.get("val_loss", "nan"))})
     log = pd.DataFrame(rows)
-    fit_number = (log["epoch"] - 1) // N_TREES
-    log["event"] = fit_number // fits_per_event
-    log["block"] = fit_number % fits_per_event
+    log["event"] = (log["epoch"] - 1) // N_TREES
     log["tree"] = (log["epoch"] - 1) % N_TREES + 1
 
     return log
@@ -95,10 +93,9 @@ def save(fig, name):
 def main():
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     metrics = json.loads((OUTPUT_DIR / "metrics.json").read_text(encoding="utf-8"))
-    fits_per_event = 1 + ("train_val" in metrics[EVENTS[0]])
 
     X, y, start, models, probabilities, val_label, groups, rates = load_test()
-    log = read_log(LOG_PATH, fits_per_event)
+    log = read_log(LOG_PATH)
     save(plots.learning_curves(log, N_TREES, val_label), "curvas_aprendizaje.png")
     test_period = f"{start.min():%d/%m/%Y}–{start.max():%d/%m/%Y}"
     save(plots.roc_pr(y, probabilities, metrics, test_period), "roc_pr_test.png")

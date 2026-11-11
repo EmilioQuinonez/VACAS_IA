@@ -9,7 +9,7 @@ EVENTS = [
 ]
 EVENT_KEYS = ("mecanico", "salud", "conducta")  # solo nombran atributos: alguna_anomalia no tiene
 QUARTERS = ("di", "dd", "ti", "td")
-# Tabla de selección de datos del Doc, columna XGBoost; las máquinas (maquina_*) se agregan aparte.
+# Tabla de selección de datos del Doc, columna XGBoost.
 FEATURES = [
     "intervalo_horas", "intervalo_horas_sin_dato", "regreso_tras_periodo_seco", "estado_numero_de_ordeno",
     "t_sesion", "thi_sesion", "horas_thi_alto_24h", "sangre_tasa_maquina_30d",
@@ -38,12 +38,11 @@ def load_sessions(path):
 
 def build_features(sessions):
     """
-    X (FEATURES y dummies maquina_*; los NaN se conservan) e y (una columna 0/1 por evento y
-    alguna_anomalia, que es lo contrario de successful_milking_event).
+    X (FEATURES; los NaN se conservan) e y (una columna 0/1 por evento y alguna_anomalia, que es
+    lo contrario de successful_milking_event).
     """
-    machines = [column for column in sessions.columns if column.startswith("maquina_")]
-    X = sessions[FEATURES + machines]
-    print(f"[features] {X.shape[1]} columns ({len(machines)} machines)")
+    X = sessions[FEATURES]
+    print(f"[features] {X.shape[1]} columns")
 
     labels = sessions[EVENTS[:3]].assign(alguna_anomalia=1 - sessions["successful_milking_event"])
 
