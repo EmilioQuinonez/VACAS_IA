@@ -1,11 +1,9 @@
-"""Umbral de recall, métricas por conjunto y corte por vaca."""
+"""Umbral de recall y métricas por conjunto."""
 
-import pandas as pd
 from sklearn.metrics import (
     accuracy_score, average_precision_score, brier_score_loss, f1_score,
     precision_recall_curve, precision_score, recall_score, roc_auc_score,
 )
-from sklearn.model_selection import GroupKFold
 
 
 def choose_threshold(model, X, y, val_rows, target_recall):
@@ -44,20 +42,3 @@ def evaluate(model, X, y, sets, recall_threshold):
 
     return metrics
 
-
-def cross_validate_by_cow(fit, X, y, cows, recall_threshold, n_folds, first_epoch, epochs_per_fit):
-    """
-    GroupKFold por vaca: cada fold entrena (con fit) sin una parte de las vacas y se evalúa en ellas.
-    Devuelve media, desviación y valores por fold de las métricas sin umbral y con recall_threshold.
-    """
-    folds = []
-    for number, (train_rows, test_rows) in enumerate(GroupKFold(n_splits=n_folds).split(X, y, cows)):
-        model = fit(X, y, train_rows, test_rows, first_epoch + number * epochs_per_fit)
-        m = evaluate(model, X, y, {"fold": test_rows}, recall_threshold)["fold"]
-        folds.append({
-            "roc_auc": m["roc_auc"], "pr_auc": m["pr_auc"], "brier": m["brier"],
-            **m["threshold_recall"],
-        })
-    folds = pd.DataFrame(folds)
-
-    return {"mean": folds.mean().to_dict(), "std": folds.std().to_dict(), "folds": folds.to_dict("records")}

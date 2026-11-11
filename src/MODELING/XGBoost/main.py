@@ -7,7 +7,6 @@ Por cada una de las 4 salidas:
 - Corte cronológico 70/15/15 (las sesiones más antiguas a train, las más recientes a test): el
   modelo de train elige en val el umbral de recall. Con RETRAIN_WITH_VAL, el modelo final se
   reentrena con train + val y es el que se evalúa en test; si no, se evalúa el de train.
-- Corte por vaca (si RUN_BY_COW): GroupKFold sobre todas las sesiones con el umbral anterior.
 Los modelos finales van a MODELS_DIR (se versionan); metrics.json y el log, a OUTPUT_DIR (fuera de Git). Las gráficas se generan aparte
 con plot_results.py, a partir de lo que guarda este script.
 
@@ -22,7 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from dataset import EVENTS, build_features, load_sessions, split_by_time
-from evaluation import choose_threshold, cross_validate_by_cow, evaluate
+from evaluation import choose_threshold, evaluate
 from xgboost_model import train_event
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -36,13 +35,11 @@ VAL_FRACTION = 0.15  # val: el 15 % siguiente; test: el 15 % más reciente
 RETRAIN_WITH_VAL = False  # True reentrena con train + val el modelo que se evalúa en test
 TARGET_RECALL = 0.80  # Criterio de negocio: detectar al menos 80 % de las anomalías.
 N_TREES = 100  # Valor por defecto de XGBoost; fijo para numerar las épocas del log.
-N_FOLDS = 5
 RANDOM_STATE = 42
-RUN_BY_COW = True  # False corre solo el corte cronológico
 
 
 def print_summary(event, results, threshold):
-    """Métricas de un evento en cada conjunto y, si hay, media ± desviación del corte por vaca."""
+    """Métricas de un evento en cada conjunto."""
     models = "train and val with the train model, train_val and test with the final one" if RETRAIN_WITH_VAL \
         else "all sets with the train model"
     print(f"\n{event} (threshold for recall >= {TARGET_RECALL:.0%} on val: {threshold:.3f}; {models})")
@@ -54,9 +51,6 @@ def print_summary(event, results, threshold):
             t = m[label]
             print(f"             {label:16}: accuracy {t['accuracy']:.1%} | precision {t['precision']:.1%} | "
                   f"recall {t['recall']:.1%} | F1 {t['f1']:.3f}")
-    if "by_cow" in results:
-        mean, std = results["by_cow"]["mean"], results["by_cow"]["std"]
-        print(f"  by cow   : " + " | ".join(f"{k} {mean[k]:.3f} ± {std[k]:.3f}" for k in mean))
 
 
 def main():
@@ -67,9 +61,8 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     MODELS_DIR.mkdir(exist_ok=True)
 
-    # Épocas del log: modelo de train y, si aplican, modelo final y un entrenamiento por fold.
-    chrono_fits = 1 + RETRAIN_WITH_VAL
-    fits_per_event = chrono_fits + (N_FOLDS if RUN_BY_COW else 0)
+    # Épocas del log: modelo de train y, si se reentrena con train + val, el modelo final.
+    fits_per_event = 1 + RETRAIN_WITH_VAL
     fit = partial(train_event, n_trees=N_TREES, total_epochs=fits_per_event * N_TREES * len(EVENTS),
                   random_state=RANDOM_STATE)
 
@@ -90,12 +83,6 @@ def main():
             results[event].update(evaluate(model, X, y, {name: idx[name] for name in ("train", "val", "test")},
                                            threshold))
         model.save_model(MODELS_DIR / f"{event}.json")
-
-        if RUN_BY_COW:
-            print(f"\n[training] {event}: {N_FOLDS} folds by cow")
-            results[event]["by_cow"] = cross_validate_by_cow(
-                fit, X, y, sessions["id_vaca"], threshold, N_FOLDS, first_epoch + chrono_fits * N_TREES, N_TREES
-            )
         print_summary(event, results[event], threshold)
 
     with open(OUTPUT_DIR / "metrics.json", "w", encoding="utf-8") as file:

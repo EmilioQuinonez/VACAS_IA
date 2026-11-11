@@ -24,11 +24,8 @@ from main import INPUT_PATH, LOG_PATH, MODELS_DIR, N_TREES, OUTPUT_DIR, TRAIN_FR
 FIGURES_DIR = Path(__file__).resolve().parent / "img"
 
 
-def read_log(path, fits_per_event, chrono_fits):
-    """
-    Log loss de train y val por época; block 0 = modelo de train, 1 = final (si se reentrenó con
-    train + val) y los siguientes (by_cow) = folds por vaca.
-    """
+def read_log(path, fits_per_event):
+    """Log loss de train y val por época; block 0 = modelo de train, 1 = final (si se reentrenó con train + val)."""
     rows, epoch = [], None
     for line in path.read_text(encoding="utf-8").splitlines():
         header = re.match(r"^Epoch (\d+)/\d+$", line)
@@ -43,7 +40,6 @@ def read_log(path, fits_per_event, chrono_fits):
     log["event"] = fit_number // fits_per_event
     log["block"] = fit_number % fits_per_event
     log["tree"] = (log["epoch"] - 1) % N_TREES + 1
-    log["by_cow"] = log["block"] >= chrono_fits
 
     return log
 
@@ -99,12 +95,10 @@ def save(fig, name):
 def main():
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     metrics = json.loads((OUTPUT_DIR / "metrics.json").read_text(encoding="utf-8"))
-    has_by_cow = all("by_cow" in metrics[event] for event in EVENTS)
-    chrono_fits = 1 + ("train_val" in metrics[EVENTS[0]])
-    fits_per_event = chrono_fits + (len(metrics[EVENTS[0]]["by_cow"]["folds"]) if has_by_cow else 0)
+    fits_per_event = 1 + ("train_val" in metrics[EVENTS[0]])
 
     X, y, start, models, probabilities, val_label, groups, rates = load_test()
-    log = read_log(LOG_PATH, fits_per_event, chrono_fits)
+    log = read_log(LOG_PATH, fits_per_event)
     save(plots.learning_curves(log, N_TREES, val_label), "curvas_aprendizaje.png")
     test_period = f"{start.min():%d/%m/%Y}–{start.max():%d/%m/%Y}"
     save(plots.roc_pr(y, probabilities, metrics, test_period), "roc_pr_test.png")
@@ -112,8 +106,6 @@ def main():
     save(plots.probability_distributions(y, probabilities, metrics), "distribucion_probabilidades.png")
     save(plots.gain_importance(models), "importancia_gain.png")
     save(plots.model_vs_feature(rates, y, probabilities), "modelo_vs_una_variable.png")
-    if has_by_cow:
-        save(plots.by_cow(metrics), "corte_por_vaca.png")
     save(plots.weekly_performance(y, start, probabilities, metrics), "desempeno_semanal_test.png")
     save(plots.metrics_by_cow_group(y, probabilities, groups, metrics), "vacas_nuevas_metricas.png")
     save(plots.new_cow_ramp(y, probabilities, X["dias_en_hato"].to_numpy(), groups, metrics),

@@ -52,19 +52,14 @@ def label_line_end(ax, x, y, text, color):
 
 
 def learning_curves(log, n_trees, val_label):
-    """1. Log loss por árbol: train y val del corte cronológico y, si hay, vacas fuera (media de los folds)."""
+    """1. Log loss por árbol: train y val del corte cronológico."""
     fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4), sharey=True)
     for event, ax in enumerate(axes):
         chrono = log[(log["event"] == event) & (log["block"] == 0)]
-        by_cow = log[(log["event"] == event) & log["by_cow"]]
         series = [
             ("Train", chrono["tree"], chrono["loss"], SERIES["train"]),
             (val_label, chrono["tree"], chrono["val_loss"], SERIES["val"]),
         ]
-        if len(by_cow):
-            folds = by_cow.groupby("tree")["val_loss"].mean()
-            n_folds = by_cow["block"].nunique()
-            series.append((f"Vacas fuera (media {n_folds} folds)", folds.index, folds, SERIES["cows"]))
         for name, x, y, color in series:
             x, y = x.to_numpy(), y.to_numpy()
             ax.plot(x, y, color=color, label=name)
@@ -201,38 +196,8 @@ def model_vs_feature(rates, y, probabilities):
     return fig
 
 
-def by_cow(metrics):
-    """7. Métricas de cada fold por vaca, su media y el test cronológico como referencia."""
-    names = {"roc_auc": "ROC-AUC", "pr_auc": "PR-AUC", "recall": "Recall"}
-    fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4.2), sharey=True)
-    for i, event in enumerate(EVENTS):
-        folds, ax = pd.DataFrame(metrics[event]["by_cow"]["folds"]), axes[i]
-        test = metrics[event]["test"]
-        chrono = {"roc_auc": test["roc_auc"], "pr_auc": test["pr_auc"],
-                  "recall": test["threshold_recall"]["recall"]}
-        for x, key in enumerate(names):
-            jitter = np.linspace(-0.12, 0.12, len(folds))
-            ax.plot(x + jitter, folds[key], "o", color=SERIES["cows"], markersize=6, alpha=0.8,
-                    label="Fold por vaca" if x == 0 else None)
-            ax.plot([x - 0.22, x + 0.22], [folds[key].mean()] * 2, color=SERIES["cows"], linewidth=2.5,
-                    label="Media de los folds" if x == 0 else None)
-            ax.plot(x + 0.32, chrono[key], "D", color=SERIES["val"], markersize=7,
-                    label="Test cronológico" if x == 0 else None)
-            ax.annotate(f"{folds[key].mean():.2f}", (x - 0.22, folds[key].mean()), xytext=(-4, 0),
-                        textcoords="offset points", ha="right", va="center", fontsize=9, color=MUTED)
-        ax.set_xticks(range(len(names)), names.values())
-        ax.set_xlim(-0.6, len(names) - 0.4)
-        ax.set_ylim(0.3, 1)
-        ax.set_title(EVENT_NAMES[i], loc="left")
-        ax.grid(axis="x", visible=False)
-    axes[1].legend(loc="lower left")
-    fig.suptitle(f"Corte por vaca ({len(folds)} folds): el modelo rinde parecido con vacas que no vio",
-                 x=0.01, ha="left", fontsize=12)
-    return fig
-
-
 def weekly_performance(y, start, probabilities, metrics):
-    """8. Recall, precisión y prevalencia por semana en test."""
+    """7. Recall, precisión y prevalencia por semana en test."""
     week = start.dt.to_period("W-SUN").dt.start_time.to_numpy()
     fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.2), sharey=True)
     for i, event in enumerate(EVENTS):
@@ -266,7 +231,7 @@ def weekly_performance(y, start, probabilities, metrics):
 
 
 def metrics_by_cow_group(y, probabilities, groups, metrics):
-    """9. ROC-AUC, PR-AUC y, con el umbral de val, recall y precisión en test por grupo de vaca."""
+    """8. ROC-AUC, PR-AUC y, con el umbral de val, recall y precisión en test por grupo de vaca."""
     names = ["ROC-AUC", "PR-AUC", "Recall", "Precisión"]
     width = 0.26
     fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.4), sharey=True)
@@ -295,7 +260,7 @@ def metrics_by_cow_group(y, probabilities, groups, metrics):
 
 def new_cow_ramp(y, probabilities, days_in_herd, groups, metrics):
     """
-    10. Recall, precisión y prevalencia de las vacas que no estuvieron en train según sus días en el
+    9. Recall, precisión y prevalencia de las vacas que no estuvieron en train según sus días en el
     hato; la línea punteada es el valor de las vacas conocidas.
     """
     new = groups != "Conocida"
@@ -337,7 +302,7 @@ def new_cow_ramp(y, probabilities, days_in_herd, groups, metrics):
 
 def probabilities_by_cow_group(y, probabilities, groups, metrics):
     """
-    11. Calibración en test (arriba) y probabilidad de los ordeños con evento (abajo) de las vacas
+    10. Calibración en test (arriba) y probabilidad de los ordeños con evento (abajo) de las vacas
     conocidas y de las que no estuvieron en train.
     """
     bins = np.linspace(0, 1, 26)
@@ -372,7 +337,7 @@ def probabilities_by_cow_group(y, probabilities, groups, metrics):
 
 
 def confusion_matrices(y, probabilities, metrics):
-    """12. Matriz de confusión en test con el umbral elegido en val; el color es el % de cada fila."""
+    """11. Matriz de confusión en test con el umbral elegido en val; el color es el % de cada fila."""
     cmap = LinearSegmentedColormap.from_list("azul", [SURFACE, *SEQUENTIAL])
     rows, columns = ["Sin evento", "Con evento"], ["Sin alerta", "Alerta"]
     fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4.2))
