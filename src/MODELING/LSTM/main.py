@@ -6,7 +6,8 @@ La red lee la secuencia de las K sesiones previas de la vaca (cada paso con los 
 sesión) y, después de la capa LSTM, el contexto de la sesión a predecir (clima, máquina,
 calendario y carga del hato).
 - Corte cronológico 70/15/15 sin espacio entre periodos: train entrena, val detiene el
-  entrenamiento (early stopping) y elige el umbral de recall, y test evalúa.
+  entrenamiento (early stopping cuando el PR-AUC promedio de val no mejora en PATIENCE épocas)
+  y elige el umbral de recall, y test evalúa.
 - Vacas en test: las mismas métricas para vacas conocidas (en train), solo en val y nuevas
   (primer ordeño en test), con los mismos grupos que XGBoost y la regresión logística.
 Modelo, metrics.json e history.json van a OUTPUT_DIR (src/MODELING/LSTM/modelos/lstm_base).
@@ -57,8 +58,10 @@ def build_model(k, n_sequence, n_context):
 
     model = keras.Model([sequence, context], output)
     # Con varias salidas sigmoide, "accuracy" se toma como categórica; se pide la binaria.
+    # pr_auc: PR-AUC de cada salida promediado (multi_label), el que vigila el early stopping.
     model.compile(optimizer="adam", loss="binary_crossentropy",
-                  metrics=[keras.metrics.BinaryAccuracy(name="accuracy")])
+                  metrics=[keras.metrics.BinaryAccuracy(name="accuracy"),
+                           keras.metrics.AUC(curve="PR", multi_label=True, num_labels=len(EVENTS), name="pr_auc")])
 
     return model
 
@@ -98,13 +101,13 @@ def main():
     def inputs(rows):
         return [X_seq[rows], X_ctx[rows]]
 
-    print("\n[training] LSTM: train, early stopping on val")
+    print(f"\n[training] LSTM: train, early stopping when mean PR-AUC on val does not improve in {PATIENCE} epochs")
     model = build_model(K, X_seq.shape[2], X_ctx.shape[1])
     history = model.fit(
         inputs(idx["train"]), y[idx["train"]],
         validation_data=(inputs(idx["val"]), y[idx["val"]]),
         epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=2,
-        callbacks=[keras.callbacks.EarlyStopping(monitor="val_loss", patience=PATIENCE,
+        callbacks=[keras.callbacks.EarlyStopping(monitor="val_pr_auc", mode="max", patience=PATIENCE,
                                                  restore_best_weights=True, verbose=1)],
     )
     model.save(OUTPUT_DIR / "lstm.keras")

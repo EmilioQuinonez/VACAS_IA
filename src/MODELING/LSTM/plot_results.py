@@ -1,7 +1,7 @@
 """
 Gráficas de la LSTM base. Carga el modelo guardado por main.py, vuelve a armar las mismas
 entradas y predice val y test; no reentrena. Las gráficas van a OUTPUT_DIR/graficas:
-- curvas_aprendizaje.png: pérdida y accuracy por época en train y val.
+- curvas_aprendizaje.png: pérdida, PR-AUC promedio y accuracy por época en train y val.
 - roc_pr_test.png, calibracion_test.png, matrices_confusion_test.png y
   distribucion_probabilidades.png: test con el umbral de recall elegido en val.
 - desempeno_semanal_test.png: precisión y recall de cada semana de test.
@@ -46,12 +46,16 @@ plt.rcParams.update({
 
 
 def learning_curves(history):
-    """Pérdida y accuracy por época; la línea punteada marca la época que se restauró."""
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.6), constrained_layout=True)
+    """
+    Pérdida, PR-AUC promedio y accuracy por época; la línea punteada marca la época restaurada
+    (la de mayor PR-AUC promedio en val, que es lo que vigila el early stopping).
+    """
+    fig, axes = plt.subplots(1, 3, figsize=(19, 4.6), constrained_layout=True)
     epochs = np.arange(1, len(history["loss"]) + 1)
-    best = int(np.argmin(history["val_loss"])) + 1
+    best = int(np.argmax(history["val_pr_auc"])) + 1
     for ax, key, label in [(axes[0], "loss", "Pérdida (binary cross-entropy)"),
-                           (axes[1], "accuracy", "Accuracy binaria (umbral 0.5)")]:
+                           (axes[1], "pr_auc", "PR-AUC promedio de las 4 salidas"),
+                           (axes[2], "accuracy", "Accuracy binaria (umbral 0.5)")]:
         ax.plot(epochs, history[key], color=BLUE, label=f"Train: {history[key][best - 1]:.4f}")
         ax.plot(epochs, history[f"val_{key}"], color=ORANGE, label=f"Val: {history[f'val_{key}'][best - 1]:.4f}")
         ax.axvline(best, color=REFERENCE, linestyle="--", linewidth=1)
