@@ -215,6 +215,66 @@ test = dataset.iloc[fold["test"]]
 
 > **Nota:** esta separación al azar corresponde al reto de datos. Para el modelado, el [Reporte de diseño de pruebas](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.7tfnlrrsx4yq) define un corte cronológico 70/15/15: el 70 % más antiguo para entrenamiento, el 15 % siguiente para validación y el 15 % más reciente para prueba.
 
+## Modelado: XGBoost base
+
+Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`.
+
+Ejecuta los siguientes comandos desde la raíz del repositorio.
+
+### 1. Agregar las variables de historial
+
+**Windows**
+
+```powershell
+py src/MODELING/XGBoost/build_history_features.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/MODELING/XGBoost/build_history_features.py
+```
+
+**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con las 19 variables de la tabla de selección de datos (calendario, ordeño previo y tasas de la vaca y del hato), calculadas solo con ordeños anteriores a cada sesión. Las filas y columnas existentes se conservan.
+
+### 2. Entrenar y evaluar el modelo
+
+Crea antes la carpeta `Data/modelos/xgboost_base/`. El paso 3 lee el log que se guarda ahí.
+
+**Windows**
+
+```powershell
+py -X utf8 -u src/MODELING/XGBoost/main.py | Out-File -Encoding utf8 Data/modelos/xgboost_base/xgboost_baseline.log
+```
+
+**macOS y Linux**
+
+```bash
+python3 -u src/MODELING/XGBoost/main.py > Data/modelos/xgboost_base/xgboost_baseline.log
+```
+
+**Resultado esperado:**
+- se entrena un clasificador por evento (falla mecánica, anomalía de salud e interrupción por conducta) con el corte cronológico 70/15/15;
+- el umbral de cada evento se elige en validación para detectar al menos el 80 % de los eventos;
+- el modelo se evalúa en prueba y con un corte por vaca de 5 folds;
+- los modelos y `metrics.json` se guardan en `Data/modelos/xgboost_base/`, y el log de entrenamiento en `xgboost_baseline.log`.
+
+### 3. Generar las gráficas
+
+**Windows**
+
+```powershell
+py src/MODELING/XGBoost/plot_results.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/MODELING/XGBoost/plot_results.py
+```
+
+**Resultado esperado:** se generan 11 gráficas con cifras agregadas, sin datos por vaca, en `Data/modelos/xgboost_base/graficas/`. Se calculan a partir de los modelos, `metrics.json` y el log del paso anterior, sin reentrenar.
+
 
 ## ¿Cómo acceder a los entregables?
 
@@ -249,6 +309,10 @@ La estructura del repositorio es:
     - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento a `Data/dataset_vacas_integrado.csv`.
     - [`integrar_concentrado.py`](src/DP/integrar_concentrado.py) — Añade cuatro atributos históricos de concentrado a `Data/dataset_vacas_integrado.csv`.
     - [`k_fold.py`](src/DP/k_fold.py) — Separa la muestra en un conjunto de prueba fijo y cinco folds de entrenamiento y validación.
+  - **[`MODELING/XGBoost/`](src/MODELING/XGBoost/)** — XGBoost base por evento de ordeño.
+    - [`build_history_features.py`](src/MODELING/XGBoost/build_history_features.py) — Agrega las variables de historial de la tabla de selección de datos a `Data/dataset_vacas_integrado.csv`.
+    - [`main.py`](src/MODELING/XGBoost/main.py) — Entrena y evalúa un clasificador por evento con el corte cronológico 70/15/15 y el corte por vaca. Usa `dataset.py`, `evaluation.py` y `xgboost_model.py`.
+    - [`plot_results.py`](src/MODELING/XGBoost/plot_results.py) — Genera las gráficas del modelo con `plots.py`.
   - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
     - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
     - [`dataset_vacas_muestra.csv`](src/RETO_DATOS/dataset_vacas_muestra.csv) — Muestra generada por el script anterior.
