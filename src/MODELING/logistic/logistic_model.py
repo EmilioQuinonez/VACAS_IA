@@ -1,4 +1,4 @@
-"""Imputación ajustada en train, regresión logística y explicaciones locales."""
+"""Relleno con cero y bandera, escala de train y regresión logística explicable."""
 
 import numpy as np
 import pandas as pd
@@ -24,20 +24,13 @@ LOGISTIC_CONFIG = {
 
 
 class CowPreprocessor:
-    """Medianas por vaca/bloque estrictamente anteriores; respaldo y escala de train.
+    """Completa faltantes con cero y bandera; ajusta escala y referencia solo en train."""
 
-    transform no actualiza estado. Para incorporar antecedentes posteriores a train,
-    pasar history=(X_hist, vacas_hist, fechas_hist, bloques_hist), siempre observados.
-    Los predictores históricos ya deben estar construidos sin fuga temporal.
-    """
-
-    def fit(self, X, cows, times, blocks):
+    def fit(self, X):
         self.columns = list(X.columns)
         self.binary = binary_features(self.columns)
         self.continuous = [c for c in self.columns if c not in self.binary]
-        self.global_medians = X[self.continuous].median().fillna(0)
-        self.median_history = self._median_history(X, cows, times, blocks)
-        expanded = self._impute(X, cows, times, blocks, self.median_history)
+        expanded = self._fill_missing(X)
         self.scaler = StandardScaler().fit(expanded[self.continuous])
         self.transformed_names = list(expanded.columns)
         expanded[self.continuous] = self.scaler.transform(expanded[self.continuous])
@@ -45,38 +38,14 @@ class CowPreprocessor:
         
         return self
 
-    def _keys(self, cows, times, blocks):
-        return pd.DataFrame({"_cow": np.asarray(cows), "_time": pd.to_datetime(np.asarray(times)), "_block": np.asarray(blocks)})
+    def _fill_missing(self, X):
+        values = X[self.columns]
+        # Todas las columnas reciben bandera para mantener el esquema entre particiones.
+        flags = values.isna().astype(float).add_suffix("__faltante")
+        return pd.concat([values.fillna(0), flags], axis=1)
 
-    def _median_history(self, X, cows, times, blocks):
-        source = self._keys(cows, times, blocks)
-        source[self.continuous] = X[self.continuous].to_numpy()
-        tables = []
-        
-        for _, group in source.groupby(["_cow", "_block"], sort=False):
-            group = group.sort_values("_time", kind="stable").copy()
-            group[self.continuous] = group[self.continuous].expanding().median().to_numpy()
-            # El último acumulado de un instante contiene todas sus sesiones.
-            tables.append(group.drop_duplicates("_time", keep="last"))
-        return pd.concat(tables, ignore_index=True).sort_values("_time", kind="stable")
-
-    def _impute(self, X, cows, times, blocks, history):
-        query = self._keys(cows, times, blocks).assign(_position=np.arange(len(X)))
-        past = pd.merge_asof(
-            query.sort_values("_time", kind="stable"), history,
-            on="_time", by=["_cow", "_block"], direction="backward", allow_exact_matches=False,
-        ).sort_values("_position")
-        
-        cow_values = past[self.continuous].set_axis(X.index)
-        filled = X[self.columns].copy()
-        filled[self.continuous] = X[self.continuous].fillna(cow_values).fillna(self.global_medians)
-        filled[self.binary] = X[self.binary].fillna(0)
-        flags = X.isna().astype(float).add_suffix("__faltante")
-        return pd.concat([filled, flags], axis=1)
-
-    def transform(self, X, cows, times, blocks, history=None):
-        medians = self.median_history if history is None else self._median_history(*history)
-        expanded = self._impute(X, cows, times, blocks, medians)
+    def transform(self, X):
+        expanded = self._fill_missing(X)
         expanded[self.continuous] = self.scaler.transform(expanded[self.continuous])
         return np.ascontiguousarray(expanded.to_numpy(dtype=np.float64))
 
@@ -161,10 +130,11 @@ def explain(model, preprocessor, transformed, X, top_n=3):
             rows = np.flatnonzero((names == name) & nonzero)
             columns = [c for c in X if feature_group(c) == name]
             raw = X.iloc[rows][columns].to_numpy()
-            if name in ("produccion_previa", "box_time_to_yield_ratio"):
+            if name == "produccion_previa":
                 raw = np.expm1(raw)
+            unit = " s/kg" if name == "box_time_to_yield_ratio" else ""
             values[rows] = [
-                "; ".join(f"{c}={v:.6g}" if pd.notna(v) else f"{c}=faltante" for c, v in zip(columns, row))
+                "; ".join(f"{c}={v:.6g}{unit}" if pd.notna(v) else f"{c}=faltante" for c, v in zip(columns, row))
                 for row in raw
             ]
         output[f"valor_{rank + 1}"] = values
@@ -182,9 +152,11 @@ def coefficient_table(models, preprocessor):
     for event, model in models.items():
         for column, group, weight in zip(preprocessor.transformed_names, groups, model.coef_[0]):
             scale = "por 1 desviación estándar en la escala del predictor" if column in preprocessor.continuous else "cambio de 0 a 1"
-            if column in ("produccion_previa", "box_time_to_yield_ratio"):
+            if column == "produccion_previa":
                 scale += " log1p"
-            if column == "mdi_previo" or column.startswith("blood_diff_"):
+            if column == "box_time_to_yield_ratio":
+                scale += " (predictor en s/kg)"
+            if column == "mdi_previo" or column in ("blood_diff_di", "blood_diff_dd", "blood_diff_ti"):
                 scale += " log1p original"
             rows.append({
                 "event": event, "variable": column, "grupo": group, "coeficiente": float(weight),

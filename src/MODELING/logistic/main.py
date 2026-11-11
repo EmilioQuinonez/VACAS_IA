@@ -92,13 +92,12 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
         parts[name] = rows[available]
         print(f"[split] {name}: {len(parts[name]):,} etiquetas disponibles; {int((~available).sum())} aún sin terminar al corte", flush=True)
     split["counts"] = {name: len(rows) for name, rows in parts.items()}
-    print("[features] Construyendo historial disponible antes de cada sesión", flush=True)
+    print("[features] Reutilizando atributos de DP y construyendo historial adicional", flush=True)
     X = build_features(sessions)
-    cows, times, blocks = sessions["id_vaca"], sessions["inicio"], sessions["bloque_historial"]
+    cows = sessions["id_vaca"]
     train = parts["train"]
-    preprocessor = CowPreprocessor().fit(X.iloc[train], cows.iloc[train], times.iloc[train], blocks.iloc[train])
-    # Las medianas históricas avanzan con datos pasados, sin reajustar respaldo ni escala.
-    matrix = preprocessor.transform(X, cows, times, blocks, history=(X, cows, times, blocks))
+    preprocessor = CowPreprocessor().fit(X.iloc[train])
+    matrix = preprocessor.transform(X)
     transformed = {name: matrix[rows] for name, rows in parts.items()}
     print(f"[features] {X.shape[1]} predictores; {matrix.shape[1]} columnas con indicadores", flush=True)
     test_rows = parts["test"]
@@ -178,6 +177,7 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
         "models": models, "thresholds": thresholds, "logistic_config": config,
         "input_columns": list(X.columns), "transformed_columns": preprocessor.transformed_names,
         "machine_columns": sorted(c for c in X if c.startswith("maquina_")),
+        "preparation": "dp_features_zero_missing_flags_train_scaler_v1",
         "split": split,
     }
     joblib.dump(bundle, models_dir / "model.joblib", compress=3)
