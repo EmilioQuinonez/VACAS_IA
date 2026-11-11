@@ -19,7 +19,7 @@ from xgboost import XGBClassifier
 
 import plots
 from dataset import EVENT_KEYS, EVENTS, build_features, load_sessions, split_by_time
-from main import INPUT_PATH, LOG_PATH, N_TREES, OUTPUT_DIR, TRAIN_FRACTION, VAL_FRACTION
+from main import INPUT_PATH, LOG_PATH, MODELS_DIR, N_TREES, OUTPUT_DIR, TRAIN_FRACTION, VAL_FRACTION
 
 FIGURES_DIR = Path(__file__).resolve().parent / "img"
 
@@ -61,7 +61,7 @@ def load_test():
     models, probabilities = [], []
     for event in EVENTS:
         model = XGBClassifier()
-        model.load_model(OUTPUT_DIR / f"{event}.json")
+        model.load_model(MODELS_DIR / f"{event}.json")
         models.append(model)
         probabilities.append(model.predict_proba(X.iloc[test])[:, 1])
 

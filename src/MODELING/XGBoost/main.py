@@ -8,7 +8,7 @@ Por cada una de las 4 salidas:
   modelo de train elige en val el umbral de recall. Con RETRAIN_WITH_VAL, el modelo final se
   reentrena con train + val y es el que se evalúa en test; si no, se evalúa el de train.
 - Corte por vaca (si RUN_BY_COW): GroupKFold sobre todas las sesiones con el umbral anterior.
-Modelos finales y metrics.json van a OUTPUT_DIR (fuera de Git). Las gráficas se generan aparte
+Los modelos finales van a MODELS_DIR (se versionan); metrics.json y el log, a OUTPUT_DIR (fuera de Git). Las gráficas se generan aparte
 con plot_results.py, a partir de lo que guarda este script.
 
 Uso, desde la raíz del repo (con -u el log se escribe al momento, para el panel /entrenamiento):
@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[3]
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 OUTPUT_DIR = ROOT / "Data" / "modelos" / "xgboost_base"
 LOG_PATH = OUTPUT_DIR / "xgboost_baseline.log"
+MODELS_DIR = Path(__file__).resolve().parent / "models"
 
 TRAIN_FRACTION = 0.70  # train: el 70 % más antiguo de las sesiones
 VAL_FRACTION = 0.15  # val: el 15 % siguiente; test: el 15 % más reciente
@@ -64,6 +65,7 @@ def main():
     idx = split_by_time(sessions["inicio"], TRAIN_FRACTION, VAL_FRACTION)
     final_rows = np.concatenate([idx["train"], idx["val"]])
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    MODELS_DIR.mkdir(exist_ok=True)
 
     # Épocas del log: modelo de train y, si aplican, modelo final y un entrenamiento por fold.
     chrono_fits = 1 + RETRAIN_WITH_VAL
@@ -87,7 +89,7 @@ def main():
         else:
             results[event].update(evaluate(model, X, y, {name: idx[name] for name in ("train", "val", "test")},
                                            threshold))
-        model.save_model(OUTPUT_DIR / f"{event}.json")
+        model.save_model(MODELS_DIR / f"{event}.json")
 
         if RUN_BY_COW:
             print(f"\n[training] {event}: {N_FOLDS} folds by cow")
@@ -98,7 +100,7 @@ def main():
 
     with open(OUTPUT_DIR / "metrics.json", "w", encoding="utf-8") as file:
         json.dump(results, file, indent=2)
-    print(f"\nModels and metrics in {OUTPUT_DIR.relative_to(ROOT)}")
+    print(f"\nModels in {MODELS_DIR.relative_to(ROOT)}; metrics in {OUTPUT_DIR.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":
