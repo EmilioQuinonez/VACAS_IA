@@ -11,7 +11,7 @@ Modelos finales y metrics.json van a OUTPUT_DIR (fuera de Git). Las gráficas se
 con plot_results.py, a partir de lo que guarda este script.
 
 Uso, desde la raíz del repo (con -u el log se escribe al momento, para el panel /entrenamiento):
-    python -u src/MODELING/main.py >| Data/modelos/xgboost_base/xgboost_baseline.log 2>&1
+    python -u src/MODELING/XGBoost/main.py >| Data/modelos/xgboost_base/xgboost_baseline.log 2>&1
 """
 
 import json
@@ -24,7 +24,7 @@ from dataset import EVENTS, build_features, load_sessions, split_by_time
 from evaluation import choose_threshold, cross_validate_by_cow, evaluate
 from xgboost_model import train_event
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 OUTPUT_DIR = ROOT / "Data" / "modelos" / "xgboost_base"
 LOG_PATH = OUTPUT_DIR / "xgboost_baseline.log"

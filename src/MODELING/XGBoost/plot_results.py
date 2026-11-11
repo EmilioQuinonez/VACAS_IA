@@ -5,7 +5,7 @@ metrics.json y el log), sin reentrenar. Solo cifras agregadas, sin datos por vac
 Las figuras van a FIGURES_DIR, fuera de Git por ahora; para versionarlas basta con cambiar esa ruta.
 
 Uso, desde la raíz del repo y después de main.py:
-    python src/MODELING/plot_results.py
+    python src/MODELING/XGBoost/plot_results.py
 """
 
 import json
