@@ -195,7 +195,7 @@ python3 -u src/MODELING/LSTM/main.py >| src/MODELING/LSTM/modelos/lstm_base/lstm
 
 - Lee la secuencia de las 20 sesiones previas de la vaca. Cada paso tiene los valores de esa sesión: FME, `blood_diff_*`, `box_time_to_yield_ratio`, producción, MDI, conductividad máxima, cuarto inactivo, eventos y horas desde el ordeño anterior.
 - Después de la capa LSTM se agrega el contexto de la sesión a predecir: intervalo, máquina, clima, sangre por máquina, calendario y carga del hato.
-- Usa un corte cronológico 70/15/15 sin espacio entre periodos. Con val se detiene el entrenamiento y se elige el umbral para un recall ≥ 80 %. Las métricas se calculan en train, val, test y en test separado por vaca, con los mismos grupos que XGBoost y la regresión logística: conocidas (estuvieron en train, `test_vacas_conocidas`), solo en val (`test_vacas_solo_val`) y nuevas (su primer ordeño es en test, `test_vacas_nuevas`).
+- Usa un corte cronológico 70/15/15 sin espacio entre periodos. Con val se detiene el entrenamiento (early stopping cuando el PR-AUC promedio de las 4 salidas en val no mejora en 5 épocas, hasta 50 épocas) y se elige el umbral para un recall ≥ 80 %. Las métricas se calculan en train, val, test y en test separado por vaca, con los mismos grupos que XGBoost y la regresión logística: conocidas (estuvieron en train, `test_vacas_conocidas`), solo en val (`test_vacas_solo_val`) y nuevas (su primer ordeño es en test, `test_vacas_nuevas`).
 
 ### 3. Generar las gráficas
 
@@ -211,7 +211,7 @@ py -u src/MODELING/LSTM/plot_results.py
 python3 -u src/MODELING/LSTM/plot_results.py
 ```
 
-**Resultado esperado:** se generan en `src/MODELING/LSTM/modelos/lstm_base/graficas/` ocho gráficas a partir del modelo guardado, sin reentrenar: curvas de aprendizaje, ROC y precisión-recall, calibración, matrices de confusión, distribución de probabilidades y desempeño semanal en test; métricas de vacas conocidas, solo en val y nuevas; e importancia por permutación en val (caída del PR-AUC al revolver cada variable).
+**Resultado esperado:** se generan en `src/MODELING/LSTM/modelos/lstm_base/graficas/` ocho gráficas a partir del modelo guardado, sin reentrenar: curvas de aprendizaje (pérdida, PR-AUC promedio y accuracy por época), ROC y precisión-recall, calibración, matrices de confusión, distribución de probabilidades y desempeño semanal en test; métricas de vacas conocidas, solo en val y nuevas; e importancia por permutación en val (caída del PR-AUC al revolver cada variable).
 
 ## Preparación para reto de datos.
 
