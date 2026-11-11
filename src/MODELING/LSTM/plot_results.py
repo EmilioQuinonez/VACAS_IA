@@ -1,11 +1,11 @@
 """
 Gráficas de la LSTM base. Carga el modelo guardado por main.py, vuelve a armar las mismas
-entradas y predice val y test; no reentrena. Las gráficas van a OUTPUT_DIR/graficas (fuera de Git):
+entradas y predice val y test; no reentrena. Las gráficas van a OUTPUT_DIR/graficas:
 - curvas_aprendizaje.png: pérdida y accuracy por época en train y val.
 - roc_pr_test.png, calibracion_test.png, matrices_confusion_test.png y
   distribucion_probabilidades.png: test con el umbral de recall elegido en val.
 - desempeno_semanal_test.png: precisión y recall de cada semana de test.
-- vacas_nuevas_metricas.png: test separado en vacas que estaban en train y vacas nuevas.
+- vacas_nuevas_metricas.png: test separado en vacas conocidas, solo en val y nuevas.
 - importancia_permutacion.png: cuánto baja el PR-AUC de val al revolver cada variable.
 
 Requiere correr antes src/MODELING/LSTM/main.py.
@@ -26,15 +26,17 @@ from sklearn.calibration import calibration_curve
 from sklearn.metrics import average_precision_score, confusion_matrix, precision_recall_curve, roc_curve
 from tensorflow import keras
 
-from dataset import CONTEXT_FEATURES, EVENTS, SEQUENCE_FEATURES, build_inputs, load_sessions, split_by_time
-from main import BATCH_SIZE, INPUT_PATH, K, OUTPUT_DIR, RANDOM_STATE, ROOT, TRAIN_FRACTION, VAL_FRACTION, evaluate
+from dataset import (
+    CONTEXT_FEATURES, EVENTS, SEQUENCE_FEATURES, build_inputs, load_sessions, split_by_time, split_test_by_cow,
+)
+from main import BATCH_SIZE, INPUT_PATH, K, OUTPUT_DIR, RANDOM_STATE, ROOT, TRAIN_FRACTION, VAL_FRACTION
 
 FIGURES_DIR = OUTPUT_DIR / "graficas"
 EVENT_NAMES = ["Mecánico", "Salud", "Conducta", "Alguna anomalía"]
 MIN_WEEK_SESSIONS = 1000  # Semanas incompletas en los bordes de test no se grafican.
 TOP_FEATURES = 10
 
-BLUE, ORANGE, REFERENCE = "#2a78d6", "#eb6834", "#9a9890"
+BLUE, ORANGE, AQUA, REFERENCE = "#2a78d6", "#eb6834", "#1baf7a", "#9a9890"
 plt.rcParams.update({
     "figure.facecolor": "#fcfcfb", "axes.facecolor": "#fcfcfb", "savefig.facecolor": "#fcfcfb",
     "axes.spines.top": False, "axes.spines.right": False, "axes.edgecolor": "#9a9890",
@@ -154,24 +156,28 @@ def weekly_performance(y, probability, start, metrics):
     return fig
 
 
-def metrics_by_cow_group(groups):
-    """Mismas métricas en test para vacas que estaban en train y vacas nuevas."""
+def metrics_by_cow_group(metrics, groups, cows):
+    """Mismas métricas en test para vacas conocidas, solo en val y nuevas (umbral de val)."""
     measures = [("ROC-AUC", "roc_auc"), ("PR-AUC", "pr_auc"), ("Precisión", "precision"),
                 ("Recall", "recall"), ("F1", "f1")]
-    fig, axes = plt.subplots(1, len(measures), figsize=(20, 4.6), constrained_layout=True)
+    labels = [("test_vacas_conocidas", "Conocidas (en train)", BLUE),
+              ("test_vacas_solo_val", "Solo en val", AQUA),
+              ("test_vacas_nuevas", "Nuevas (primer ordeño en test)", ORANGE)]
+    fig, axes = plt.subplots(1, len(measures), figsize=(24, 4.8), constrained_layout=True)
     positions = np.arange(len(EVENTS))
     for ax, (label, key) in zip(axes, measures):
-        for offset, (group, color) in zip((-0.2, 0.2), [("conocidas", BLUE), ("nuevas", ORANGE)]):
-            scores = groups[group]["metrics"]
-            values = [scores[e][key] if key in scores[e] else scores[e]["threshold_recall"][key] for e in EVENTS]
-            bars = ax.bar(positions + offset, values, width=0.38, color=color, edgecolor="#fcfcfb", linewidth=2,
-                          label=f"Vacas {group} ({groups[group]['cows']} vacas, {groups[group]['sessions']:,} ordeños)")
-            ax.bar_label(bars, fmt="%.2f", fontsize=8, padding=2)
+        for offset, (group, name, color) in zip((-0.27, 0, 0.27), labels):
+            scores = [metrics[e][group] for e in EVENTS]
+            values = [s[key] if key in s else s["threshold_recall"][key] for s in scores]
+            rows = groups[group]
+            bars = ax.bar(positions + offset, values, width=0.27, color=color, edgecolor="#fcfcfb", linewidth=1.5,
+                          label=f"{name}: {cows.iloc[rows].nunique()} vacas, {len(rows):,} ordeños")
+            ax.bar_label(bars, fmt="%.2f", fontsize=6.5, padding=2)
         ax.set(title=label, xticks=positions, ylim=(0, 1.1))
         ax.set_xticklabels(EVENT_NAMES, rotation=15, fontsize=8)
         ax.grid(axis="x", visible=False)
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.08))
+    fig.legend(handles, labels, loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.08))
     fig.suptitle("Desempeño en test por grupo de vaca, con el umbral de val")
     return fig
 
@@ -235,15 +241,7 @@ def main():
     probability = model.predict([X_seq[test], X_ctx[test]], batch_size=BATCH_SIZE, verbose=0)
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
-    cows = sessions["id_vaca"]
-    known = cows.iloc[test].isin(cows.iloc[idx["train"]]).to_numpy()
-    groups = {}
-    for group, mask in [("conocidas", known), ("nuevas", ~known)]:
-        groups[group] = {
-            "cows": cows.iloc[test[mask]].nunique(), "sessions": int(mask.sum()),
-            "metrics": {event: evaluate(y[test][mask, n], probability[mask, n], metrics[event]["threshold_recall_val"])
-                        for n, event in enumerate(EVENTS)},
-        }
+    groups = split_test_by_cow(sessions["id_vaca"], idx)
 
     save(learning_curves(history), "curvas_aprendizaje.png")
     save(roc_pr(y[test], probability, metrics), "roc_pr_test.png")
@@ -251,7 +249,7 @@ def main():
     save(confusion(y[test], probability, metrics), "matrices_confusion_test.png")
     save(probability_distributions(y[test], probability, metrics), "distribucion_probabilidades.png")
     save(weekly_performance(y[test], probability, sessions["inicio"].iloc[test], metrics), "desempeno_semanal_test.png")
-    save(metrics_by_cow_group(groups), "vacas_nuevas_metricas.png")
+    save(metrics_by_cow_group(metrics, groups, sessions["id_vaca"]), "vacas_nuevas_metricas.png")
     print("\n[importance] permutation on val")
     val = idx["val"]
     save(permutation_importance(model, X_seq[val], X_ctx[val], y[val]), "importancia_permutacion.png")

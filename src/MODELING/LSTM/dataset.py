@@ -74,6 +74,25 @@ def split_by_time(start, train_fraction, val_fraction):
     return idx
 
 
+def split_test_by_cow(cows, idx):
+    """
+    Divide test igual que XGBoost y la regresión logística: vacas conocidas (estuvieron en train),
+    solo en val (el modelo no entrenó con ellas) y nuevas (su primer ordeño es en test).
+    """
+    test_cows = cows.iloc[idx["test"]]
+    in_train = test_cows.isin(cows.iloc[idx["train"]]).to_numpy()
+    in_val = test_cows.isin(cows.iloc[idx["val"]]).to_numpy()
+    groups = {
+        "test_vacas_conocidas": idx["test"][in_train],
+        "test_vacas_solo_val": idx["test"][~in_train & in_val],
+        "test_vacas_nuevas": idx["test"][~in_train & ~in_val],
+    }
+    for name, rows in groups.items():
+        print(f"[split] {name}: {len(rows):,} sessions of {cows.iloc[rows].nunique()} cows")
+
+    return groups
+
+
 def build_inputs(sessions, train_rows, k):
     """
     X_seq (sesiones, k, variables): para la sesión t, las filas t - k + 1 ... t de la misma vaca y

@@ -7,13 +7,14 @@ sesión) y, después de la capa LSTM, el contexto de la sesión a predecir (clim
 calendario y carga del hato).
 - Corte cronológico 70/15/15 sin espacio entre periodos: train entrena, val detiene el
   entrenamiento (early stopping) y elige el umbral de recall, y test evalúa.
-- Vacas no vistas: las mismas métricas en las sesiones de test de vacas que no están en train.
-Modelo, metrics.json e history.json van a OUTPUT_DIR (fuera de Git).
+- Vacas en test: las mismas métricas para vacas conocidas (en train), solo en val y nuevas
+  (primer ordeño en test), con los mismos grupos que XGBoost y la regresión logística.
+Modelo, metrics.json e history.json van a OUTPUT_DIR (src/MODELING/LSTM/modelos/lstm_base).
 
 Requiere correr antes src/MODELING/LSTM/build_history_features.py.
 
 Uso, desde la raíz del repo (con -u el log se escribe al momento):
-    python -u src/MODELING/LSTM/main.py >| Data/modelos/lstm_base/lstm_base.log 2>&1
+    python -u src/MODELING/LSTM/main.py >| src/MODELING/LSTM/modelos/lstm_base/lstm_base.log 2>&1
 """
 
 import json
@@ -25,18 +26,18 @@ from sklearn.metrics import (
 )
 from tensorflow import keras
 
-from dataset import EVENTS, build_inputs, load_sessions, split_by_time
+from dataset import EVENTS, build_inputs, load_sessions, split_by_time, split_test_by_cow
 
 ROOT = Path(__file__).resolve().parents[3]
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
-OUTPUT_DIR = ROOT / "Data" / "modelos" / "lstm_base"
+OUTPUT_DIR = Path(__file__).resolve().parent / "modelos" / "lstm_base"
 
 TRAIN_FRACTION = 0.70  # train: el 70 % más antiguo de las sesiones
 VAL_FRACTION = 0.15  # val: el 15 % siguiente; test: el 15 % más reciente
 K = 20  # Sesiones previas que lee la red
 UNITS = 64
 DROPOUT = 0.2
-EPOCHS = 30
+EPOCHS = 50
 BATCH_SIZE = 512
 PATIENCE = 5
 TARGET_RECALL = 0.80  # Criterio de negocio: detectar al menos 80 % de las anomalías.
@@ -91,10 +92,7 @@ def main():
     sessions = load_sessions(INPUT_PATH)
     idx = split_by_time(sessions["inicio"], TRAIN_FRACTION, VAL_FRACTION)
     X_seq, X_ctx, y = build_inputs(sessions, idx["train"], K)
-    cows = sessions["id_vaca"]
-    idx["test_vacas_nuevas"] = idx["test"][~cows.iloc[idx["test"]].isin(cows.iloc[idx["train"]]).to_numpy()]
-    print(f"[split] test_vacas_nuevas: {len(idx['test_vacas_nuevas']):,} sessions of "
-          f"{cows.iloc[idx['test_vacas_nuevas']].nunique()} cows not in train")
+    idx.update(split_test_by_cow(sessions["id_vaca"], idx))
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     def inputs(rows):
@@ -125,11 +123,11 @@ def main():
         print(f"\n{event} (threshold for recall >= {TARGET_RECALL:.0%} on val: {threshold:.3f})")
         for name in probabilities:
             m = results[event][name]
-            print(f"  {name:17}: prevalence {m['prevalence']:.1%} | ROC-AUC {m['roc_auc']:.3f} | "
+            print(f"  {name:20}: prevalence {m['prevalence']:.1%} | ROC-AUC {m['roc_auc']:.3f} | "
                   f"PR-AUC {m['pr_auc']:.3f} | Brier {m['brier']:.3f} | accuracy no event {m['accuracy_no_event']:.1%}")
             for label in ("threshold_0.5", "threshold_recall"):
                 t = m[label]
-                print(f"                     {label:16}: accuracy {t['accuracy']:.1%} | precision "
+                print(f"                        {label:16}: accuracy {t['accuracy']:.1%} | precision "
                       f"{t['precision']:.1%} | recall {t['recall']:.1%} | F1 {t['f1']:.3f}")
 
     with open(OUTPUT_DIR / "metrics.json", "w", encoding="utf-8") as file:
