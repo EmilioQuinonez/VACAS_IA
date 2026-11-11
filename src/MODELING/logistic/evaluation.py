@@ -3,41 +3,52 @@
 import numpy as np
 from sklearn.metrics import (
     accuracy_score, average_precision_score, brier_score_loss, confusion_matrix,
-    f1_score, precision_recall_curve, precision_score, recall_score, roc_auc_score,
+    log_loss, precision_recall_curve, precision_recall_fscore_support, roc_auc_score,
 )
 
 def choose_threshold(actual, probability, target_recall=0.80):
     """Máxima precisión con recall suficiente; desempata por mayor umbral."""
+    actual, probability = np.asarray(actual), np.asarray(probability, dtype=float)
+    if not actual.sum():
+        raise ValueError("Validación requiere positivos para elegir el umbral.")
     precision, recall, thresholds = precision_recall_curve(actual, probability)
 
     # Encontrar umbrales que cumplen el objetivo de target_recall
     eligible = np.flatnonzero(recall[:-1] >= target_recall)
     
-    if not len(eligible):
-        raise ValueError("No hay umbral que cumpla la sensibilidad objetivo.")
     best = max(eligible, key=lambda i: (precision[i], thresholds[i]))
     
     return float(thresholds[best])
 
 def evaluate(actual, probability, threshold):
     """Evalúa probabilidades y decisiones con average precision y otras métricas."""
-    actual, probability = np.asarray(actual), np.asarray(probability)
+    actual, probability = np.asarray(actual), np.asarray(probability, dtype=float)
+    n = len(actual)
+    positives = int(actual.sum())
+    prevalence = float(actual.mean()) if n else None
+    both_classes = 0 < positives < n
     result = {
-        "n": len(actual), "prevalence": float(actual.mean()),
-        "accuracy_no_event": float(1 - actual.mean()),
-        "roc_auc": float(roc_auc_score(actual, probability)),
-        "average_precision": float(average_precision_score(actual, probability)),
-        "brier": float(brier_score_loss(actual, probability)),
+        "n": n, "positives": positives, "prevalence": prevalence,
+        "accuracy_no_event": 1 - prevalence if n else None,
+        "accuracy_majority": max(prevalence, 1 - prevalence) if n else None,
+        "roc_auc": float(roc_auc_score(actual, probability)) if both_classes else None,
+        "average_precision": float(average_precision_score(actual, probability)) if positives else None,
+        "brier": float(brier_score_loss(actual, probability)) if n else None,
+        "log_loss": float(log_loss(actual, probability, labels=[0, 1])) if n else None,
+        "undefined_metrics_note": None if both_classes else "Sin ambas clases: ROC-AUC no calculable; sin positivos: AP y recall no calculables. Sin predicciones positivas: precisión no calculable. Vacío: métricas no calculables.",
     }
     
     for name, cutoff in (("threshold_0.5", 0.5), ("threshold_recall", threshold)):
         prediction = probability >= cutoff
+        matrix = confusion_matrix(actual, prediction, labels=[0, 1]) if n else np.zeros((2, 2), dtype=int)
+        scores = precision_recall_fscore_support(
+            actual, prediction, average="binary", zero_division=np.nan,
+        )[:3] if n else (np.nan, np.nan, np.nan)
         result[name] = {
-            "threshold": float(cutoff), "accuracy": float(accuracy_score(actual, prediction)),
-            "precision": float(precision_score(actual, prediction, zero_division=0)),
-            "recall": float(recall_score(actual, prediction)),
-            "f1": float(f1_score(actual, prediction, zero_division=0)),
-            "confusion_matrix": confusion_matrix(actual, prediction, labels=[0, 1]).tolist(),
+            "threshold": float(cutoff), "accuracy": float(accuracy_score(actual, prediction)) if n else None,
+            **{key: None if np.isnan(value) else float(value)
+               for key, value in zip(("precision", "recall", "f1"), scores)},
+            "confusion_matrix": matrix.tolist(),
         }
     
     return result

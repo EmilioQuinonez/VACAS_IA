@@ -1,10 +1,9 @@
-"""Entrena, evalúa y genera seis gráficas con particiones cronológicas por cuantiles.
+"""Entrena cuatro regresiones con train y las evalúa con validación y test.
 
 Desde la raíz: py src/MODELING/logistic/main.py
 Desde esta carpeta: py main.py
 """
 
-import argparse
 from pathlib import Path
 
 if not __package__:
@@ -14,146 +13,179 @@ if not __package__:
     __package__ = "src.MODELING.logistic"
 
 import joblib
+import numpy as np
 import pandas as pd
 
 from .dataset import EVENTS, build_features, get_labels, load_sessions, split_by_time
 from .evaluation import choose_threshold, evaluate, explanation_coverage
-from .logistic_model import CowPreprocessor, coefficient_table, explain, train_event, training_curve
+from .logistic_model import LOGISTIC_CONFIG, CowPreprocessor, coefficient_table, explain, train_event
 from .plot_results import save_plots
 
 MODULE_DIR = Path(__file__).resolve().parent
+OUTPUT_DIR = MODULE_DIR
 INPUT_PATH = MODULE_DIR.parents[2] / "Data" / "dataset_vacas_integrado.csv"
-TRAIN_FRACTION, VAL_FRACTION = 0.70, 0.15
-# Elección manual a partir de results/graficas/hiperparametros_validacion.png.
-FIXED_HYPERPARAMETERS = {
-    "mechanical_connection_failure_event": {"C": 0.01, "l1_ratio": 0.1},
-    "health_anomaly_event": {"C": 0.1, "l1_ratio": 0.9},
-    "behavior_interruption_event": {"C": 0.01, "l1_ratio": 0.9},
-    "alguna_anomalia": {"C": 0.1, "l1_ratio": 0.1},
-}
-TARGET_RECALL, RANDOM_STATE = 0.80, 42
-# Evaluar el ajuste obtenido con hasta 500 iteraciones, aunque no haya convergido.
-MAX_ITER, TOL = 500, 1e-4
+TRAIN_FRACTION, VAL_FRACTION, TARGET_RECALL = 0.70, 0.15, 0.80
 
-def fit_model(event, transformed, labels, parts):
-    """Ajusta parámetros fijos y permite evaluar el modelo aunque no converja."""
-    train_labels = labels[event].iloc[parts["train"]].to_numpy()
-    params = FIXED_HYPERPARAMETERS[event]
-    print(f"[fit] {event}; C={params['C']:g}; l1_ratio={params['l1_ratio']:g}; max_iter={MAX_ITER}; parámetros fijos", flush=True)
-    model, details = train_event(
-        transformed["train"], train_labels, params["C"], params["l1_ratio"],
-        RANDOM_STATE, MAX_ITER, TOL,
-    )
-    print(f"  iteraciones ejecutadas={details['iterations']}", flush=True)
-    return model, details
+
+def fit_model(event, transformed, labels, parts, config):
+    """Un único entrenamiento incremental del evento con historial por época."""
+    print(f"[fit] {event}; configuración global={config}", flush=True)
+    actual = {name: labels[event].iloc[rows].to_numpy() for name, rows in parts.items()}
+    model, details, history = train_event(transformed, actual, config)
+    print(f"  épocas={details['iterations']}; motivo de parada={details['stop_reason']}", flush=True)
+    return model, details, history
 
 
 def print_summary(event, results, threshold):
-    print(f"\n[result] {event}; umbral={threshold:.6f}", flush=True)
+    def number(value):
+        return "no calculable" if value is None else f"{value:.4f}"
 
-    parameters = results["parameters"]
-    print(
-        f"  Hiperparámetros fijos: "
-        f"C={parameters['C']:g}; l1_ratio={parameters['l1_ratio']:g}",
-        flush=True,
-    )
-    
-    for name in ("train", "val", "test"):
+    columns = [(
+        "Métrica", "Observaciones", "ROC-AUC", "AP", "Brier", "Log loss", "Precisión",
+        "Sensibilidad", "F1", "Exactitud", "Exactitud (mayoritaria)",
+    )]
+    for name, label in (
+        ("train", "Entrenamiento"), ("val", "Validación"), ("test", "Prueba completa"),
+    ):
         scores = results[name]
         decision = scores["threshold_recall"]
-        print(
-            f"  {name}: AP={scores['average_precision']:.4f}; Brier={scores['brier']:.4f}; "
-            f"precisión={decision['precision']:.3%}; sensibilidad={decision['recall']:.3%}; "
-            f"F1={decision['f1']:.4f}; accuracy={decision['accuracy']:.3%}", flush=True,
-        )
+        columns.append((
+            label, f"{scores['n']:,}", number(scores["roc_auc"]), number(scores["average_precision"]),
+            number(scores["brier"]), number(scores["log_loss"]),
+            number(decision["precision"]), number(decision["recall"]),
+            number(decision["f1"]), number(decision["accuracy"]),
+            number(scores["accuracy_majority"]),
+        ))
+
+    widths = [max(len(cell) for cell in column) for column in columns]
+    border = "+-" + "-+-".join("-" * width for width in widths) + "-+"
+    lines = [f"\n[result] {event}", f"Umbral elegido en validación: {threshold:.6f}", border]
+    for index, row in enumerate(zip(*columns)):
+        cells = [cell.ljust(widths[0]) if col == 0 else cell.rjust(widths[col]) for col, cell in enumerate(row)]
+        lines.append("| " + " | ".join(cells) + " |")
+        if index == 0:
+            lines.append(border)
+    lines.extend((border, ""))
+    print("\n".join(lines), flush=True)
 
 
-def run(input_path=INPUT_PATH):
-    # Cargar y dividir por cuantiles sin excluir intervalos entre conjuntos.
+def _difference(first, second):
+    return None if first is None or second is None else float(first - second)
+
+
+def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
+    config = dict(LOGISTIC_CONFIG if config is None else config)
+    output_dir = Path(output_dir)
+    images_dir, models_dir = output_dir / "img", output_dir / "models"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    models_dir.mkdir(parents=True, exist_ok=True)
     sessions = load_sessions(input_path)
     labels = get_labels(sessions)
     parts, split = split_by_time(sessions["inicio"], TRAIN_FRACTION, VAL_FRACTION)
-    for event in EVENTS:
-        for name, rows in parts.items():
-            if labels[event].iloc[rows].nunique() != 2:
-                raise ValueError(f"{event}: {name} no contiene ambas clases.")
-
-    # Preparar: historial anterior a cada sesión e imputación/escala solo de train.
-    print("[features] Construyendo historial en memoria", flush=True)
+    # Un resultado que todavía no terminó al corte no puede entrenar ni elegir umbrales.
+    completion = sessions["inicio"] + pd.to_timedelta(sessions["duracion_seg"], unit="s")
+    split["unavailable_labels_purged"] = {}
+    for name, boundary in (("train", split["train_end"]), ("val", split["val_end"])):
+        rows = parts[name]
+        available = completion.iloc[rows].lt(pd.Timestamp(boundary)).to_numpy()
+        split["unavailable_labels_purged"][name] = int((~available).sum())
+        parts[name] = rows[available]
+        print(f"[split] {name}: {len(parts[name]):,} etiquetas disponibles; {int((~available).sum())} aún sin terminar al corte", flush=True)
+    split["counts"] = {name: len(rows) for name, rows in parts.items()}
+    print("[features] Construyendo historial disponible antes de cada sesión", flush=True)
     X = build_features(sessions)
-    
-    cows = sessions["id_vaca"]
-    preprocessor = CowPreprocessor().fit(X.iloc[parts["train"]], cows.iloc[parts["train"]])
-    transformed = {name: preprocessor.transform(X.iloc[rows], cows.iloc[rows]) for name, rows in parts.items()}
-    print(f"[features] {X.shape[1]} predictores; {transformed['train'].shape[1]} columnas con indicadores", flush=True)
-    
-    if preprocessor.empty_columns:
-        print(f"[imputation] Sin datos en train; respaldo 0: {preprocessor.empty_columns}", flush=True)
-
-    artifacts = MODULE_DIR / "artifacts"
-    artifacts.mkdir(parents=True, exist_ok=True)
+    cows, times, blocks = sessions["id_vaca"], sessions["inicio"], sessions["bloque_historial"]
+    train = parts["train"]
+    preprocessor = CowPreprocessor().fit(X.iloc[train], cows.iloc[train], times.iloc[train], blocks.iloc[train])
+    # Las medianas históricas avanzan con datos pasados, sin reajustar respaldo ni escala.
+    matrix = preprocessor.transform(X, cows, times, blocks, history=(X, cows, times, blocks))
+    transformed = {name: matrix[rows] for name, rows in parts.items()}
+    print(f"[features] {X.shape[1]} predictores; {matrix.shape[1]} columnas con indicadores", flush=True)
+    test_rows = parts["test"]
+    first_seen = sessions.groupby("id_vaca")["inicio"].min()
+    new_cows = first_seen.index[first_seen >= pd.Timestamp(split["test_start"])].tolist()
+    new_mask = cows.iloc[test_rows].isin(new_cows).to_numpy()
+    known_mask = ~new_mask
+    known_count = cows.iloc[test_rows].iloc[known_mask].nunique()
+    metrics = {
+        "status": "fitting", "split": split, "logistic_config": config,
+        "new_cows": {"n_cows": len(new_cows), "n_sessions": int(new_mask.sum())},
+        "known_cows": {"n_cows": int(known_count), "n_sessions": int(known_mask.sum())},
+    }
     models, thresholds, predictions = {}, {}, []
-    metrics = {"split": split}
-
-    # Entrenar con parámetros fijos; validación ajusta el umbral y test solo evalúa.
     for event in EVENTS:
-        model, parameters = fit_model(event, transformed, labels, parts)
-        
+        model, parameters, history = fit_model(event, transformed, labels, parts, config)
+        if not parameters["converged"]:
+            metrics["status"] = "incomplete_convergence"
+            metrics[event] = {"parameters": parameters}
+            raise RuntimeError(f"{event} agotó max_iter sin cumplir el criterio de parada de train. Ajusta LOGISTIC_CONFIG; no se publica el modelo.")
         models[event] = model
         probabilities = {name: model.predict_proba(data)[:, 1] for name, data in transformed.items()}
         threshold = choose_threshold(labels[event].iloc[parts["val"]], probabilities["val"], TARGET_RECALL)
         thresholds[event] = threshold
-        scores = {"threshold_recall_val": threshold, "parameters": parameters}
-        
+        scores = {"threshold_recall_val": threshold, "parameters": parameters, "learning_curve": history}
         for name, rows in parts.items():
-            probability = probabilities[name]
-            scores[name] = evaluate(labels[event].iloc[rows], probability, threshold)
-            
-            if name == "test":
-                frame = pd.DataFrame({
-                    "event": event, "actual": labels[event].iloc[rows].to_numpy(),
-                    "probability": probability,
-                })
-                
-                explanations = explain(model, preprocessor, transformed[name], X.iloc[rows].reset_index(drop=True))
-                scores[name]["explanations"] = explanation_coverage(explanations, probability, threshold)
-                predictions.append(frame)
-        
-        # Diagnóstico del ajuste fijo; test nunca elige el modelo ni la iteración.
-        print(f"[learning] {event}; reconstruyendo curvas por iteraciones del modelo fijo", flush=True)
-        actual = {name: labels[event].iloc[rows].to_numpy() for name, rows in parts.items()}
-        scores["learning_curve"] = training_curve(model, transformed, actual).to_dict("records")
+            scores[name] = evaluate(labels[event].iloc[rows], probabilities[name], threshold)
+        scores["new_cows"] = evaluate(labels[event].iloc[test_rows].to_numpy()[new_mask], probabilities["test"][new_mask], threshold)
+        scores["known_cows"] = evaluate(labels[event].iloc[test_rows].to_numpy()[known_mask], probabilities["test"][known_mask], threshold)
+        scores["new_cows_difference_from_test"] = {
+            key: _difference(scores["new_cows"][key], scores["test"][key])
+            for key in ("prevalence", "roc_auc", "average_precision", "brier", "log_loss")
+        }
+        scores["new_cows_difference_from_test"].update({
+            key: _difference(scores["new_cows"]["threshold_recall"][key], scores["test"]["threshold_recall"][key])
+            for key in ("accuracy", "precision", "recall", "f1")
+        })
+        scores["generalization_difference"] = {
+            f"{later}_minus_{earlier}": {
+                key: _difference(scores[later][key], scores[earlier][key])
+                for key in ("average_precision", "roc_auc", "brier", "log_loss")
+            }
+            for earlier, later in (("train", "val"), ("train", "test"), ("val", "test"))
+        }
+        frame = sessions.iloc[test_rows][["id_vaca", "inicio"]].reset_index(drop=True)
+        frame["event"] = event
+        frame["actual"] = labels[event].iloc[test_rows].to_numpy()
+        frame["probability"] = probabilities["test"]
+        frame["threshold"] = threshold
+        frame["prediction"] = (frame["probability"] >= threshold).astype(int)
+        alert_positions = np.flatnonzero(frame["prediction"])
+        explanation = explain(model, preprocessor, transformed["test"][alert_positions], X.iloc[test_rows[alert_positions]].reset_index(drop=True))
+        # Solo las alertas reciben factores; los datos se conservan en memoria.
+        explanation.index = alert_positions
+        frame = frame.join(explanation)
+        for column in [c for c in explanation if c.startswith(("factor_", "valor_", "direccion_"))]:
+            frame[column] = frame[column].fillna("")
+        scores["test"]["explanations"] = explanation_coverage(frame, frame["probability"], threshold)
+        predictions.append(frame)
         metrics[event] = scores
         print_summary(event, scores, threshold)
+        auc_gap = _difference(scores["train"]["roc_auc"], scores["test"]["roc_auc"])
+        print(f"  Diferencia ROC-AUC (train - test): {'no calculable' if auc_gap is None else f'{auc_gap:.4f}'}", flush=True)
 
-    anomaly_test = metrics["alguna_anomalia"]["test"]
+    anomaly = metrics["alguna_anomalia"]["test"]
     metrics["business_criteria"] = {
-        "anomaly_recall_at_least_80_percent": anomaly_test["threshold_recall"]["recall"] >= TARGET_RECALL,
-        "anomaly_accuracy_at_least_80_percent": anomaly_test["threshold_recall"]["accuracy"] >= 0.80,
-        "three_factors_coverage_at_least_80_percent": (anomaly_test["explanations"]["coverage"] or 0) >= 0.80,
-        "note": "Los factores son asociaciones del modelo, no causas demostradas.",
+        "anomaly_recall_at_least_80_percent": (anomaly["threshold_recall"]["recall"] or 0) >= TARGET_RECALL,
+        "anomaly_accuracy_at_least_80_percent": anomaly["threshold_recall"]["accuracy"] >= 0.80,
+        "three_factors_coverage_at_least_80_percent": (anomaly["explanations"]["coverage"] or 0) >= 0.80,
+        "note": "Factores predictivos asociados; no son causas demostradas ni validación del socio formador.",
     }
-    print("\n[criterios]", metrics["business_criteria"], flush=True)
-
-    # Guardar un único paquete: contiene los mismos modelos que se evaluaron.
+    coefficient_data = coefficient_table(models, preprocessor)
+    prediction_data = pd.concat(predictions, ignore_index=True)
+    prediction_data["probability_alguna_anomalia"] = np.tile(predictions[-1]["probability"].to_numpy(), len(EVENTS))
     bundle = {
-        "preprocessor": preprocessor, "models": models, "thresholds": thresholds,
+        "preprocessor": preprocessor,
+        "models": models, "thresholds": thresholds, "logistic_config": config,
+        "input_columns": list(X.columns), "transformed_columns": preprocessor.transformed_names,
         "machine_columns": sorted(c for c in X if c.startswith("maquina_")),
-        "hyperparameters": {event: metrics[event]["parameters"] for event in EVENTS},
+        "split": split,
     }
-    joblib.dump(bundle, artifacts / "model.joblib", compress=3)
-    save_plots(
-        metrics, pd.concat(predictions, ignore_index=True),
-        coefficient_table(models, preprocessor),
-    )
-    print(f"\n[done] Modelo en {artifacts / 'model.joblib'}", flush=True)
-    
+    joblib.dump(bundle, models_dir / "model.joblib", compress=3)
+    save_plots(metrics, prediction_data, coefficient_data, images_dir)
+    metrics["status"] = "evaluation_complete"
+    print(f"[done] Gráficas en {images_dir}; modelos en {models_dir}", flush=True)
     return metrics
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, default=INPUT_PATH, help="Dataset integrado; no se modifica.")
-    args = parser.parse_args()
-    
-    run(args.input)
+    run()

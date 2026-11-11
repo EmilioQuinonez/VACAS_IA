@@ -1,4 +1,4 @@
-"""Datos, atributos causales y partición cronológica; no modifica el CSV original."""
+"""Datos e historial disponible antes de cada sesión; no modifica el CSV original."""
 
 import numpy as np
 import pandas as pd
@@ -30,13 +30,12 @@ def load_sessions(path, labeled=True):
         frame = frame.loc[keep].copy()
     frame = frame.reset_index(drop=True)
     
-    if labeled:
-        # Valida las etiquetas antes de construir atributos o usar el historial.
-        get_labels(frame)
     return frame
 
 def get_labels(sessions):
     labels = sessions[[*EVENTS[:3], "successful_milking_event"]]
+    if not labels.isin([0, 1]).all().all():
+        raise ValueError("Las cuatro etiquetas originales deben ser binarias y sin nulos.")
     anomaly = 1 - labels["successful_milking_event"]
     
     return labels[list(EVENTS[:3])].assign(alguna_anomalia=anomaly).astype("int8")
@@ -71,13 +70,16 @@ def split_by_time(start, train_fraction=0.70, val_fraction=0.15):
 
 def _source_values(history):
     values = history[["id_vaca", "inicio", "bloque_historial"]].copy()
+    duration = pd.to_numeric(history["duracion_seg"], errors="raise")
+    values["disponible"] = history["inicio"] + pd.to_timedelta(duration, unit="s")
     for event, key in zip(EVENTS[:3], EVENT_KEYS):
         values[f"{key}_previo"] = history[event]
     
     for base in ("mdi_faltante", "estado_mdi_sin_dato"):
         values[f"{base}_previo"] = history[base]
     
-    values["mdi_previo"] = history["estado_mdi"].mask(history["estado_mdi_sin_dato"].eq(1))
+    mdi_missing = history[["mdi_faltante", "estado_mdi_sin_dato"]].eq(1).any(axis=1)
+    values["mdi_previo"] = history["estado_mdi"].mask(mdi_missing)
     values["produccion_previa"] = history["main_produccion_kg"]
     inactive = history[[f"cuarto_inactivo_{q}" for q in QUARTERS]].eq(1)
     values["cuarto_inactivo_previo"] = inactive.any(axis=1).astype(float)
@@ -97,7 +99,6 @@ def _source_values(history):
         values[f"blood_diff_{q}"] = differences[f"sangre_ppm_{q}"]
     
     values["box_time_to_yield_ratio"] = history["duracion_seg"] / 60 / history["main_produccion_kg"].where(history["main_produccion_kg"].gt(0))
-    values["temperatura_previa"] = history["t_sesion"]
     values["cuartos_patada"] = history[[f"patada_{q}" for q in QUARTERS]].eq(1).sum(axis=1)
     values["con_sangre"] = blood.max(axis=1).gt(0).astype(float)
     
@@ -106,7 +107,14 @@ def _source_values(history):
 def _previous(sessions, values):
     left = sessions[["id_vaca", "bloque_historial", "inicio"]].copy()
     left["_position"] = np.arange(len(left))
+    # Empates de disponibilidad: el rezago no elige una fila arbitrariamente.
+    # Los indicadores usan any y las mediciones continuas la mediana del grupo.
     right = values.drop(columns=["cuartos_patada", "con_sangre"])
+    keys = ["id_vaca", "bloque_historial", "disponible"]
+    flags = binary_features(right.drop(columns=[*keys, "inicio"]).columns)
+    aggregations = {c: ("max" if c in flags else "median") for c in right if c not in keys}
+    right = right.groupby(keys, as_index=False).agg(aggregations)
+    right = right.drop(columns="inicio").rename(columns={"disponible": "inicio"})
 
     # Selecciona la información anterior usando su fecha como referencia
     merged = pd.merge_asof(
@@ -132,8 +140,9 @@ def _cow_rates(sessions, values, X):
         source = source_groups.get(key)
         if source is None or source.empty:
             continue
-        daily = source.set_index("inicio")[[*event_columns, "cuartos_patada"]].copy()
+        daily = source.set_index("disponible")[[*event_columns, "cuartos_patada"]].copy()
         daily["count"] = 1.0
+        daily = daily.groupby(level=0).sum().sort_index()
         times = pd.DatetimeIndex(group["inicio"])
         grid = daily.index.union(times).unique().sort_values()
         daily = daily.reindex(grid, fill_value=0)
@@ -145,8 +154,15 @@ def _cow_rates(sessions, values, X):
         sums7 = daily[["cuartos_patada", "count"]].rolling("7D", closed="left", min_periods=1).sum()
         X.loc[group.index, "kicks_ratio_7d"] = (sums7["cuartos_patada"] / sums7["count"].replace(0, np.nan)).reindex(times).to_numpy()
 
-def _herd_rates(sessions, history, X):
-    days = history["inicio"].dt.normalize()
+def _herd_rates(sessions, history, values, X):
+    if history.empty:
+        for key in EVENT_KEYS:
+            X[f"{key}_hato_7d"] = np.nan
+        X["vacas_activas_7d"] = 0.0
+        return
+    
+    # Solo días completos de resultados ya disponibles.
+    days = values["disponible"].dt.normalize()
     query_days = sessions["inicio"].dt.normalize()
 
     calendar = pd.date_range(
@@ -172,8 +188,6 @@ def _herd_rates(sessions, history, X):
 def _machine_rates(sessions, history, values, machines, X):
     def machine_id(frame):
         flags = frame[machines]
-        if not flags.isin([0, 1]).all().all() or flags.sum(axis=1).gt(1).any():
-            raise ValueError("Dummies de máquina inválidas.")
         return flags.astype(int).astype(str).agg("|".join, axis=1)
 
     source_machine, query_machine = machine_id(history), machine_id(sessions)
@@ -183,7 +197,7 @@ def _machine_rates(sessions, history, values, machines, X):
         if len(source_rows) == 0:
             X.loc[rows, "sangre_tasa_maquina_30d"] = 0.0
             continue
-        source = values.loc[source_rows].set_index("inicio")[["con_sangre"]].assign(count=1.0).groupby(level=0).sum()
+        source = values.loc[source_rows].set_index("disponible")[["con_sangre"]].assign(count=1.0).groupby(level=0).sum()
         times = pd.DatetimeIndex(sessions.loc[rows, "inicio"])
         grid = source.index.union(times).unique().sort_values()
         sums = source.reindex(grid, fill_value=0).rolling("30D", closed="left", min_periods=1).sum()
@@ -192,13 +206,15 @@ def _machine_rates(sessions, history, values, machines, X):
     X["sangre_pico_maquina"] = X["sangre_tasa_maquina_30d"].gt(0.15).astype(float)
 
 def _calendar(sessions, history, X):
+    """Aproximaciones desde primera observación; no son fechas de parto/alta reales."""
     start = sessions["inicio"]
     block_start = history.groupby(["id_vaca", "bloque_historial"])["inicio"].min()
     keys = pd.MultiIndex.from_frame(sessions[["id_vaca", "bloque_historial"]])
     first = pd.Series(block_start.reindex(keys).to_numpy(), index=sessions.index)
     
-    herd_start = sessions["id_vaca"].map(history.groupby("id_vaca")["inicio"].min())
+    herd_start = pd.Series(history.groupby("id_vaca")["inicio"].min().reindex(sessions["id_vaca"]).to_numpy(), index=sessions.index)
     for name, first_seen, bins in (("dias_en_leche", first, MILK_BINS), ("dias_en_hato", herd_start, HERD_BINS)):
+        first_seen = first_seen.where(first_seen.le(start), start)
         elapsed = ((start - first_seen).dt.total_seconds() / 86400).clip(lower=0).fillna(0)
         codes = pd.cut(elapsed, bins=bins, right=False, labels=False)
         for category in range(1, len(bins) - 1):
@@ -211,21 +227,10 @@ def _calendar(sessions, history, X):
     X["es_domingo"] = start.dt.dayofweek.eq(6).astype(float)
 
 def build_features(sessions, history=None, machine_columns=None):
-    """Construye X. En inferencia solo history aporta mediciones y etiquetas, nunca las consultas."""
+    """Usa contexto del ordeño actual y resultados de ordeños anteriores del historial."""
     sessions = sessions.copy().reset_index(drop=True)
     history = sessions.copy() if history is None else history.copy().reset_index(drop=True)
-    machines = machine_columns or sorted(c for c in sessions if c.startswith("maquina_"))
-    
-    for name, frame in (("sesiones", sessions), ("historial", history)):
-        blocks = pd.to_numeric(frame["bloque_historial"], errors="raise")
-        if blocks.isna().any() or not np.isfinite(blocks).all() or blocks.mod(1).ne(0).any():
-            raise ValueError(f"bloque_historial debe contener enteros sin nulos en {name}.")
-        
-        frame["bloque_historial"] = blocks.astype("int64")
-        unknown = [c for c in frame if c.startswith("maquina_") and c not in machines and frame[c].ne(0).any()]
-        if unknown:
-            raise ValueError(f"Máquinas fuera del esquema guardado en {name}: {unknown}")
-    
+    machines = sorted(c for c in sessions if c.startswith("maquina_")) if machine_columns is None else list(machine_columns)
     X = sessions[[*CONTEXT, *machines]].astype(float).copy()
     X["intervalo_horas"] = X["intervalo_horas"].mask(X["intervalo_horas_sin_dato"].eq(1))
 
@@ -233,8 +238,7 @@ def build_features(sessions, history=None, machine_columns=None):
     values = _source_values(history)
     previous = _previous(sessions, values)
 
-    # La temperatura previa se reserva para construir flies_proxy.
-    X = pd.concat([X, previous.drop(columns="temperatura_previa")], axis=1)
+    X = pd.concat([X, previous], axis=1)
 
     # Prepara columnas para los valores historicos
     for column in [*[f"{key}_vaca_30d" for key in EVENT_KEYS], "kicks_ratio_7d"]:
@@ -242,20 +246,16 @@ def build_features(sessions, history=None, machine_columns=None):
 
     # Agrega tasas históricas y variables de calendario.
     _cow_rates(sessions, values, X)
-    _herd_rates(sessions, history, X)
+    _herd_rates(sessions, history, values, X)
     _machine_rates(sessions, history, values, machines, X)
     _calendar(sessions, history, X)
     afternoon = sessions["inicio"].dt.hour.between(13, 17).astype(float)
     
-    X["flies_proxy"] = afternoon * previous["temperatura_previa"] * X["kicks_ratio_7d"]
+    # El clima ya está integrado en la fila del ordeño actual; no se desfasa.
+    X["flies_proxy"] = afternoon * sessions["t_sesion"] * X["kicks_ratio_7d"]
     
     for column in ("produccion_previa", "box_time_to_yield_ratio"):
-        if X[column].dropna().lt(0).any():
-            raise ValueError(f"{column} contiene valores negativos.")
         X[column] = np.log1p(X[column])
-    
-    if np.isinf(X.to_numpy(dtype=float)).any():
-        raise ValueError("Los predictores contienen infinitos.")
     
     return X.astype(float)
 
@@ -269,7 +269,7 @@ def feature_group(column):
     }
     if column in quality_groups:
         return quality_groups[column]
-    for name in ("dias_en_leche", "dias_en_hato", "mes", "hora"):
+    for name in ("dias_en_leche", "dias_en_hato", "mes", "hora", "maquina"):
         if column.startswith(name + "_"):
             return name
     return column
