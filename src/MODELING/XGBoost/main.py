@@ -6,11 +6,12 @@ agrega solo si aparece sobreajuste).
 Por cada una de las 4 salidas, con un corte cronológico 70/15/15 (las sesiones más antiguas a
 train, las más recientes a test): el modelo se entrena una sola vez con train, elige en val el
 umbral de recall y se evalúa en train, val y test.
-Los modelos van a MODELS_DIR (se versionan); metrics.json y el log, a OUTPUT_DIR (fuera de Git).
-Las gráficas se generan aparte con plot_results.py, a partir de lo que guarda este script.
+Los modelos van a MODELS_DIR (se versionan); metrics.json y las curvas de aprendizaje (log loss de
+train y val por árbol), a OUTPUT_DIR (fuera de Git). Las gráficas se generan aparte con
+plot_results.py, a partir de lo que guarda este script.
 
-Uso, desde la raíz del repo (con -u el log se escribe al momento, para el panel /entrenamiento):
-    python -u src/MODELING/XGBoost/main.py >| Data/modelos/xgboost_base/xgboost_baseline.log 2>&1
+Uso, desde la raíz del repo:
+    python src/MODELING/XGBoost/main.py
 """
 
 import json
@@ -24,13 +25,13 @@ from xgboost_model import train_event
 ROOT = Path(__file__).resolve().parents[3]
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 OUTPUT_DIR = ROOT / "Data" / "modelos" / "xgboost_base"
-LOG_PATH = OUTPUT_DIR / "xgboost_baseline.log"
+CURVES_PATH = OUTPUT_DIR / "curvas_aprendizaje.json"
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 
 TRAIN_FRACTION = 0.70  # train: el 70 % más antiguo de las sesiones
 VAL_FRACTION = 0.15  # val: el 15 % siguiente; test: el 15 % más reciente
 TARGET_RECALL = 0.80  # Criterio de negocio: detectar al menos 80 % de las anomalías.
-N_TREES = 100  # Valor por defecto de XGBoost; fijo para numerar las épocas del log.
+N_TREES = 100  # Valor por defecto de XGBoost.
 RANDOM_STATE = 42
 
 
@@ -54,13 +55,15 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     MODELS_DIR.mkdir(exist_ok=True)
 
-    fit = partial(train_event, n_trees=N_TREES, total_epochs=N_TREES * len(EVENTS), random_state=RANDOM_STATE)
+    fit = partial(train_event, n_trees=N_TREES, random_state=RANDOM_STATE)
 
-    results = {}
-    for number, event in enumerate(EVENTS):
+    results, curves = {}, {}
+    for event in EVENTS:
         y = labels[event]
         print(f"\n[training] {event}: train, validating on val")
-        model = fit(X, y, idx["train"], idx["val"], number * N_TREES)
+        model = fit(X, y, idx["train"], idx["val"])
+        log = model.evals_result()
+        curves[event] = {"train": log["validation_0"]["logloss"], "val": log["validation_1"]["logloss"]}
         threshold = choose_threshold(model, X, y, idx["val"], TARGET_RECALL)
         results[event] = {"threshold_recall_val": threshold}
         results[event].update(evaluate(model, X, y, idx, threshold))
@@ -69,6 +72,8 @@ def main():
 
     with open(OUTPUT_DIR / "metrics.json", "w", encoding="utf-8") as file:
         json.dump(results, file, indent=2)
+    with open(CURVES_PATH, "w", encoding="utf-8") as file:
+        json.dump(curves, file)
     print(f"\nModels in {MODELS_DIR.relative_to(ROOT)}; metrics in {OUTPUT_DIR.relative_to(ROOT)}")
 
 

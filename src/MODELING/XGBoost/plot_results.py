@@ -1,6 +1,6 @@
 """
 Genera las gráficas del XGBoost base a partir de lo que guardó main.py (modelos,
-metrics.json y el log), sin reentrenar. Solo cifras agregadas, sin datos por vaca.
+metrics.json y las curvas de aprendizaje), sin reentrenar. Solo cifras agregadas, sin datos por vaca.
 
 Las figuras van a FIGURES_DIR (src/MODELING/XGBoost/img), que sí se versiona.
 
@@ -9,7 +9,6 @@ Uso, desde la raíz del repo y después de main.py:
 """
 
 import json
-import re
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -19,27 +18,19 @@ from xgboost import XGBClassifier
 
 import plots
 from dataset import EVENT_KEYS, EVENTS, build_features, load_sessions, split_by_time
-from main import INPUT_PATH, LOG_PATH, MODELS_DIR, N_TREES, OUTPUT_DIR, TRAIN_FRACTION, VAL_FRACTION
+from main import CURVES_PATH, INPUT_PATH, MODELS_DIR, N_TREES, OUTPUT_DIR, TRAIN_FRACTION, VAL_FRACTION
 
 FIGURES_DIR = Path(__file__).resolve().parent / "img"
 
 
-def read_log(path):
-    """Log loss de train y val por época de cada evento."""
-    rows, epoch = [], None
-    for line in path.read_text(encoding="utf-8").splitlines():
-        header = re.match(r"^Epoch (\d+)/\d+$", line)
-        if header:
-            epoch = int(header.group(1))
-        elif line.startswith("1/1 - "):
-            metrics = dict(re.findall(r"(\w+): (-?[\d.]+)", line))
-            rows.append({"epoch": epoch, "loss": float(metrics["loss"]),
-                         "val_loss": float(metrics.get("val_loss", "nan"))})
-    log = pd.DataFrame(rows)
-    log["event"] = (log["epoch"] - 1) // N_TREES
-    log["tree"] = (log["epoch"] - 1) % N_TREES + 1
+def read_curves(path):
+    """Log loss de train y val por árbol de cada evento (en el orden de EVENTS), como lo guarda main.py."""
+    curves = json.loads(path.read_text(encoding="utf-8"))
+    frames = [pd.DataFrame({"event": number, "tree": np.arange(1, len(curves[event]["train"]) + 1),
+                            "loss": curves[event]["train"], "val_loss": curves[event]["val"]})
+              for number, event in enumerate(EVENTS)]
 
-    return log
+    return pd.concat(frames, ignore_index=True)
 
 
 def load_test():
@@ -95,7 +86,7 @@ def main():
     metrics = json.loads((OUTPUT_DIR / "metrics.json").read_text(encoding="utf-8"))
 
     X, y, start, models, probabilities, val_label, groups, rates = load_test()
-    log = read_log(LOG_PATH)
+    log = read_curves(CURVES_PATH)
     save(plots.learning_curves(log, N_TREES, val_label), "curvas_aprendizaje.png")
     test_period = f"{start.min():%d/%m/%Y}–{start.max():%d/%m/%Y}"
     save(plots.roc_pr(y, probabilities, metrics, test_period), "roc_pr_test.png")
