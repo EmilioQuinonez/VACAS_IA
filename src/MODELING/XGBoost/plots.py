@@ -12,10 +12,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import LinearSegmentedColormap
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import (
-    average_precision_score, brier_score_loss, precision_recall_curve, precision_score,
-    recall_score, roc_auc_score, roc_curve,
+    average_precision_score, brier_score_loss, confusion_matrix, precision_recall_curve,
+    precision_score, recall_score, roc_auc_score, roc_curve,
 )
 
 from dataset import EVENT_KEYS, EVENTS
@@ -30,6 +31,7 @@ SERIES = {"train": "#2a78d6", "val": "#eb6834", "cows": "#1baf7a"}
 COW_GROUPS = {"Conocida": SERIES["train"], "Solo en val": SERIES["cows"], "Nueva": SERIES["val"]}
 DAY_BINS = ["0–30", "31–90", "> 90"]  # días en el hato; 0–7 tiene muy pocas sesiones y va en 0–30
 INK, MUTED, GRID, SURFACE, REFERENCE = "#0b0b0b", "#52514e", "#e6e5e0", "#fcfcfb", "#9a9890"
+SEQUENTIAL = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]  # rampa azul de 100 a 700 (matriz de confusión)
 
 plt.rcParams.update({
     "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
@@ -363,4 +365,33 @@ def probabilities_by_cow_group(y, probabilities, groups, metrics):
     axes[1, 0].set_ylabel("Densidad")
     fig.suptitle("Vacas conocidas frente a no vistas en train: calibración (arriba) y probabilidad de los "
                  "ordeños con evento (abajo)", x=0.01, ha="left", fontsize=12)
+    return fig
+
+
+def confusion_matrices(y, probabilities, metrics):
+    """12. Matriz de confusión en test con el umbral elegido en val; el color es el % de cada fila."""
+    cmap = LinearSegmentedColormap.from_list("azul", [SURFACE, *SEQUENTIAL])
+    rows, columns = ["Sin evento", "Con evento"], ["Sin alerta", "Alerta"]
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.2))
+    for i, event in enumerate(EVENTS):
+        actual, ax = y[event].to_numpy(), axes[i]
+        threshold = metrics[event]["threshold_recall_val"]
+        matrix = confusion_matrix(actual, probabilities[i] >= threshold, labels=[0, 1])
+        share = matrix / matrix.sum(axis=1, keepdims=True)
+        ax.pcolormesh(share, cmap=cmap, vmin=0, vmax=1, edgecolors=SURFACE, linewidth=2)
+        for row in range(2):
+            for col in range(2):
+                color = SURFACE if share[row, col] > 0.55 else INK
+                ax.text(col + 0.5, row + 0.5, f"{matrix[row, col]:,}\n{share[row, col]:.0%} de la fila",
+                        ha="center", va="center", fontsize=10, color=color)
+        ax.set_xticks([0.5, 1.5], columns)
+        ax.set_yticks([0.5, 1.5], rows)
+        ax.invert_yaxis()
+        ax.grid(False)
+        ax.tick_params(length=0)
+        ax.set_title(f"{EVENT_NAMES[i]} · umbral {threshold:.2f}", loc="left")
+        ax.set_xlabel("Predicción")
+    axes[0].set_ylabel("Clase real")
+    fig.suptitle("Matrices de confusión en test con el umbral elegido en val "
+                 "(la diagonal son los aciertos)", x=0.01, ha="left", fontsize=12)
     return fig

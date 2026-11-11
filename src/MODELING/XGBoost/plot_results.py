@@ -2,7 +2,7 @@
 Genera las gráficas del XGBoost base a partir de lo que guardó main.py (modelos finales,
 metrics.json y el log), sin reentrenar. Solo cifras agregadas, sin datos por vaca.
 
-Las figuras van a FIGURES_DIR, fuera de Git por ahora; para versionarlas basta con cambiar esa ruta.
+Las figuras van a FIGURES_DIR (src/MODELING/XGBoost/img), que sí se versiona.
 
 Uso, desde la raíz del repo y después de main.py:
     python src/MODELING/XGBoost/plot_results.py
@@ -10,6 +10,7 @@ Uso, desde la raíz del repo y después de main.py:
 
 import json
 import re
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,7 +21,7 @@ import plots
 from dataset import EVENTS, build_features, load_sessions, split_by_time
 from main import INPUT_PATH, LOG_PATH, N_TREES, OUTPUT_DIR, TRAIN_FRACTION, VAL_FRACTION
 
-FIGURES_DIR = OUTPUT_DIR / "graficas"
+FIGURES_DIR = Path(__file__).resolve().parent / "img"
 
 
 def read_log(path, fits_per_event, chrono_fits):
@@ -101,6 +102,7 @@ def main():
     save(plots.new_cow_ramp(y, probabilities, X["dias_en_hato"].to_numpy(), groups, metrics),
          "vacas_nuevas_arranque.png")
     save(plots.probabilities_by_cow_group(y, probabilities, groups, metrics), "vacas_nuevas_probabilidades.png")
+    save(plots.confusion_matrices(y, probabilities, metrics), "matrices_confusion_test.png")
     print(f"Figures in {FIGURES_DIR}")
 
 
