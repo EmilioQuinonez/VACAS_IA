@@ -1,6 +1,6 @@
 """
 Genera las gráficas del XGBoost base a partir de lo que guardó main.py (modelos,
-metrics.json y las curvas de aprendizaje), sin reentrenar. Solo cifras agregadas, sin datos por vaca.
+metrics.json y las curvas de aprendizaje, todo en models/), sin reentrenar. Solo cifras agregadas, sin datos por vaca.
 
 Las figuras van a FIGURES_DIR (src/MODELING/XGBoost/img), que sí se versiona.
 
@@ -18,7 +18,8 @@ from xgboost import XGBClassifier
 
 import plots
 from dataset import EVENT_KEYS, EVENTS, build_features, load_sessions, split_by_time
-from main import CURVES_PATH, INPUT_PATH, MODELS_DIR, N_TREES, OUTPUT_DIR, TRAIN_FRACTION, VAL_FRACTION
+from main import CURVES_PATH, INPUT_PATH, METRICS_PATH, MODELS_DIR, N_TREES, TRAIN_FRACTION, VAL_FRACTION
+from xgboost_model import PlattXGB
 
 FIGURES_DIR = Path(__file__).resolve().parent / "img"
 
@@ -33,9 +34,9 @@ def read_curves(path):
     return pd.concat(frames, ignore_index=True)
 
 
-def load_test():
+def load_test(metrics):
     """
-    Atributos, etiquetas, inicio y probabilidades de los modelos guardados en test; fechas de val y
+    Atributos, etiquetas, inicio y probabilidades calibradas de los modelos guardados en test; fechas de val y
     grupo de la vaca de cada sesión de test (Conocida si estuvo en train, Solo en val o Nueva) y
     tasa de cada salida de la vaca a 30 días.
     """
@@ -48,7 +49,8 @@ def load_test():
         model = XGBClassifier()
         model.load_model(MODELS_DIR / f"{event}.json")
         models.append(model)
-        probabilities.append(model.predict_proba(X.iloc[test])[:, 1])
+        calibrated = PlattXGB(model, **metrics[event]["platt"])
+        probabilities.append(calibrated.predict_proba(X.iloc[test])[:, 1])
 
     val_label = f"Val ({val_dates.min():%d/%m/%Y}–{val_dates.max():%d/%m/%Y})"
     cows = sessions["id_vaca"]
@@ -83,9 +85,9 @@ def save(fig, name):
 
 def main():
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    metrics = json.loads((OUTPUT_DIR / "metrics.json").read_text(encoding="utf-8"))
+    metrics = json.loads(METRICS_PATH.read_text(encoding="utf-8"))
 
-    X, y, start, models, probabilities, val_label, groups, rates = load_test()
+    X, y, start, models, probabilities, val_label, groups, rates = load_test(metrics)
     log = read_curves(CURVES_PATH)
     save(plots.learning_curves(log, N_TREES, val_label), "curvas_aprendizaje.png")
     test_period = f"{start.min():%d/%m/%Y}–{start.max():%d/%m/%Y}"

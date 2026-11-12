@@ -4,11 +4,12 @@ ordeño no fue exitoso), con los valores por defecto de la librería y sin regul
 agrega solo si aparece sobreajuste).
 
 Por cada una de las 4 salidas, con un corte cronológico 70/15/15 (las sesiones más antiguas a
-train, las más recientes a test): el modelo se entrena una sola vez con train, elige en val el
-umbral de recall y se evalúa en train, val y test.
-Los modelos van a MODELS_DIR (se versionan); metrics.json y las curvas de aprendizaje (log loss de
-train y val por árbol), a OUTPUT_DIR (fuera de Git). Las gráficas se generan aparte con
-plot_results.py, a partir de lo que guarda este script.
+train, las más recientes a test): el modelo se entrena una sola vez con train, se calibra en val
+(Platt, porque scale_pos_weight infla las probabilidades), elige en val el umbral de recall con
+las probabilidades calibradas y se evalúa en train, val y test.
+Todo va a MODELS_DIR, que se versiona: el XGBoost (.json), metrics.json (con los 2 coeficientes
+de Platt de cada salida) y las curvas de aprendizaje (log loss de train y val por árbol, sin
+calibrar). Las gráficas se generan aparte con plot_results.py, a partir de lo que guarda este script.
 
 Uso, desde la raíz del repo:
     python src/MODELING/XGBoost/main.py
@@ -20,13 +21,13 @@ from pathlib import Path
 
 from dataset import EVENTS, build_features, load_sessions, split_by_time
 from evaluation import choose_threshold, evaluate
-from xgboost_model import train_event
+from xgboost_model import calibrate, train_event
 
 ROOT = Path(__file__).resolve().parents[3]
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
-OUTPUT_DIR = ROOT / "Data" / "modelos" / "xgboost_base"
-CURVES_PATH = OUTPUT_DIR / "curvas_aprendizaje.json"
 MODELS_DIR = Path(__file__).resolve().parent / "models"
+METRICS_PATH = MODELS_DIR / "metrics.json"
+CURVES_PATH = MODELS_DIR / "curvas_aprendizaje.json"
 
 TRAIN_FRACTION = 0.70  # train: el 70 % más antiguo de las sesiones
 VAL_FRACTION = 0.15  # val: el 15 % siguiente; test: el 15 % más reciente
@@ -52,7 +53,6 @@ def main():
     sessions = load_sessions(INPUT_PATH)
     X, labels = build_features(sessions)
     idx = split_by_time(sessions["inicio"], TRAIN_FRACTION, VAL_FRACTION)
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     MODELS_DIR.mkdir(exist_ok=True)
 
     fit = partial(train_event, n_trees=N_TREES, random_state=RANDOM_STATE)
@@ -64,17 +64,19 @@ def main():
         model = fit(X, y, idx["train"], idx["val"])
         log = model.evals_result()
         curves[event] = {"train": log["validation_0"]["logloss"], "val": log["validation_1"]["logloss"]}
-        threshold = choose_threshold(model, X, y, idx["val"], TARGET_RECALL)
-        results[event] = {"threshold_recall_val": threshold}
-        results[event].update(evaluate(model, X, y, idx, threshold))
+        calibrated = calibrate(model, X, y, idx["val"])
+        threshold = choose_threshold(calibrated, X, y, idx["val"], TARGET_RECALL)
+        results[event] = {"threshold_recall_val": threshold,
+                          "platt": {"slope": calibrated.slope, "intercept": calibrated.intercept}}
+        results[event].update(evaluate(calibrated, X, y, idx, threshold))
         model.save_model(MODELS_DIR / f"{event}.json")
         print_summary(event, results[event], threshold)
 
-    with open(OUTPUT_DIR / "metrics.json", "w", encoding="utf-8") as file:
+    with open(METRICS_PATH, "w", encoding="utf-8") as file:
         json.dump(results, file, indent=2)
     with open(CURVES_PATH, "w", encoding="utf-8") as file:
         json.dump(curves, file)
-    print(f"\nModels in {MODELS_DIR.relative_to(ROOT)}; metrics in {OUTPUT_DIR.relative_to(ROOT)}")
+    print(f"\nModels, metrics and learning curves in {MODELS_DIR.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

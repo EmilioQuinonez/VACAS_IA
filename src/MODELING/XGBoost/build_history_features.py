@@ -30,6 +30,7 @@ HERD_DAYS = 7
 PREVIOUS = [
     *[f"{key}_previo" for key in EVENTS.values()],
     "mdi_previo", "conductividad_max_previa", "produccion_previa", "cuarto_inactivo_previo",
+    "mdi_faltante_previo", "estado_mdi_sin_dato_previo",
 ]
 NEW_COLUMNS = [
     "mes", "dia_semana", "hora", "dias_en_leche", "dias_en_hato", *PREVIOUS,
@@ -59,6 +60,8 @@ def add_previous_session(sessions, milkings, new):
     values = pd.DataFrame({
         "id_vaca": m["id_vaca"], "bloque_historial": m["bloque_historial"], "inicio": m["inicio"],
         "mdi_previo": m["estado_mdi"], "produccion_previa": m["main_produccion_kg"],
+        # Banderas de que el MDI de ese ordeño se imputó en la limpieza.
+        "mdi_faltante_previo": m["mdi_faltante"], "estado_mdi_sin_dato_previo": m["estado_mdi_sin_dato"],
     })
     for event, key in EVENTS.items():
         values[f"{key}_previo"] = m[event]

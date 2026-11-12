@@ -12,7 +12,7 @@ QUARTERS = ("di", "dd", "ti", "td")
 # Tabla de selección de datos del Doc, columna XGBoost.
 FEATURES = [
     "intervalo_horas", "intervalo_horas_sin_dato", "regreso_tras_periodo_seco", "estado_numero_de_ordeno",
-    "t_sesion", "thi_sesion", "horas_thi_alto_24h", "sangre_tasa_maquina_30d",
+    "maquina_7063e4b1", "maquina_86696b37", "t_sesion", "thi_sesion", "horas_thi_alto_24h", "sangre_tasa_maquina_30d",
     "fme_connection", "fme_milk_production", "fme_incomplete", "kicks_ratio_7d",
     *[f"blood_diff_{quarter}" for quarter in QUARTERS],
     "box_time_to_yield_ratio", "flies_proxy",
@@ -21,6 +21,7 @@ FEATURES = [
     *[f"{key}_vaca_30d" for key in EVENT_KEYS], *[f"{key}_hato_7d" for key in EVENT_KEYS],
     "vacas_activas_7d", *[f"{key}_previo" for key in EVENT_KEYS],
     "mdi_previo", "conductividad_max_previa", "produccion_previa", "cuarto_inactivo_previo",
+    "mdi_faltante_previo", "estado_mdi_sin_dato_previo",
 ]
 
 

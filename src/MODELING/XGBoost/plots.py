@@ -124,7 +124,7 @@ def calibration(y, probabilities, metrics):
         ax.set_ylim(0, 1)
     axes[0].set_ylabel("Frecuencia real del evento")
     axes[0].legend(loc="upper left")
-    fig.suptitle("Calibración en test: bajo la diagonal, el modelo sobrestima la probabilidad",
+    fig.suptitle("Calibración en test (Platt ajustado en val): bajo la diagonal, el modelo sobrestima",
                  x=0.01, ha="left", fontsize=12)
     return fig
 

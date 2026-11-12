@@ -1,5 +1,8 @@
-"""Clasificador XGBoost por evento."""
+"""Clasificador XGBoost por evento y su calibración."""
 
+import numpy as np
+from scipy.special import expit
+from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
 
@@ -21,3 +24,24 @@ def train_event(X, y, rows, val_rows=None, *, n_trees, random_state):
     )
 
     return model.fit(X_fit, y_fit, eval_set=eval_set, verbose=False)
+
+
+class PlattXGB:
+    """XGBoost con probabilidad calibrada: sigmoide(slope · log-odds del XGBoost + intercept)."""
+
+    def __init__(self, model, slope, intercept):
+        self.model, self.slope, self.intercept = model, slope, intercept
+
+    def predict_proba(self, X):
+        p = expit(self.slope * self.model.predict(X, output_margin=True) + self.intercept)
+        return np.column_stack([1 - p, p])
+
+
+def calibrate(model, X, y, rows):
+    """
+    Calibración de Platt ajustada en rows sobre los log-odds del XGBoost, sin reentrenarlo:
+    corrige la inflación de scale_pos_weight sin cambiar el orden de las probabilidades.
+    """
+    margin = model.predict(X.iloc[rows], output_margin=True).reshape(-1, 1)
+    platt = LogisticRegression(penalty=None).fit(margin, y.iloc[rows])
+    return PlattXGB(model, float(platt.coef_[0, 0]), float(platt.intercept_[0]))
