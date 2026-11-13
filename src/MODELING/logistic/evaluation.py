@@ -1,6 +1,10 @@
 """Selección con validación y evaluación de probabilidades y decisiones binarias."""
 
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
+from .dataset import EVENTS
 from sklearn.metrics import (
     accuracy_score, average_precision_score, brier_score_loss, confusion_matrix,
     f1_score, log_loss, precision_recall_curve, precision_recall_fscore_support, roc_auc_score,
@@ -66,3 +70,24 @@ def explanation_coverage(explanations, probability, threshold):
         "alerts": int(alerts.sum()), "alerts_with_three_factors": int((alerts & complete).sum()),
         "coverage": float(complete[alerts].mean()) if alerts.any() else None,
     }
+
+
+def save_metric_tables(metrics, output_dir):
+    """Guarda las métricas de cada evento y conjunto en archivos CSV."""
+    directory = Path(output_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    rows = (
+        ("Observaciones", "n", False), ("F1", "f1", True),
+        ("Sensibilidad", "recall", True), ("Precisión", "precision", True),
+        ("F1 (alertar siempre)", "f1_always_alert", False),
+        ("ROC-AUC", "roc_auc", False), ("AP", "average_precision", False),
+        ("Brier", "brier", False), ("Log loss", "log_loss", False),
+        ("Exactitud", "accuracy", True), ("Exactitud (mayoritaria)", "accuracy_majority", False),
+    )
+    for event in EVENTS:
+        table = {"Métrica": [label for label, _, _ in rows]}
+        for split, label in (("train", "Entrenamiento"), ("val", "Validación"), ("test", "Prueba completa")):
+            scores = metrics[event][split]
+            values = [(scores["threshold_recall"] if decision else scores)[key] for _, key, decision in rows]
+            table[label] = [str(values[0])] + [f"{value:.4f}" if value is not None else "" for value in values[1:]]
+        pd.DataFrame(table).to_csv(directory / f"{event}.csv", index=False, encoding="utf-8-sig")
