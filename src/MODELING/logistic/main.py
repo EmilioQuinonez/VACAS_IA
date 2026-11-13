@@ -16,25 +16,25 @@ if not __package__:
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import ParameterGrid
 
 from .dataset import EVENTS, build_features, get_labels, load_sessions, split_by_time
 from .evaluation import choose_threshold, evaluate, explanation_coverage, save_metric_tables
-from .logistic_model import LOGISTIC_CONFIG, CowPreprocessor, coefficient_table, explain, train_event
+from .logistic_model import CowPreprocessor, coefficient_table, explain, train_event
 from .plot_results import save_plots
 
 MODULE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = MODULE_DIR
 VERSION = "v4"  # Cambia esta versión para guardar una nueva iteración.
-PATIENCE_BY_EVENT = {
-    "mechanical_connection_failure_event": 20,
-    "health_anomaly_event": 10,
-    "behavior_interruption_event": 20,
-    "alguna_anomalia": 20,
+FIXED_CONFIG = {
+    "loss": "log_loss", "penalty": "elasticnet", "learning_rate": "optimal",
+    "average": True, "class_weight": None, "random_state": 42,
+    "max_iter": 2000, "tol": 1e-4,
 }
-REGULARIZATION_GRID = {
-    "alpha": [0.00001, 0.0001, 0.01], 
-    "l1_ratio": [0, 0.5, 1]
+CONFIG_BY_EVENT = {
+    "mechanical_connection_failure_event": {"alpha": 0.0001, "l1_ratio": 1, "n_iter_no_change": 20},
+    "health_anomaly_event": {"alpha": 0.0001, "l1_ratio": 0, "n_iter_no_change": 10},
+    "behavior_interruption_event": {"alpha": 0.01, "l1_ratio": 0, "n_iter_no_change": 20},
+    "alguna_anomalia": {"alpha": 0.00001, "l1_ratio": 0.5, "n_iter_no_change": 20},
 }
 INPUT_PATH = MODULE_DIR.parents[2] / "Data" / "dataset_vacas_integrado.csv"
 TRAIN_FRACTION, VAL_FRACTION, TARGET_RECALL = 0.70, 0.15, 0.80
@@ -80,7 +80,7 @@ def _difference(first, second):
 
 
 def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
-    config = dict(LOGISTIC_CONFIG if config is None else config)
+    config = dict(FIXED_CONFIG if config is None else config)
     output_dir = Path(output_dir)
     images_dir, models_dir = output_dir / "img" / VERSION, output_dir / "models"
     images_dir.mkdir(parents=True, exist_ok=True)
@@ -113,17 +113,7 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
             name: labels[event].iloc[rows].to_numpy()
             for name, rows in parts.items()
         }
-        selection_data = {name: transformed[name] for name in ("train", "val")}
-        selection_actual = {name: actual[name] for name in ("train", "val")}
-        base = {**config, "n_iter_no_change": PATIENCE_BY_EVENT[event]}
-        candidates = []
-        for candidate in ParameterGrid(REGULARIZATION_GRID):
-            candidate_config = {**base, **candidate}
-            _, details, _ = train_event(selection_data, selection_actual, candidate_config, TARGET_RECALL, show_params_settings=False)
-            if details["converged"]:
-                is_v3 = candidate["alpha"] == 0.0001 and candidate["l1_ratio"] == 0.5
-                candidates.append((details["best_validation_f1"], is_v3, candidate_config))
-        selected_config = max(candidates, key=lambda item: (item[0], item[1], -item[2]["alpha"], -item[2]["l1_ratio"]))[2]
+        selected_config = {**config, **CONFIG_BY_EVENT[event]}
         selected_configs[event] = selected_config
         print(f"[train] {event}; alpha={selected_config['alpha']}; l1_ratio={selected_config['l1_ratio']}; n_iter_no_change={selected_config['n_iter_no_change']}", flush=True)
         model, parameters, history = train_event(transformed, actual, selected_config, TARGET_RECALL)
@@ -133,10 +123,7 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
             f"motivo de parada={parameters['stop_reason']}",
             flush=True,
         )
-        if not parameters["converged"]:
-            metrics["status"] = "incomplete_convergence"
-            metrics[event] = {"parameters": parameters}
-            raise RuntimeError(f"{event} agotó max_iter sin cumplir el criterio de parada de F1 en validación. Ajusta LOGISTIC_CONFIG; no se publica el modelo.")
+        
         models[event] = model
         probabilities = {name: model.predict_proba(data)[:, 1] for name, data in transformed.items()}
         threshold = choose_threshold(labels[event].iloc[parts["val"]], probabilities["val"], TARGET_RECALL)

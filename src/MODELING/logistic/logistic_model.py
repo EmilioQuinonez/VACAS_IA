@@ -25,7 +25,6 @@ LOGISTIC_CONFIG = {
     "n_iter_no_change": 5,
 }
 
-
 class CowPreprocessor:
     """Completa faltantes con cero y bandera; ajusta escala y referencia solo en train."""
 
