@@ -41,4 +41,3 @@ def evaluate(model, X, y, sets, recall_threshold):
             }
 
     return metrics
-
