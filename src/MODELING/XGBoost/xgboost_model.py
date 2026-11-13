@@ -6,10 +6,12 @@ from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
 
-def train_event(X, y, rows, val_rows=None, *, n_trees, random_state):
+def train_event(X, y, rows, val_rows=None, *, params, random_state):
     """
-    Entrena un XGBoost con valores por defecto; scale_pos_weight compensa el desbalance.
-    val_rows solo se evalúa para las curvas de aprendizaje: no detiene ni cambia el entrenamiento.
+    Entrena un XGBoost con los hiperparámetros de params (los que faltan quedan con el valor
+    por defecto de XGBoost, incluida la regularización L2 reg_lambda = 1); scale_pos_weight
+    compensa el desbalance. val_rows solo se evalúa para las curvas de aprendizaje: no
+    detiene ni cambia el entrenamiento.
     """
     X_fit, y_fit = X.iloc[rows], y.iloc[rows]
     eval_set = [(X_fit, y_fit)]
@@ -17,10 +19,10 @@ def train_event(X, y, rows, val_rows=None, *, n_trees, random_state):
         eval_set.append((X.iloc[val_rows], y.iloc[val_rows]))
     model = XGBClassifier(
         objective="binary:logistic",
-        n_estimators=n_trees,
         scale_pos_weight=(y_fit == 0).sum() / (y_fit == 1).sum(),
         eval_metric="logloss",
         random_state=random_state,
+        **params,
     )
 
     return model.fit(X_fit, y_fit, eval_set=eval_set, verbose=False)

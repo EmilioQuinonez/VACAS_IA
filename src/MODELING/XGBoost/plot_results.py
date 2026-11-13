@@ -1,15 +1,15 @@
 """
-Genera las gráficas del XGBoost base a partir de lo que guardó main.py (modelos,
-metrics.json y las curvas de aprendizaje, todo en models/), sin reentrenar. Solo cifras agregadas, sin datos por vaca.
+Genera las gráficas de la versión VERSION de versions.py a partir de lo que guardó main.py
+(modelos, metrics.json y las curvas de aprendizaje, en models/<VERSION>/), sin reentrenar. Solo
+cifras agregadas, sin datos por vaca.
 
-Las figuras van a FIGURES_DIR (src/MODELING/XGBoost/img), que sí se versiona.
+Las figuras van a img/<VERSION>/, que sí se versiona.
 
 Uso, desde la raíz del repo y después de main.py:
     python src/MODELING/XGBoost/plot_results.py
 """
 
 import json
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,10 +18,9 @@ from xgboost import XGBClassifier
 
 import plots
 from dataset import EVENT_KEYS, EVENTS, build_features, load_sessions, split_by_time
-from main import CURVES_PATH, INPUT_PATH, METRICS_PATH, MODELS_DIR, N_TREES, TRAIN_FRACTION, VAL_FRACTION
+from main import CURVES_PATH, INPUT_PATH, METRICS_PATH, TRAIN_FRACTION, VAL_FRACTION
+from versions import FIGURES_DIR, MODELS_DIR, VERSION, VERSIONS
 from xgboost_model import PlattXGB
-
-FIGURES_DIR = Path(__file__).resolve().parent / "img"
 
 
 def read_curves(path):
@@ -89,7 +88,7 @@ def main():
 
     X, y, start, models, probabilities, val_label, groups, rates = load_test(metrics)
     log = read_curves(CURVES_PATH)
-    save(plots.learning_curves(log, N_TREES, val_label), "curvas_aprendizaje.png")
+    save(plots.learning_curves(log, VERSIONS[VERSION]["n_estimators"], val_label), "curvas_aprendizaje.png")
     test_period = f"{start.min():%d/%m/%Y}–{start.max():%d/%m/%Y}"
     save(plots.roc_pr(y, probabilities, metrics, test_period), "roc_pr_test.png")
     save(plots.calibration(y, probabilities, metrics), "calibracion_test.png")

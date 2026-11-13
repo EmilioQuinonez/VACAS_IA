@@ -1,17 +1,18 @@
 """
-XGBoost base: un clasificador binario por evento de ordeño y uno para "alguna anomalía" (el
-ordeño no fue exitoso), con los valores por defecto de la librería y sin regularización (se
-agrega solo si aparece sobreajuste).
+XGBoost: un clasificador binario por evento de ordeño y uno para "alguna anomalía" (el ordeño no
+fue exitoso), con los hiperparámetros de la versión VERSION de versions.py. v1 usa los valores
+por defecto de XGBoost, que incluyen la regularización L2 (reg_lambda = 1).
 
 Por cada una de las 4 salidas, con un corte cronológico 70/15/15 (las sesiones más antiguas a
 train, las más recientes a test): el modelo se entrena una sola vez con train, se calibra en val
 (Platt, porque scale_pos_weight infla las probabilidades), elige en val el umbral de recall con
 las probabilidades calibradas y se evalúa en train, val y test.
-Todo va a MODELS_DIR, que se versiona: el XGBoost (.json), metrics.json (con los 2 coeficientes
-de Platt de cada salida) y las curvas de aprendizaje (log loss de train y val por árbol, sin
-calibrar). Las gráficas se generan aparte con plot_results.py, a partir de lo que guarda este script.
+Todo va a models/<VERSION>/, que se versiona: el XGBoost (.json), metrics.json (con los
+hiperparámetros y los 2 coeficientes de Platt de cada salida) y las curvas de aprendizaje (log loss
+de train y val por árbol, sin calibrar). Las gráficas se generan aparte con plot_results.py.
 
 Uso, desde la raíz del repo:
+    python src/MODELING/XGBoost/build_history_features.py   # una vez: agrega las 21 variables de historial
     python src/MODELING/XGBoost/main.py
 """
 
@@ -21,18 +22,17 @@ from pathlib import Path
 
 from dataset import EVENTS, build_features, load_sessions, split_by_time
 from evaluation import choose_threshold, evaluate
+from versions import MODELS_DIR, VERSION, VERSIONS
 from xgboost_model import calibrate, train_event
 
 ROOT = Path(__file__).resolve().parents[3]
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
-MODELS_DIR = Path(__file__).resolve().parent / "models"
 METRICS_PATH = MODELS_DIR / "metrics.json"
 CURVES_PATH = MODELS_DIR / "curvas_aprendizaje.json"
 
 TRAIN_FRACTION = 0.70  # train: el 70 % más antiguo de las sesiones
 VAL_FRACTION = 0.15  # val: el 15 % siguiente; test: el 15 % más reciente
 TARGET_RECALL = 0.80  # Criterio de negocio: detectar al menos 80 % de las anomalías.
-N_TREES = 100  # Valor por defecto de XGBoost.
 RANDOM_STATE = 42
 
 
@@ -53,11 +53,13 @@ def main():
     sessions = load_sessions(INPUT_PATH)
     X, labels = build_features(sessions)
     idx = split_by_time(sessions["inicio"], TRAIN_FRACTION, VAL_FRACTION)
-    MODELS_DIR.mkdir(exist_ok=True)
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-    fit = partial(train_event, n_trees=N_TREES, random_state=RANDOM_STATE)
+    params = VERSIONS[VERSION]
+    print(f"[version] {VERSION}: {params}")
+    fit = partial(train_event, params=params, random_state=RANDOM_STATE)
 
-    results, curves = {}, {}
+    results, curves = {"version": VERSION, "params": params}, {}
     for event in EVENTS:
         y = labels[event]
         print(f"\n[training] {event}: train, validating on val")
