@@ -1,0 +1,54 @@
+{
+  "mechanical_connection_failure_event": {
+    "loss": "log_loss",
+    "penalty": "elasticnet",
+    "alpha": 0.0001,
+    "l1_ratio": 1,
+    "learning_rate": "optimal",
+    "average": true,
+    "class_weight": null,
+    "random_state": 42,
+    "max_iter": 2000,
+    "tol": 0.0001,
+    "n_iter_no_change": 20
+  },
+  "health_anomaly_event": {
+    "loss": "log_loss",
+    "penalty": "elasticnet",
+    "alpha": 0.0001,
+    "l1_ratio": 0,
+    "learning_rate": "optimal",
+    "average": true,
+    "class_weight": null,
+    "random_state": 42,
+    "max_iter": 2000,
+    "tol": 0.0001,
+    "n_iter_no_change": 10
+  },
+  "behavior_interruption_event": {
+    "loss": "log_loss",
+    "penalty": "elasticnet",
+    "alpha": 0.01,
+    "l1_ratio": 0,
+    "learning_rate": "optimal",
+    "average": true,
+    "class_weight": null,
+    "random_state": 42,
+    "max_iter": 2000,
+    "tol": 0.0001,
+    "n_iter_no_change": 20
+  },
+  "alguna_anomalia": {
+    "loss": "log_loss",
+    "penalty": "elasticnet",
+    "alpha": 1e-05,
+    "l1_ratio": 0.5,
+    "learning_rate": "optimal",
+    "average": true,
+    "class_weight": null,
+    "random_state": 42,
+    "max_iter": 2000,
+    "tol": 0.0001,
+    "n_iter_no_change": 20
+  }
+}
