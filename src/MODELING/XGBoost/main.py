@@ -1,18 +1,8 @@
 """
-XGBoost: un clasificador binario por evento de ordeño y uno para "alguna anomalía" (el ordeño no
-fue exitoso), con los hiperparámetros de la versión VERSION de versions.py. v1 usa los valores
-por defecto de XGBoost, que incluyen la regularización L2 (reg_lambda = 1).
+Entrena, calibra y evalúa la versión VERSION de versions.py: un XGBoost por evento y uno para
+alguna anomalía. Guarda los modelos y las métricas en models/<VERSION>/.
 
-Por cada una de las 4 salidas, con un corte cronológico 70/15/15 (las sesiones más antiguas a
-train, las más recientes a test): el modelo se entrena una sola vez con train, se calibra en val
-(Platt, porque scale_pos_weight infla las probabilidades), elige en val el umbral de recall con
-las probabilidades calibradas y se evalúa en train, val y test.
-Todo va a models/<VERSION>/, que se versiona: el XGBoost (.json), metrics.json (con los
-hiperparámetros y los 2 coeficientes de Platt de cada salida) y las curvas de aprendizaje (log loss
-de train y val por árbol, sin calibrar). Las gráficas se generan aparte con plot_results.py.
-
-Uso, desde la raíz del repo:
-    python src/MODELING/XGBoost/build_history_features.py   # una vez: agrega las 21 variables de historial
+Uso, desde la raíz del repo y después de build_history_features.py:
     python src/MODELING/XGBoost/main.py
 """
 

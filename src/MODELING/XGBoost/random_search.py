@@ -1,14 +1,6 @@
 """
-Búsqueda al azar de hiperparámetros del XGBoost; la mejor combinación es v5 en versions.py.
-
-Cada combinación se aplica a las 4 salidas y sigue los mismos pasos que main.py (entrenar con
-train, calibrar con Platt y fijar el umbral de recall en val), pero solo se mide en train y val:
-test no se calcula. Se elige con el F1 de alguna anomalía en val (redondeado a 3 decimales); si
-hay empate, decide el PR-AUC de alguna anomalía en val y luego la menor brecha de ROC-AUC entre
-train y val. Todas las combinaciones van a OUTPUT_PATH.
-
-Para cambiar la búsqueda, edita N_COMBINATIONS, SEED o SPACE. La ganadora se copia a mano en
-VERSIONS["v5"] de versions.py y se entrena con main.py.
+Búsqueda al azar de hiperparámetros del XGBoost, medida solo en train y val. Guarda las
+combinaciones en models/v5/busqueda.csv; la mejor es v5 en versions.py.
 
 Uso, desde la raíz del repo y después de build_history_features.py:
     python src/MODELING/XGBoost/random_search.py

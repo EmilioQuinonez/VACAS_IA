@@ -1,12 +1,7 @@
 """
-Agrega a Data/dataset_vacas_integrado.csv las variables nuevas de la tabla de selección de
-datos (pestaña DP del Doc): calendario, ordeño previo, tasas de la vaca y del hato.
+Agrega a Data/dataset_vacas_integrado.csv las 21 variables de historial que usa el XGBoost.
 
-Todas usan solo información anterior al inicio de la sesión, y el historial se toma solo de
-ordeños (sin rechazos ni echadas). Se conservan todas las filas; si las columnas ya existen,
-se reemplazan.
-
-Uso:
+Uso, desde la raíz del repo:
     python src/MODELING/XGBoost/build_history_features.py
 """
 

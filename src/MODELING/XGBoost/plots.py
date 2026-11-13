@@ -1,10 +1,4 @@
-"""
-Gráficas del XGBoost base; cada función devuelve la figura y plot_results.py la guarda.
-
-Editar: títulos y etiquetas dentro de cada función; nombres de los eventos en EVENT_NAMES;
-colores en SERIES (papel de cada serie, igual en todas las gráficas), INK, MUTED, GRID,
-SURFACE y REFERENCE.
-"""
+"""Gráficas del XGBoost: cada función arma una figura y plot_results.py la guarda."""
 
 import matplotlib
 

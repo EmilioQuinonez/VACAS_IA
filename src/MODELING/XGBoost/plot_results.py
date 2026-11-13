@@ -1,9 +1,5 @@
 """
-Genera las gráficas de la versión VERSION de versions.py a partir de lo que guardó main.py
-(modelos, metrics.json y las curvas de aprendizaje, en models/<VERSION>/), sin reentrenar. Solo
-cifras agregadas, sin datos por vaca.
-
-Las figuras van a img/<VERSION>/, que sí se versiona.
+Genera en img/<VERSION>/ las gráficas de la versión VERSION de versions.py, sin reentrenar.
 
 Uso, desde la raíz del repo y después de main.py:
     python src/MODELING/XGBoost/plot_results.py
