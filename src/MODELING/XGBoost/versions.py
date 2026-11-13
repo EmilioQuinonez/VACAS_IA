@@ -12,8 +12,10 @@ from pathlib import Path
 VERSIONS = {
     # Base: valores por defecto de XGBoost.
     "v1": {"n_estimators": 100},
+    # Pasos más chicos, para que val no se estanque desde los primeros árboles.
+    "v2": {"n_estimators": 200, "learning_rate": 0.05},
 }
-VERSION = "v1"
+VERSION = "v2"
 
 BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models" / VERSION
