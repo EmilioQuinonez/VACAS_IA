@@ -1,4 +1,8 @@
 {
+  "version": "v1",
+  "params": {
+    "n_estimators": 100
+  },
   "mechanical_connection_failure_event": {
     "threshold_recall_val": 0.11344222724437714,
     "platt": {
