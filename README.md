@@ -307,6 +307,10 @@ La estructura del repositorio es:
     - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento a `Data/dataset_vacas_integrado.csv`.
     - [`integrar_concentrado.py`](src/DP/integrar_concentrado.py) — Añade cuatro atributos históricos de concentrado a `Data/dataset_vacas_integrado.csv`.
     - [`k_fold.py`](src/DP/k_fold.py) — Separa la muestra en un conjunto de prueba fijo y cinco folds de entrenamiento y validación.
+  - **[`MODELING/XGBoost/`](src/MODELING/XGBoost/)** — XGBoost base por evento de ordeño.
+    - [`build_history_features.py`](src/MODELING/XGBoost/build_history_features.py) — Agrega las variables de historial de la tabla de selección de datos a `Data/dataset_vacas_integrado.csv`.
+    - [`main.py`](src/MODELING/XGBoost/main.py) — Entrena y evalúa un clasificador por evento y uno para alguna anomalía con el corte cronológico 70/15/15. Usa `dataset.py`, `evaluation.py` y `xgboost_model.py`.
+    - [`plot_results.py`](src/MODELING/XGBoost/plot_results.py) — Genera las gráficas del modelo con `plots.py` en [`img/`](src/MODELING/XGBoost/img/).
   - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
     - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
     - [`dataset_vacas_muestra.csv`](src/RETO_DATOS/dataset_vacas_muestra.csv) — Muestra generada por el script anterior.
