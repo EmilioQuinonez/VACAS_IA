@@ -23,6 +23,7 @@ from .plot_results import save_plots
 
 MODULE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = MODULE_DIR
+VERSION = "v1"  # Cambia esta versión para guardar una nueva iteración.
 INPUT_PATH = MODULE_DIR.parents[2] / "Data" / "dataset_vacas_integrado.csv"
 TRAIN_FRACTION, VAL_FRACTION, TARGET_RECALL = 0.70, 0.15, 0.80
 
@@ -67,7 +68,7 @@ def _difference(first, second):
 def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
     config = dict(LOGISTIC_CONFIG if config is None else config)
     output_dir = Path(output_dir)
-    images_dir, models_dir = output_dir / "img", output_dir / "models"
+    images_dir, models_dir = output_dir / "img" / VERSION, output_dir / "models"
     images_dir.mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
     sessions = load_sessions(input_path)
@@ -171,7 +172,7 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
         "preparation": "dp_features_zero_missing_flags_train_scaler_v1",
         "split": split,
     }
-    joblib.dump(bundle, models_dir / "model.joblib", compress=3)
+    joblib.dump(bundle, models_dir / f"{VERSION}.joblib", compress=3)
     save_plots(metrics, prediction_data, coefficient_data, images_dir)
     metrics["status"] = "evaluation_complete"
     print(f"[done] Gráficas en {images_dir}; modelos en {models_dir}", flush=True)
