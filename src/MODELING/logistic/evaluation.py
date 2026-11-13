@@ -3,7 +3,7 @@
 import numpy as np
 from sklearn.metrics import (
     accuracy_score, average_precision_score, brier_score_loss, confusion_matrix,
-    log_loss, precision_recall_curve, precision_recall_fscore_support, roc_auc_score,
+    f1_score, log_loss, precision_recall_curve, precision_recall_fscore_support, roc_auc_score,
 )
 
 def choose_threshold(actual, probability, target_recall=0.80):
@@ -31,6 +31,7 @@ def evaluate(actual, probability, threshold):
         "n": n, "positives": positives, "prevalence": prevalence,
         "accuracy_no_event": 1 - prevalence if n else None,
         "accuracy_majority": max(prevalence, 1 - prevalence) if n else None,
+        "f1_always_alert": float(f1_score(actual, np.ones(n), zero_division=0)) if n else None,
         "roc_auc": float(roc_auc_score(actual, probability)) if both_classes else None,
         "average_precision": float(average_precision_score(actual, probability)) if positives else None,
         "brier": float(brier_score_loss(actual, probability)) if n else None,

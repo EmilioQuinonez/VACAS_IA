@@ -23,7 +23,7 @@ from .plot_results import save_plots
 
 MODULE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = MODULE_DIR
-VERSION = "v1"  # Cambia esta versión para guardar una nueva iteración.
+VERSION = "v2"  # Cambia esta versión para guardar una nueva iteración.
 INPUT_PATH = MODULE_DIR.parents[2] / "Data" / "dataset_vacas_integrado.csv"
 TRAIN_FRACTION, VAL_FRACTION, TARGET_RECALL = 0.70, 0.15, 0.80
 
@@ -33,8 +33,8 @@ def print_summary(event, results, threshold):
         return "no calculable" if value is None else f"{value:.4f}"
 
     columns = [(
-        "Métrica", "Observaciones", "ROC-AUC", "AP", "Brier", "Log loss", "Precisión",
-        "Sensibilidad", "F1", "Exactitud", "Exactitud (mayoritaria)",
+        "Métrica", "Observaciones", "F1", "Sensibilidad", "Precisión", "F1 (alertar siempre)",
+        "ROC-AUC", "AP", "Brier", "Log loss", "Exactitud", "Exactitud (mayoritaria)",
     )]
     for name, label in (
         ("train", "Entrenamiento"), ("val", "Validación"), ("test", "Prueba completa"),
@@ -42,10 +42,10 @@ def print_summary(event, results, threshold):
         scores = results[name]
         decision = scores["threshold_recall"]
         columns.append((
-            label, f"{scores['n']:,}", number(scores["roc_auc"]), number(scores["average_precision"]),
-            number(scores["brier"]), number(scores["log_loss"]),
-            number(decision["precision"]), number(decision["recall"]),
-            number(decision["f1"]), number(decision["accuracy"]),
+            label, f"{scores['n']:,}", number(decision["f1"]), number(decision["recall"]),
+            number(decision["precision"]), number(scores["f1_always_alert"]),
+            number(scores["roc_auc"]), number(scores["average_precision"]),
+            number(scores["brier"]), number(scores["log_loss"]), number(decision["accuracy"]),
             number(scores["accuracy_majority"]),
         ))
 
@@ -58,6 +58,8 @@ def print_summary(event, results, threshold):
         if index == 0:
             lines.append(border)
     lines.extend((border, ""))
+    for name, passed in results["business_criteria"].items():
+        lines.append(f"  {name}: {'no calculable' if passed is None else 'cumple' if passed else 'no cumple'}")
     print("\n".join(lines), flush=True)
 
 
@@ -100,16 +102,17 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
             name: labels[event].iloc[rows].to_numpy()
             for name, rows in parts.items()
         }
-        model, parameters, history = train_event(transformed, actual, config)
+        model, parameters, history = train_event(transformed, actual, config, TARGET_RECALL)
         print(
             f"  épocas={parameters['iterations']}; "
+            f"mejor época={parameters['best_epoch']}; F1 val={parameters['best_validation_f1']:.4f}; "
             f"motivo de parada={parameters['stop_reason']}",
             flush=True,
         )
         if not parameters["converged"]:
             metrics["status"] = "incomplete_convergence"
             metrics[event] = {"parameters": parameters}
-            raise RuntimeError(f"{event} agotó max_iter sin cumplir el criterio de parada de train. Ajusta LOGISTIC_CONFIG; no se publica el modelo.")
+            raise RuntimeError(f"{event} agotó max_iter sin cumplir el criterio de parada de F1 en validación. Ajusta LOGISTIC_CONFIG; no se publica el modelo.")
         models[event] = model
         probabilities = {name: model.predict_proba(data)[:, 1] for name, data in transformed.items()}
         threshold = choose_threshold(labels[event].iloc[parts["val"]], probabilities["val"], TARGET_RECALL)
@@ -148,6 +151,16 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
         for column in [c for c in explanation if c.startswith(("factor_", "valor_", "direccion_"))]:
             frame[column] = frame[column].fillna("")
         scores["test"]["explanations"] = explanation_coverage(frame, frame["probability"], threshold)
+        
+        # Cambiar la metrica para que sea f1-score
+        decision = scores["test"]["threshold_recall"]
+        f1, recall, baseline = decision["f1"], decision["recall"], scores["test"]["f1_always_alert"]
+        scores["business_criteria"] = {
+            "Recall test >= 80%": None if recall is None else recall >= TARGET_RECALL,
+            "F1 test >= 0.70": None if f1 is None else f1 >= 0.70,
+            "F1 test > alertar siempre": None if f1 is None or baseline is None else f1 > baseline,
+        }
+        
         predictions.append(frame)
         metrics[event] = scores
         print_summary(event, scores, threshold)
@@ -156,8 +169,7 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
 
     anomaly = metrics["alguna_anomalia"]["test"]
     metrics["business_criteria"] = {
-        "anomaly_recall_at_least_80_percent": (anomaly["threshold_recall"]["recall"] or 0) >= TARGET_RECALL,
-        "anomaly_accuracy_at_least_80_percent": anomaly["threshold_recall"]["accuracy"] >= 0.80,
+        "events": {event: metrics[event]["business_criteria"] for event in EVENTS},
         "three_factors_coverage_at_least_80_percent": (anomaly["explanations"]["coverage"] or 0) >= 0.80,
         "note": "Factores predictivos asociados; no son causas demostradas ni validación del socio formador.",
     }
