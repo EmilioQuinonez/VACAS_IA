@@ -14,8 +14,11 @@ VERSIONS = {
     "v1": {"n_estimators": 100},
     # Pasos más chicos, para que val no se estanque desde los primeros árboles.
     "v2": {"n_estimators": 200, "learning_rate": 0.05},
+    # Árboles más simples y regularizados.
+    "v3": {"n_estimators": 300, "learning_rate": 0.05, "max_depth": 4, "min_child_weight": 10, "gamma": 1,
+           "reg_lambda": 5},
 }
-VERSION = "v2"
+VERSION = "v3"
 
 BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models" / VERSION
