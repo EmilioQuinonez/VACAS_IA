@@ -216,6 +216,37 @@ python3 -u src/MODELING/LSTM/plot_results.py
 
 **Resultado esperado:** se generan en `src/MODELING/LSTM/modelos/lstm_base/graficas/` ocho gráficas a partir del modelo guardado, sin reentrenar: curvas de aprendizaje (pérdida, PR-AUC promedio y accuracy por época), ROC y precisión-recall, calibración, matrices de confusión, distribución de probabilidades y desempeño semanal en test; métricas de vacas conocidas, solo en val y nuevas; e importancia por permutación en val (caída del PR-AUC al revolver cada variable).
 
+## Modelo XGBoost
+
+Se asume lo mismo que en el modelo LSTM. Ejecuta los comandos desde la raíz del repositorio; en Windows usa `py` en lugar de `python3`.
+
+### 1. Agregar las variables de historial
+
+```bash
+python3 src/MODELING/XGBoost/build_history_features.py
+```
+
+**Resultado esperado:** se agregan a `Data/dataset_vacas_integrado.csv` las 21 variables de historial que usa XGBoost: las 19 del script de la LSTM más `mdi_faltante_previo` y `estado_mdi_sin_dato_previo`. Sin este paso, `main.py` se detiene e indica qué columnas faltan.
+
+### 2. Elegir la versión, entrenar y graficar
+
+Las versiones (v1 a v5) y sus hiperparámetros están en [`versions.py`](src/MODELING/XGBoost/versions.py). Para correr otra, cambia `VERSION` en ese archivo.
+
+```bash
+python3 src/MODELING/XGBoost/main.py
+python3 src/MODELING/XGBoost/plot_results.py
+```
+
+**Resultado esperado:** `main.py` guarda en `src/MODELING/XGBoost/models/<versión>/` los 4 modelos, `metrics.json` y las curvas de aprendizaje, y `plot_results.py` guarda 11 gráficas en `src/MODELING/XGBoost/img/<versión>/`.
+
+### 3. Búsqueda al azar (opcional)
+
+```bash
+python3 src/MODELING/XGBoost/random_search.py
+```
+
+**Resultado esperado:** prueba 40 combinaciones al azar, medidas solo en train y val, y guarda la tabla en `src/MODELING/XGBoost/models/v5/busqueda.csv`. La mejor es v5 en `versions.py`.
+
 ## Preparación para reto de datos.
 
 Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. 
@@ -307,10 +338,12 @@ La estructura del repositorio es:
     - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento a `Data/dataset_vacas_integrado.csv`.
     - [`integrar_concentrado.py`](src/DP/integrar_concentrado.py) — Añade cuatro atributos históricos de concentrado a `Data/dataset_vacas_integrado.csv`.
     - [`k_fold.py`](src/DP/k_fold.py) — Separa la muestra en un conjunto de prueba fijo y cinco folds de entrenamiento y validación.
-  - **[`MODELING/XGBoost/`](src/MODELING/XGBoost/)** — XGBoost base por evento de ordeño.
+  - **[`MODELING/XGBoost/`](src/MODELING/XGBoost/)** — XGBoost por evento de ordeño.
     - [`build_history_features.py`](src/MODELING/XGBoost/build_history_features.py) — Agrega las variables de historial de la tabla de selección de datos a `Data/dataset_vacas_integrado.csv`.
-    - [`main.py`](src/MODELING/XGBoost/main.py) — Entrena y evalúa un clasificador por evento y uno para alguna anomalía con el corte cronológico 70/15/15. Usa `dataset.py`, `evaluation.py` y `xgboost_model.py`.
-    - [`plot_results.py`](src/MODELING/XGBoost/plot_results.py) — Genera las gráficas del modelo con `plots.py` en [`img/`](src/MODELING/XGBoost/img/).
+    - [`versions.py`](src/MODELING/XGBoost/versions.py) — Hiperparámetros de cada versión y la versión que se corre.
+    - [`main.py`](src/MODELING/XGBoost/main.py) — Entrena y evalúa la versión elegida: un clasificador por evento y uno para alguna anomalía con el corte cronológico 70/15/15. Guarda en [`models/<versión>/`](src/MODELING/XGBoost/models/). Usa `dataset.py`, `evaluation.py` y `xgboost_model.py`.
+    - [`plot_results.py`](src/MODELING/XGBoost/plot_results.py) — Genera las gráficas de la versión elegida con `plots.py` en [`img/<versión>/`](src/MODELING/XGBoost/img/).
+    - [`random_search.py`](src/MODELING/XGBoost/random_search.py) — Búsqueda al azar de hiperparámetros, medida en train y val; de ahí sale v5.
   - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
     - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
     - [`dataset_vacas_muestra.csv`](src/RETO_DATOS/dataset_vacas_muestra.csv) — Muestra generada por el script anterior.
