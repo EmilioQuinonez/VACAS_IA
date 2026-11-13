@@ -7,16 +7,20 @@ from sklearn.metrics import (
 )
 
 def choose_threshold(actual, probability, target_recall=0.80):
-    """Mayor umbral que alcanza el recall objetivo en validación."""
+    """Umbral con mayor F1 entre los que alcanzan el recall objetivo en validación."""
     actual, probability = np.asarray(actual), np.asarray(probability, dtype=float)
     if not actual.sum():
         raise ValueError("Validación requiere positivos para elegir el umbral.")
-    _, recall, thresholds = precision_recall_curve(actual, probability)
+    precision, recall, thresholds = precision_recall_curve(actual, probability)
 
     # Encontrar umbrales que cumplen el objetivo de target_recall
     eligible = np.flatnonzero(recall[:-1] >= target_recall)
     
-    best = eligible[np.argmax(thresholds[eligible])]
+    denominator = precision[:-1] + recall[:-1]
+    f1 = np.divide(2 * precision[:-1] * recall[:-1], denominator,
+                   out=np.zeros_like(denominator), where=denominator != 0)
+    best_f1 = f1[eligible].max()
+    best = eligible[f1[eligible] == best_f1][-1]
     
     return float(thresholds[best])
 
