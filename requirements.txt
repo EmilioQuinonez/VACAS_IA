@@ -8,4 +8,5 @@ requests
 python-dotenv
 openpyxl
 scikit-learn
+xgboost
 tensorflow
