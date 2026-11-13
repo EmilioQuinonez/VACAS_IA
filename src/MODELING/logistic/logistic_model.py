@@ -53,7 +53,7 @@ class CowPreprocessor:
         return np.ascontiguousarray(expanded.to_numpy(dtype=np.float64))
 
 
-def train_event(transformed, actual, config=None, target_recall=0.80):
+def train_event(transformed, actual, config=None, target_recall=0.80, show_params_settings=True):
     """Entrena solo con train y registra loss y accuracy a umbral 0.5 por época."""
     params = dict(LOGISTIC_CONFIG if config is None else config)
     if not len(actual["val"]) or not np.asarray(actual["val"]).sum():
@@ -88,7 +88,7 @@ def train_event(transformed, actual, config=None, target_recall=0.80):
         else:
             stale_epochs += 1
         stopped = stale_epochs >= params["n_iter_no_change"]
-        if epoch == 1 or epoch % 10 == 0 or stopped or epoch == params["max_iter"]:
+        if show_params_settings and (epoch == 1 or epoch % 10 == 0 or stopped or epoch == params["max_iter"]):
             print(f"  [learning] época {epoch}/{params['max_iter']}; Log Loss train={losses['train']:.4f}; F1 val={val_f1:.4f}; mejor F1 val={best_f1:.4f}", flush=True)
         if stopped:
             break

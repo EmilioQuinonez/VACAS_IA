@@ -4,6 +4,7 @@ Desde la raíz: py src/MODELING/logistic/main.py
 Desde esta carpeta: py main.py
 """
 
+import json
 from pathlib import Path
 
 if not __package__:
@@ -15,6 +16,7 @@ if not __package__:
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import ParameterGrid
 
 from .dataset import EVENTS, build_features, get_labels, load_sessions, split_by_time
 from .evaluation import choose_threshold, evaluate, explanation_coverage
@@ -23,7 +25,8 @@ from .plot_results import save_plots
 
 MODULE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = MODULE_DIR
-VERSION = "v2"  # Cambia esta versión para guardar una nueva iteración.
+VERSION = "v3"  # Cambia esta versión para guardar una nueva iteración.
+PATIENCE_GRID = {"n_iter_no_change": [5, 10, 20]}
 INPUT_PATH = MODULE_DIR.parents[2] / "Data" / "dataset_vacas_integrado.csv"
 TRAIN_FRACTION, VAL_FRACTION, TARGET_RECALL = 0.70, 0.15, 0.80
 
@@ -95,14 +98,25 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
         "new_cows": {"n_cows": len(new_cows), "n_sessions": int(new_mask.sum())},
         "known_cows": {"n_cows": int(known_count), "n_sessions": int(known_mask.sum())},
     }
-    models, thresholds, predictions = {}, {}, []
+    models, thresholds, predictions, selected_configs = {}, {}, [], {}
     for event in EVENTS:
-        print(f"[train] {event}; configuración global={config}", flush=True)
         actual = {
             name: labels[event].iloc[rows].to_numpy()
             for name, rows in parts.items()
         }
-        model, parameters, history = train_event(transformed, actual, config, TARGET_RECALL)
+        candidates = []
+        selection_data = {name: transformed[name] for name in ("train", "val")}
+        selection_actual = {name: actual[name] for name in ("train", "val")}
+        for candidate in ParameterGrid(PATIENCE_GRID):
+            candidate_config = {**config, **candidate}
+            _, details, _ = train_event(selection_data, selection_actual, candidate_config, TARGET_RECALL, show_params_settings=False)
+            if details["converged"]:
+                candidates.append((details["best_validation_f1"], candidate["n_iter_no_change"], candidate_config))
+        
+        _, patience, selected_config = max(candidates, key=lambda item: (item[0], -item[1]))
+        selected_configs[event] = selected_config
+        print(f"[train] {event}; n_iter_no_change seleccionado={patience}", flush=True)
+        model, parameters, history = train_event(transformed, actual, selected_config, TARGET_RECALL)
         print(
             f"  épocas={parameters['iterations']}; "
             f"mejor época={parameters['best_epoch']}; F1 val={parameters['best_validation_f1']:.4f}; "
@@ -179,12 +193,16 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
     bundle = {
         "preprocessor": preprocessor,
         "models": models, "thresholds": thresholds, "logistic_config": config,
+        "selected_configs": selected_configs,
         "input_columns": list(X.columns), "transformed_columns": preprocessor.transformed_names,
         "machine_columns": sorted(c for c in X if c.startswith("maquina_")),
         "preparation": "dp_features_zero_missing_flags_train_scaler_v1",
         "split": split,
     }
     joblib.dump(bundle, models_dir / f"{VERSION}.joblib", compress=3)
+    with (models_dir / f"{VERSION}_config.json").open("w", encoding="utf-8") as file:
+        json.dump(selected_configs, file, ensure_ascii=False, indent=2)
+        file.write("\n")
     save_plots(metrics, prediction_data, coefficient_data, images_dir)
     metrics["status"] = "evaluation_complete"
     print(f"[done] Gráficas en {images_dir}; modelos en {models_dir}", flush=True)
