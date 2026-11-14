@@ -1,4 +1,5 @@
 Fecha,Persona,dataset_id / versión,Acción,Propósito,Resultado,Observaciones
+13/11/2026 00:28,TheSimpleMau,vacas/10.0,Exportación o acceso,Entrenar y evaluar las versiones v2 a v5 del XGBoost (v5: mejor de 40 combinaciones al azar),Completado,"random_search.py (solo train y val), main.py y plot_results.py; salidas con cifras agregadas, sin identificadores de vaca, en src/MODELING/XGBoost/models/v2-v5 e img/v2-v5; no se escribió ningún dataset"
 13/11/2026 00:01,XMaster417,vacas/10.0,Exportación o acceso,Entrenar y evaluar la versión 4 de regresión logística,Completado,Modelo y resultados de v4 registrados en la rama
 12/11/2026 23:23,XMaster417,vacas/10.0,Exportación o acceso,Entrenar y evaluar la versión 3 de regresión logística,Completado,Modelo y resultados de v3 registrados en la rama.
 12/11/2026 23:08,XMaster417,vacas/10.0,Exportación o acceso,Entrenar y evaluar la versión 2 de regresión logística,Completado,Modelo y resultados de v2 registrados en la rama.

@@ -1,10 +1,4 @@
-"""
-Gráficas del XGBoost base; cada función devuelve la figura y plot_results.py la guarda.
-
-Editar: títulos y etiquetas dentro de cada función; nombres de los eventos en EVENT_NAMES;
-colores en SERIES (papel de cada serie, igual en todas las gráficas), INK, MUTED, GRID,
-SURFACE y REFERENCE.
-"""
+"""Gráficas del XGBoost: cada función arma una figura y plot_results.py la guarda."""
 
 import matplotlib
 
@@ -190,9 +184,8 @@ def model_vs_feature(rates, y, probabilities):
         ax.set_xlabel("Falsos positivos")
         ax.legend(loc="lower right")
     axes[0].set_ylabel("Verdaderos positivos")
-    fig.suptitle("Modelo contra una sola variable en test (sesiones con tasa a 30 días): "
-                 "en mecánica y conducta la iguala; en salud y alguna anomalía el modelo sí aporta",
-                 x=0.01, ha="left", fontsize=12)
+    fig.suptitle("Modelo contra la tasa de la vaca a 30 días como única variable, en test "
+                 "(sesiones con tasa a 30 días)", x=0.01, ha="left", fontsize=12)
     return fig
 
 
