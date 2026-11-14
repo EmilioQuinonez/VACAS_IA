@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parents[3]
 MODULE_DIR = Path(__file__).resolve().parent
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 
-VERSION = "v3"  # Cambia esta versión para guardar una nueva iteración.
+VERSION = "v4"  # Cambia esta versión para guardar una nueva iteración.
 MODEL_DIR = MODULE_DIR / "modelos" / VERSION
 METRICS_DIR = MODULE_DIR / "metrics" / VERSION
 FIGURES_DIR = MODULE_DIR / "img" / VERSION
@@ -55,7 +55,7 @@ TARGET_RECALL = 0.80  # Criterio de negocio: detectar al menos 80 % de las anoma
 TARGET_F1 = 0.70
 RANDOM_STATE = 42
 CONFIG = {
-    "k": 20,  # Sesiones previas que lee la red (el reporte permite de 10 a 30)
+    "k": 30,  # Sesiones previas que lee la red (el reporte permite de 10 a 30); v3 eligió 30
     "units": 64,
     "dense_units": 32,
     "dropout": 0.2,
@@ -65,8 +65,9 @@ CONFIG = {
     "patience": 5,
     "recurrent": "lstm",  # lstm, stacked_lstm (dos capas), gru o bidirectional
     "heads": "shared",  # shared (una Dense para las 4 salidas) o per_event (una por evento)
+    "reduce_lr": True,  # ReduceLROnPlateau: baja el learning rate a la mitad si el F1 de val no mejora en 2 épocas
 }
-SEARCH_GRID = {"k": [10, 20, 30], "units": [32, 64, 128], "learning_rate": [0.001, 0.0003]}
+SEARCH_GRID = {}  # Vacío: se entrena solo CONFIG.
 
 
 def build_model(config, n_sequence, n_context):
@@ -139,6 +140,9 @@ def train(config, X_seq, X_ctx, y, idx, curves=True):
     callbacks = [EpochMetrics(X_seq, X_ctx, y, idx, config["batch_size"], curves),
                  keras.callbacks.EarlyStopping(monitor="val_f1", mode="max", patience=config["patience"],
                                                restore_best_weights=True, verbose=1)]
+    if config["reduce_lr"]:
+        callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor="val_f1", mode="max", factor=0.5,
+                                                           patience=2, min_lr=1e-5, verbose=1))
     train_rows = idx["train"]
     history = model.fit([X_seq[train_rows], X_ctx[train_rows]], y[train_rows], epochs=config["epochs"],
                         batch_size=config["batch_size"], verbose=2, callbacks=callbacks)
