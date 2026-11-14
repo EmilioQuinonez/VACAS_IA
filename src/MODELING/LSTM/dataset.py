@@ -76,17 +76,12 @@ def split_by_time(start, train_fraction, val_fraction):
 
 def split_test_by_cow(cows, idx):
     """
-    Divide test igual que XGBoost y la regresión logística: vacas conocidas (estuvieron en train),
-    solo en val (el modelo no entrenó con ellas) y nuevas (su primer ordeño es en test).
+    Divide test como el reporte y la regresión logística: vacas conocidas (aparecen en train o val)
+    y nuevas (su primer ordeño es en test; el modelo no las vio ni en train ni en val).
     """
     test_cows = cows.iloc[idx["test"]]
-    in_train = test_cows.isin(cows.iloc[idx["train"]]).to_numpy()
-    in_val = test_cows.isin(cows.iloc[idx["val"]]).to_numpy()
-    groups = {
-        "test_vacas_conocidas": idx["test"][in_train],
-        "test_vacas_solo_val": idx["test"][~in_train & in_val],
-        "test_vacas_nuevas": idx["test"][~in_train & ~in_val],
-    }
+    seen = test_cows.isin(cows.iloc[np.concatenate([idx["train"], idx["val"]])]).to_numpy()
+    groups = {"test_vacas_conocidas": idx["test"][seen], "test_vacas_nuevas": idx["test"][~seen]}
     for name, rows in groups.items():
         print(f"[split] {name}: {len(rows):,} sessions of {cows.iloc[rows].nunique()} cows")
 
@@ -98,12 +93,18 @@ def build_inputs(sessions, train_rows, k):
     X_seq (sesiones, k, variables): para la sesión t, las filas t - k + 1 ... t de la misma vaca y
     bloque, que describen las sesiones t - k ... t - 1. Los pasos sin sesión previa quedan en 0
     para la capa Masking. X_ctx: contexto de la sesión t. Ambos se imputan con la mediana y se
-    estandarizan con la media y desviación de train. y: una columna 0/1 por evento.
+    estandarizan con la media y desviación de train. y: una columna 0/1 por evento. scaler: la
+    mediana, media y desviación de train de cada variable, para preparar sesiones nuevas igual.
     """
+    scaler = {}
+
     def scale(columns):
         values = sessions[columns].astype(float)
-        values = values.fillna(values.iloc[train_rows].median())
+        median = values.iloc[train_rows].median()
+        values = values.fillna(median)
         mean, std = values.iloc[train_rows].mean(), values.iloc[train_rows].std().replace(0, 1)
+        scaler.update({column: {"median": median[column], "mean": mean[column], "std": std[column]}
+                       for column in columns})
         return (values - mean) / std
 
     steps = scale(SEQUENCE_FEATURES)
@@ -119,4 +120,4 @@ def build_inputs(sessions, train_rows, k):
     y = sessions[EVENTS].to_numpy(dtype="float32")
     print(f"[features] sequence {X_seq.shape}, context {X_ctx.shape}, targets {y.shape}")
 
-    return X_seq, X_ctx, y
+    return X_seq, X_ctx, y, scaler
