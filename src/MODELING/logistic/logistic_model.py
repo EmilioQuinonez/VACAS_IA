@@ -1,12 +1,15 @@
 """Relleno con cero y bandera, escala de train y regresión logística explicable."""
 
+from copy import deepcopy
+
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import SGDClassifier
-from sklearn.metrics import accuracy_score, log_loss
+from sklearn.metrics import accuracy_score, f1_score, log_loss
 from sklearn.preprocessing import StandardScaler
 
 from .dataset import binary_features, feature_group
+from .evaluation import choose_threshold
 
 LOGISTIC_CONFIG = {
     "loss": "log_loss", 
@@ -21,7 +24,6 @@ LOGISTIC_CONFIG = {
     "tol": 1e-4, 
     "n_iter_no_change": 5,
 }
-
 
 class CowPreprocessor:
     """Completa faltantes con cero y bandera; ajusta escala y referencia solo en train."""
@@ -50,10 +52,12 @@ class CowPreprocessor:
         return np.ascontiguousarray(expanded.to_numpy(dtype=np.float64))
 
 
-def train_event(transformed, actual, config=None):
+def train_event(transformed, actual, config=None, target_recall=0.80, show_params_settings=True):
     """Entrena solo con train y registra loss y accuracy a umbral 0.5 por época."""
     params = dict(LOGISTIC_CONFIG if config is None else config)
-    # La tolerancia y la paciencia se aplican al objetivo completo entre épocas.
+    if not len(actual["val"]) or not np.asarray(actual["val"]).sum():
+        raise ValueError("Validación requiere positivos para elegir el umbral y calcular F1.")
+    # La tolerancia y la paciencia se aplican al F1 de validación.
     model = SGDClassifier(**{**params, "tol": None})
     history = []
 
@@ -69,31 +73,30 @@ def train_event(transformed, actual, config=None):
         return losses
 
     record(0)
-    best_objective, stale_epochs = np.inf, 0
+    best_f1, reference_f1, best_epoch, best_model, stale_epochs = -np.inf, -np.inf, 0, None, 0
     for epoch in range(1, params["max_iter"] + 1):
         model.partial_fit(transformed["train"], actual["train"], classes=[0, 1] if epoch == 1 else None)
         losses = record(epoch)
-        weights = model.coef_[0]
-        penalty = params["alpha"] * (
-            params["l1_ratio"] * np.abs(weights).sum()
-            + (1 - params["l1_ratio"]) / 2 * np.square(weights).sum()
-        )
-        objective = float(losses["train"] + penalty)
-        if best_objective - objective >= params["tol"]:
-            best_objective, stale_epochs = objective, 0
+        val_probability = model.predict_proba(transformed["val"])[:, 1]
+        threshold = choose_threshold(actual["val"], val_probability, target_recall)
+        val_f1 = float(f1_score(actual["val"], val_probability >= threshold, zero_division=0))
+        if val_f1 > best_f1:
+            best_f1, best_epoch, best_model = val_f1, epoch, deepcopy(model)
+        if reference_f1 == -np.inf or (val_f1 > reference_f1 and val_f1 - reference_f1 >= params["tol"]):
+            reference_f1, stale_epochs = val_f1, 0
         else:
             stale_epochs += 1
         stopped = stale_epochs >= params["n_iter_no_change"]
-        if epoch == 1 or epoch % 10 == 0 or stopped or epoch == params["max_iter"]:
-            print(f"  [learning] época {epoch}/{params['max_iter']}; Log Loss train={losses['train']:.4f}; objetivo train={objective:.4f}", flush=True)
+        if show_params_settings and (epoch == 1 or epoch % 10 == 0 or stopped or epoch == params["max_iter"]):
+            print(f"  [learning] época {epoch}/{params['max_iter']}; Log Loss train={losses['train']:.4f}; F1 val={val_f1:.4f}; mejor F1 val={best_f1:.4f}", flush=True)
         if stopped:
             break
     details = {
         **params, "iterations": epoch, "converged": stopped,
-        "stop_reason": "train_objective_plateau" if stopped else "max_iter",
-        "train_objective": objective,
+        "stop_reason": "validation_f1_plateau" if stopped else "max_iter",
+        "best_epoch": best_epoch, "best_validation_f1": best_f1,
     }
-    return model, details, history
+    return best_model, details, history
 
 
 def explain(model, preprocessor, transformed, X, top_n=3):
