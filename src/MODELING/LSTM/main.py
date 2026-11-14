@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parents[3]
 MODULE_DIR = Path(__file__).resolve().parent
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 
-VERSION = "v2"  # Cambia esta versión para guardar una nueva iteración.
+VERSION = "v3"  # Cambia esta versión para guardar una nueva iteración.
 MODEL_DIR = MODULE_DIR / "modelos" / VERSION
 METRICS_DIR = MODULE_DIR / "metrics" / VERSION
 FIGURES_DIR = MODULE_DIR / "img" / VERSION
@@ -66,7 +66,7 @@ CONFIG = {
     "recurrent": "lstm",  # lstm, stacked_lstm (dos capas), gru o bidirectional
     "heads": "shared",  # shared (una Dense para las 4 salidas) o per_event (una por evento)
 }
-SEARCH_GRID = {"recurrent": ["lstm", "stacked_lstm", "gru", "bidirectional"], "heads": ["shared", "per_event"]}
+SEARCH_GRID = {"k": [10, 20, 30], "units": [32, 64, 128], "learning_rate": [0.001, 0.0003]}
 
 
 def build_model(config, n_sequence, n_context):
