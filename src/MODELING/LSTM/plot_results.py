@@ -1,13 +1,4 @@
-"""
-Gráficas de la LSTM, las mismas que la regresión logística. main.py las guarda en img/<VERSION>:
-- roc_pr_test.png, calibracion_test.png y matrices_confusion_test.png: test con el umbral elegido
-  en val (mayor F1 con recall >= 80 %).
-- aportes_evaluacion.png: equivalente a coeficientes_evaluacion de la regresión logística; aporte
-  promedio de cada variable al log-odds en las alertas de test (Integrated Gradients).
-- comparacion_test_metricas.png y comparacion_test_perdidas.png: vacas conocidas contra nuevas.
-- curvas_aprendizaje.png y curvas_accuracy.png: log loss y accuracy (umbral 0.5) por época de cada
-  evento en train, val y test.
-"""
+"""Gráficas de la LSTM, las mismas que la regresión logística (aportes_evaluacion en lugar de coeficientes)."""
 
 from pathlib import Path
 
@@ -34,7 +25,7 @@ plt.rcParams.update({
 
 
 def roc_pr(y, probability, metrics):
-    """ROC (arriba) y precisión-recall (abajo) en test; el punto es el umbral elegido en val."""
+    """ROC y precisión-sensibilidad en test; el punto es el umbral de val."""
     fig, axes = plt.subplots(2, 4, figsize=(18, 8), constrained_layout=True)
     for number, (event, name) in enumerate(zip(EVENTS, EVENT_NAMES)):
         actual, score = y[:, number], probability[:, number]
@@ -76,7 +67,7 @@ def calibration(y, probability, metrics):
 
 
 def confusion(y, probability, metrics):
-    """Conteos de test con el umbral de val; entre paréntesis, el porcentaje de cada fila real."""
+    """Matrices de confusión de test con el umbral de val."""
     fig, axes = plt.subplots(1, 4, figsize=(18, 4.4), constrained_layout=True)
     for number, (event, name, ax) in enumerate(zip(EVENTS, EVENT_NAMES, axes)):
         threshold = metrics[event]["threshold_recall_val"]
@@ -94,11 +85,11 @@ def confusion(y, probability, metrics):
 
 
 def contributions(frame):
-    """Las variables de mayor aporte promedio al log-odds en las alertas de test, por evento."""
+    """Variables de mayor aporte promedio en las alertas de test."""
     fig, axes = plt.subplots(2, 2, figsize=(16, 12), constrained_layout=True)
     for event, name, ax in zip(EVENTS, EVENT_NAMES, axes.ravel()):
-        data = frame[frame["event"].eq(event)]
-        data = data.iloc[np.argsort(np.abs(data["aporte_medio"].to_numpy()))[-TOP_FEATURES:]]
+        data = frame[frame["event"] == event]
+        data = data.loc[data["aporte_medio"].abs().sort_values().index[-TOP_FEATURES:]]
         weights = data["aporte_medio"].to_numpy()
         ax.barh(data["variable"], weights, color=np.where(weights >= 0, ORANGE, BLUE))
         ax.axvline(0, color=REFERENCE, linewidth=1)
@@ -109,7 +100,7 @@ def contributions(frame):
 
 
 def test_group_comparison(metrics, measures, title):
-    """Compara vacas conocidas y nuevas en test con el mismo modelo y el umbral de val."""
+    """Vacas conocidas contra nuevas en test."""
     columns = min(3, len(measures))
     rows = (len(measures) + columns - 1) // columns
     fig, axes = plt.subplots(rows, columns, figsize=(6 * columns, 4.5 * rows), squeeze=False)
@@ -139,7 +130,7 @@ def test_group_comparison(metrics, measures, title):
 
 
 def learning_curves(history, metric):
-    """Log loss o accuracy (umbral 0.5) de cada evento por época; la línea punteada es la época restaurada."""
+    """Log loss o accuracy por época; la línea punteada es la época restaurada."""
     fig, axes = plt.subplots(1, 4, figsize=(20, 5), constrained_layout=True)
     colors = {"train": BLUE, "val": ORANGE, "test": AQUA}
     labels = {"train": "Train", "val": "Validación", "test": "Test (solo diagnóstico)"}
@@ -162,28 +153,31 @@ def learning_curves(history, metric):
     return fig
 
 
+def save(fig, directory, name):
+    fig.savefig(directory / f"{name}.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[figure] {name}.png", flush=True)
+
+
 def save_plots(metrics, history, y_test, probability_test, contribution_data, output_dir):
-    """Guarda las gráficas en output_dir con los mismos nombres que la regresión logística."""
-    figures = Path(output_dir)
-    figures.mkdir(parents=True, exist_ok=True)
-    builders = (
-        ("roc_pr_test", roc_pr, (y_test, probability_test, metrics)),
-        ("calibracion_test", calibration, (y_test, probability_test, metrics)),
-        ("matrices_confusion_test", confusion, (y_test, probability_test, metrics)),
-        ("aportes_evaluacion", contributions, (contribution_data,)),
-        ("comparacion_test_metricas", test_group_comparison, (metrics, (
-            ("ROC-AUC (mayor es mejor)", "roc_auc"), ("PR-AUC (mayor es mejor)", "pr_auc"),
-            ("Precisión (mayor es mejor)", "precision"), ("Sensibilidad (mayor es mejor)", "recall"),
-            ("F1 (mayor es mejor)", "f1"), ("Exactitud (mayor es mejor)", "accuracy"),
-        ), "Comparación de métricas en test: mismo modelo y umbral elegido en validación")),
-        ("comparacion_test_perdidas", test_group_comparison, (metrics, (
-            ("Brier (menor es mejor)", "brier"), ("Log loss (menor es mejor)", "log_loss"),
-        ), "Comparación de pérdidas en test: menor es mejor")),
-        ("curvas_aprendizaje", learning_curves, (history, "log_loss")),
-        ("curvas_accuracy", learning_curves, (history, "accuracy")),
-    )
-    for name, build, args in builders:
-        figure = build(*args)
-        figure.savefig(figures / f"{name}.png", dpi=150, bbox_inches="tight")
-        plt.close(figure)
-        print(f"[figure] {name}.png", flush=True)
+    """Guarda las gráficas con los nombres de la regresión logística."""
+    directory = Path(output_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    metric_measures = [
+        ("ROC-AUC (mayor es mejor)", "roc_auc"), ("PR-AUC (mayor es mejor)", "pr_auc"),
+        ("Precisión (mayor es mejor)", "precision"), ("Sensibilidad (mayor es mejor)", "recall"),
+        ("F1 (mayor es mejor)", "f1"), ("Exactitud (mayor es mejor)", "accuracy"),
+    ]
+    loss_measures = [("Brier (menor es mejor)", "brier"), ("Log loss (menor es mejor)", "log_loss")]
+
+    save(roc_pr(y_test, probability_test, metrics), directory, "roc_pr_test")
+    save(calibration(y_test, probability_test, metrics), directory, "calibracion_test")
+    save(confusion(y_test, probability_test, metrics), directory, "matrices_confusion_test")
+    save(contributions(contribution_data), directory, "aportes_evaluacion")
+    save(test_group_comparison(metrics, metric_measures,
+                               "Comparación de métricas en test: mismo modelo y umbral elegido en validación"),
+         directory, "comparacion_test_metricas")
+    save(test_group_comparison(metrics, loss_measures, "Comparación de pérdidas en test: menor es mejor"),
+         directory, "comparacion_test_perdidas")
+    save(learning_curves(history, "log_loss"), directory, "curvas_aprendizaje")
+    save(learning_curves(history, "accuracy"), directory, "curvas_accuracy")

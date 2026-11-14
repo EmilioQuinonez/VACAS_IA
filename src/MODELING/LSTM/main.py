@@ -1,42 +1,29 @@
 """
-LSTM: una red multitarea con una salida sigmoide por evento de ordeño y una más para
-"alguna anomalía" (lo contrario de successful_milking_event).
+LSTM multitarea: una salida sigmoide por evento de ordeño y una para "alguna anomalía".
 
-La red lee la secuencia de las K sesiones previas de la vaca (cada paso con los valores de esa
-sesión) y, después de la capa recurrente, el contexto de la sesión a predecir (clima, máquina,
-calendario y carga del hato).
-- Corte cronológico 70/15/15 sin espacio entre periodos: train entrena, val detiene el
-  entrenamiento (early stopping cuando el F1 promedio de val no mejora en patience épocas) y elige
-  el umbral (mayor F1 entre los que alcanzan recall de 80 %), y test evalúa.
-- Test completo y separado en vacas conocidas (en train o val) y nuevas (primer ordeño en test).
-- Tres factores por alerta de test con Integrated Gradients (explain.py).
+La red lee las K sesiones previas de la vaca y, después de la LSTM, el contexto de la sesión a
+predecir. Corte cronológico 70/15/15: train entrena; val detiene el entrenamiento por F1, calibra
+y elige el umbral; test evalúa. Da 3 factores por alerta (explain.py).
 
-Cada iteración se guarda por versión (VERSION), como en la regresión logística:
-- modelos/<VERSION>/: lstm.keras, config.json, scaler.json, metrics.json, history.json, lstm.log y,
-  si hubo búsqueda, busqueda.csv.
-- metrics/<VERSION>/: un CSV de métricas por evento, alertas_test.csv.gz (los 3 factores de cada
-  alerta) y aportes_promedio.csv.
-- img/<VERSION>/: las mismas gráficas que la regresión logística (plot_results.py).
-Si SEARCH_GRID tiene valores, se entrena una red por combinación (sobre CONFIG), se elige la de
-mayor F1 promedio de val y se guarda la comparación en busqueda.csv.
+Versión final (v5); las anteriores están en su commit. Salidas en modelos/, metrics/ e img/<VERSION>.
 
 Requiere correr antes src/MODELING/LSTM/build_history_features.py.
 
 Uso, desde la raíz del repo (con -u el log se escribe al momento):
-    python -u src/MODELING/LSTM/main.py >| src/MODELING/LSTM/modelos/v1/lstm.log 2>&1
+    python -u src/MODELING/LSTM/main.py >| src/MODELING/LSTM/modelos/v5/lstm.log 2>&1
 """
 
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, log_loss
-from sklearn.model_selection import ParameterGrid
 from tensorflow import keras
 
 from dataset import EVENTS, build_inputs, load_sessions, split_by_time, split_test_by_cow
-from evaluation import SPLIT_LABELS, choose_threshold, evaluate, f1_at_threshold, save_metric_tables
+from evaluation import (
+    SPLIT_LABELS, calibrate, choose_threshold, evaluate, fit_calibration, mean_f1, save_metric_tables,
+)
 from explain import explain
 from plot_results import save_plots
 
@@ -44,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[3]
 MODULE_DIR = Path(__file__).resolve().parent
 INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 
-VERSION = "v4"  # Cambia esta versión para guardar una nueva iteración.
+VERSION = "v5"  # Cambia esta versión para guardar una nueva iteración.
 MODEL_DIR = MODULE_DIR / "modelos" / VERSION
 METRICS_DIR = MODULE_DIR / "metrics" / VERSION
 FIGURES_DIR = MODULE_DIR / "img" / VERSION
@@ -59,42 +46,23 @@ CONFIG = {
     "units": 64,
     "dense_units": 32,
     "dropout": 0.2,
-    "learning_rate": 0.001,
+    "learning_rate": 0.001,  # Inicial; ReduceLROnPlateau lo baja (v4)
     "epochs": 50,
     "batch_size": 512,
     "patience": 5,
-    "recurrent": "lstm",  # lstm, stacked_lstm (dos capas), gru o bidirectional
-    "heads": "shared",  # shared (una Dense para las 4 salidas) o per_event (una por evento)
-    "reduce_lr": True,  # ReduceLROnPlateau: baja el learning rate a la mitad si el F1 de val no mejora en 2 épocas
 }
-SEARCH_GRID = {}  # Vacío: se entrena solo CONFIG.
 
 
 def build_model(config, n_sequence, n_context):
-    """
-    Masking y capa recurrente sobre la secuencia; su salida se une al contexto antes de las capas
-    densas. "bidirectional" lee la secuencia en ambos sentidos; solo son sesiones previas, así que
-    no ve el futuro.
-    """
+    """Masking y LSTM sobre la secuencia; su salida se une al contexto antes de las capas densas."""
     sequence = keras.Input(shape=(config["k"], n_sequence), name="secuencia")
     context = keras.Input(shape=(n_context,), name="contexto")
     x = keras.layers.Masking(mask_value=0.0)(sequence)
-    if config["recurrent"] == "stacked_lstm":
-        x = keras.layers.LSTM(config["units"], dropout=config["dropout"], return_sequences=True)(x)
-    layer = keras.layers.GRU if config["recurrent"] == "gru" else keras.layers.LSTM
-    layer = layer(config["units"], dropout=config["dropout"])
-    x = (keras.layers.Bidirectional(layer) if config["recurrent"] == "bidirectional" else layer)(x)
+    x = keras.layers.LSTM(config["units"], dropout=config["dropout"])(x)
     x = keras.layers.Concatenate()([x, context])
-
-    def head(x):
-        x = keras.layers.Dense(config["dense_units"], activation="relu")(x)
-        return keras.layers.Dropout(config["dropout"])(x)
-
-    if config["heads"] == "per_event":
-        outputs = [keras.layers.Dense(1, activation="sigmoid")(head(x)) for _ in EVENTS]
-        output = keras.layers.Concatenate(name="eventos")(outputs)
-    else:
-        output = keras.layers.Dense(len(EVENTS), activation="sigmoid", name="eventos")(head(x))
+    x = keras.layers.Dense(config["dense_units"], activation="relu")(x)
+    x = keras.layers.Dropout(config["dropout"])(x)
+    output = keras.layers.Dense(len(EVENTS), activation="sigmoid", name="eventos")(x)
 
     model = keras.Model([sequence, context], output)
     model.compile(optimizer=keras.optimizers.Adam(config["learning_rate"]), loss="binary_crossentropy")
@@ -104,70 +72,46 @@ def build_model(config, n_sequence, n_context):
 
 class EpochMetrics(keras.callbacks.Callback):
     """
-    Al final de cada época agrega a logs val_f1, el F1 promedio de los 4 eventos en val con el umbral
-    con que se evalúa (lo vigila el early stopping). Con curves, también log loss y accuracy (umbral
-    0.5) de cada evento en train, val y test para las curvas de aprendizaje, como en la regresión
-    logística (test solo como diagnóstico; no decide nada); en la búsqueda se omiten porque solo se
-    grafica el modelo final. Va antes de EarlyStopping para que este y el historial ya vean estos
-    valores. Predecir los tres conjuntos agrega unos segundos por época.
+    Al final de cada época calcula val_f1 (lo vigilan EarlyStopping y ReduceLROnPlateau) y el log
+    loss y accuracy de cada evento en train, val y test para las curvas de aprendizaje.
     """
 
-    def __init__(self, X_seq, X_ctx, y, idx, batch_size, curves):
+    def __init__(self, X_seq, X_ctx, y, idx, batch_size):
         super().__init__()
-        names = ("train", "val", "test") if curves else ("val",)
-        self.splits = {name: ([X_seq[idx[name]], X_ctx[idx[name]]], y[idx[name]]) for name in names}
-        self.batch_size, self.curves = batch_size, curves
+        self.splits = {}
+        for name in ("train", "val", "test"):
+            rows = idx[name]
+            self.splits[name] = ([X_seq[rows], X_ctx[rows]], y[rows])
+        self.batch_size = batch_size
 
     def on_epoch_end(self, epoch, logs=None):
         for split, (inputs, actual) in self.splits.items():
             probability = self.model.predict(inputs, batch_size=self.batch_size, verbose=0)
-            for n, event in enumerate(EVENTS if self.curves else ()):
+            for n, event in enumerate(EVENTS):
                 logs[f"{split}_log_loss_{event}"] = float(log_loss(actual[:, n], probability[:, n], labels=[0, 1]))
                 logs[f"{split}_accuracy_{event}"] = float(accuracy_score(actual[:, n], probability[:, n] >= 0.5))
             if split == "val":
-                f1 = [f1_at_threshold(actual[:, n], probability[:, n],
-                                      choose_threshold(actual[:, n], probability[:, n], TARGET_RECALL))
-                      for n in range(len(EVENTS))]
-                logs["val_f1"] = float(np.mean(f1))
+                logs["val_f1"] = mean_f1(actual, probability, TARGET_RECALL)
         print(f"  val_f1: {logs['val_f1']:.4f}", flush=True)
 
 
-def train(config, X_seq, X_ctx, y, idx, curves=True):
-    """Entrena con train y detiene con val; devuelve el modelo con los pesos de la mejor época y su historial."""
+def train(config, X_seq, X_ctx, y, idx):
+    """Entrena con train y se detiene con val; devuelve el modelo de la mejor época y su historial."""
     print(f"\n[training] LSTM {VERSION} {config}", flush=True)
     keras.utils.set_random_seed(RANDOM_STATE)
     model = build_model(config, X_seq.shape[2], X_ctx.shape[1])
-    callbacks = [EpochMetrics(X_seq, X_ctx, y, idx, config["batch_size"], curves),
-                 keras.callbacks.EarlyStopping(monitor="val_f1", mode="max", patience=config["patience"],
-                                               restore_best_weights=True, verbose=1)]
-    if config["reduce_lr"]:
-        callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor="val_f1", mode="max", factor=0.5,
-                                                           patience=2, min_lr=1e-5, verbose=1))
-    train_rows = idx["train"]
-    history = model.fit([X_seq[train_rows], X_ctx[train_rows]], y[train_rows], epochs=config["epochs"],
+    callbacks = [
+        EpochMetrics(X_seq, X_ctx, y, idx, config["batch_size"]),
+        keras.callbacks.EarlyStopping(monitor="val_f1", mode="max", patience=config["patience"],
+                                      restore_best_weights=True, verbose=1),
+        keras.callbacks.ReduceLROnPlateau(monitor="val_f1", mode="max", factor=0.5, patience=2,
+                                          min_lr=1e-5, verbose=1),
+    ]
+    rows = idx["train"]
+    history = model.fit([X_seq[rows], X_ctx[rows]], y[rows], epochs=config["epochs"],
                         batch_size=config["batch_size"], verbose=2, callbacks=callbacks)
 
     return model, history.history
-
-
-def search(sessions, idx):
-    """Entrena CONFIG con cada combinación de SEARCH_GRID; guarda busqueda.csv y devuelve la de mayor F1 de val."""
-    rows, k, best = [], None, None
-    for candidate in ParameterGrid(SEARCH_GRID):
-        config = {**CONFIG, **candidate}
-        if config["k"] != k:
-            k = config["k"]
-            X_seq, X_ctx, y, _ = build_inputs(sessions, idx["train"], k)
-        _, history = train(config, X_seq, X_ctx, y, idx, curves=False)
-        rows.append({**candidate, "epochs_run": len(history["loss"]), "f1_val_mean": max(history["val_f1"])})
-        print(f"[search] {candidate}: mean F1 on val {rows[-1]['f1_val_mean']:.4f}", flush=True)
-        if best is None or rows[-1]["f1_val_mean"] > best[0]:
-            best = (rows[-1]["f1_val_mean"], config)
-    table = pd.DataFrame(rows).sort_values("f1_val_mean", ascending=False)
-    table.round(4).to_csv(MODEL_DIR / "busqueda.csv", index=False, encoding="utf-8-sig")
-    print(f"\n[search] best: {best[1]}", flush=True)
-
-    return best[1]
 
 
 def save_json(data, name):
@@ -176,7 +120,7 @@ def save_json(data, name):
 
 
 def print_summary(event, scores):
-    """F1, recall y precisión con el umbral de val por conjunto, y los criterios de negocio en test."""
+    """Métricas de cada conjunto y criterios de negocio."""
     threshold = scores["threshold_recall_val"]
     print(f"\n{event} (best F1 threshold with recall >= {TARGET_RECALL:.0%} on val: {threshold:.3f})")
     for name in SPLIT_LABELS:
@@ -189,24 +133,34 @@ def print_summary(event, scores):
 
 
 def main():
+    # 1. Datos
     sessions = load_sessions(INPUT_PATH)
     idx = split_by_time(sessions["inicio"], TRAIN_FRACTION, VAL_FRACTION)
+    X_seq, X_ctx, y, scaler = build_inputs(sessions, idx["train"], CONFIG["k"])
+
+    # 2. Entrenamiento
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    config = search(sessions, idx) if SEARCH_GRID else CONFIG
-    X_seq, X_ctx, y, scaler = build_inputs(sessions, idx["train"], config["k"])
-    model, history = train(config, X_seq, X_ctx, y, idx)
+    model, history = train(CONFIG, X_seq, X_ctx, y, idx)
     model.save(MODEL_DIR / "lstm.keras")
-    save_json(config, "config.json")
+    save_json(CONFIG, "config.json")
     save_json(history, "history.json")
     save_json(scaler, "scaler.json")
 
+    # 3. Probabilidades calibradas con val
     groups = split_test_by_cow(sessions["id_vaca"], idx)
     idx.update(groups)
-    probabilities = {name: model.predict([X_seq[rows], X_ctx[rows]], batch_size=config["batch_size"], verbose=0)
-                     for name, rows in idx.items()}
+    probabilities = {}
+    for name, rows in idx.items():
+        probabilities[name] = model.predict([X_seq[rows], X_ctx[rows]], batch_size=CONFIG["batch_size"], verbose=0)
+    calibration = fit_calibration(y[idx["val"]], probabilities["val"])
+    for name in probabilities:
+        probabilities[name] = calibrate(probabilities[name], calibration)
+    save_json(calibration, "calibracion.json")
 
-    results = {name: {"n_cows": int(sessions["id_vaca"].iloc[rows].nunique()), "n_sessions": len(rows)}
-               for name, rows in groups.items()}
+    # 4. Umbral, métricas y 3 factores por evento
+    results = {}
+    for name, rows in groups.items():
+        results[name] = {"n_cows": int(sessions["id_vaca"].iloc[rows].nunique()), "n_sessions": len(rows)}
     alerts, contributions = [], []
     for number, event in enumerate(EVENTS):
         threshold = choose_threshold(y[idx["val"], number], probabilities["val"][:, number], TARGET_RECALL)
@@ -217,7 +171,8 @@ def main():
         print(f"[explain] {event}", flush=True)
         is_alert = probabilities["test"][:, number] >= threshold
         alert_rows = idx["test"][is_alert]
-        factors, contribution = explain(model, X_seq, X_ctx, alert_rows, sessions, number, config["batch_size"])
+        factors, contribution = explain(model, X_seq, X_ctx, alert_rows, sessions, number,
+                                        CONFIG["batch_size"], calibration[event]["a"])
         alert = pd.DataFrame({
             "id_vaca": sessions["id_vaca"].iloc[alert_rows].to_numpy(),
             "inicio": sessions["inicio"].iloc[alert_rows].to_numpy(),
@@ -228,7 +183,7 @@ def main():
         alerts.append(pd.concat([alert, factors], axis=1))
         contributions.append(pd.DataFrame({"event": event, "variable": contribution.columns,
                                            "aporte_medio": contribution.mean().to_numpy()}))
-        complete = factors[[f"factor_{i}" for i in range(1, 4)]].ne("").all(axis=1)
+        complete = factors[["factor_1", "factor_2", "factor_3"]].ne("").all(axis=1)
         results[event]["test"]["explanations"] = {"alerts": len(factors), "coverage": float(complete.mean())}
 
         test = results[event]["test"]
@@ -240,6 +195,7 @@ def main():
         }
         print_summary(event, results[event])
 
+    # 5. Tablas y gráficas
     save_json(results, "metrics.json")
     save_metric_tables(results, METRICS_DIR)
     pd.concat(alerts, ignore_index=True).to_csv(METRICS_DIR / "alertas_test.csv.gz", index=False)

@@ -1,9 +1,7 @@
 """
-Tres factores por alerta con Integrated Gradients, como pide el reporte: cuánto sumó o restó cada
-variable al log-odds de la predicción, y de qué sesión previa vino cuando es una variable de la
-secuencia. La referencia es la misma vaca con valores promedio de train en sus sesiones previas y
-en el contexto (0 ya escalado); los pasos de relleno siguen ignorados por Masking. Los aportes de
-una sesión suman su log-odds menos el de esa referencia. Son asociaciones del modelo, no causas.
+Tres factores por alerta con Integrated Gradients: cuánto sumó o restó cada variable al log-odds y,
+si es de la secuencia, de qué sesión previa vino. La referencia es la vaca con valores promedio de
+train (0 ya escalado). Son asociaciones, no causas.
 """
 
 import numpy as np
@@ -12,13 +10,13 @@ import tensorflow as tf
 
 from dataset import CONTEXT_FEATURES, SEQUENCE_FEATURES
 
-STEPS = 32  # Puntos del camino entre la referencia y la sesión real
+STEPS = 32  # Puntos entre la referencia y la sesión real
 TOP_N = 3
-NAMES = np.array(SEQUENCE_FEATURES + CONTEXT_FEATURES, dtype=object)
+NAMES = SEQUENCE_FEATURES + CONTEXT_FEATURES
 
 
 def integrated_gradients(model, seq, ctx, output, batch_size):
-    """Aporte de cada entrada al log-odds de la salida output: (n, k, variables) y (n, variables)."""
+    """Aporte de cada entrada al log-odds: gradiente promedio entre la referencia y la entrada, por la entrada."""
     seq_gradients, ctx_gradients = np.zeros_like(seq), np.zeros_like(ctx)
     for alpha in (np.arange(STEPS) + 0.5) / STEPS:
         for start in range(0, len(seq), batch_size):
@@ -35,34 +33,43 @@ def integrated_gradients(model, seq, ctx, output, batch_size):
     return seq * seq_gradients / STEPS, ctx * ctx_gradients / STEPS
 
 
-def explain(model, X_seq, X_ctx, rows, sessions, output, batch_size):
+def explain(model, X_seq, X_ctx, rows, sessions, output, batch_size, scale):
     """
-    Factores de las sesiones rows (posiciones en sessions) para la salida output. Una variable de la
-    secuencia suma sus aportes de los k pasos y se reporta la sesión previa que más aportó (t-1 es
-    el ordeño anterior).
-    Devuelve los factores por sesión y el aporte de cada variable en cada sesión.
+    Los 3 factores de cada sesión de rows para la salida output; scale es la pendiente a de la
+    calibración. Devuelve los factores y el aporte de cada variable.
     """
     seq_contribution, ctx_contribution = integrated_gradients(model, X_seq[rows], X_ctx[rows], output, batch_size)
+    seq_contribution, ctx_contribution = seq_contribution * scale, ctx_contribution * scale
+    # La secuencia suma sus k pasos.
     contribution = np.concatenate([seq_contribution.sum(axis=1), ctx_contribution], axis=1)
-    k, n_seq = X_seq.shape[1], len(SEQUENCE_FEATURES)
-    # Pasos hacia atrás del paso con más aporte; el paso k - 1 es la fila de la sesión y describe t-1.
-    lag = k - 1 - np.abs(seq_contribution).argmax(axis=1)
+    k = X_seq.shape[1]
 
-    factors = pd.DataFrame(index=range(len(rows)))
-    ranking = np.argsort(-np.abs(contribution), axis=1)[:, :TOP_N]
-    positions = np.arange(len(rows))
-    for rank in range(TOP_N):
-        column = ranking[:, rank]
-        amount = contribution[positions, column]
-        in_sequence = column < n_seq
-        back = np.where(in_sequence, lag[positions, np.minimum(column, n_seq - 1)], 0)
-        source = rows - back  # La fila t - lag describe la sesión t - lag - 1.
-        values = [sessions[name].iat[row] for name, row in zip(NAMES[column], source)]
-        values = [np.expm1(v) if name == "box_time_to_yield_ratio" else v for name, v in zip(NAMES[column], values)]
-        factors[f"factor_{rank + 1}"] = np.where(np.abs(amount) > 1e-12, NAMES[column], "")
-        factors[f"sesion_{rank + 1}"] = np.where(in_sequence, [f"t-{b + 1}" for b in back], "actual")
-        factors[f"valor_{rank + 1}"] = ["faltante" if pd.isna(v) else f"{v:.4g}" for v in values]
-        factors[f"aporte_log_odds_{rank + 1}"] = amount
-        factors[f"direccion_{rank + 1}"] = np.where(amount > 0, "aumenta riesgo", "reduce riesgo")
+    factors = []
+    for i, row in enumerate(rows):
+        factor = {}
+        top = np.argsort(-np.abs(contribution[i]))[:TOP_N]
+        for rank, column in enumerate(top, start=1):
+            name, amount = NAMES[column], contribution[i, column]
+            if abs(amount) <= 1e-12:  # Sin aporte: no cuenta como factor (como en la regresión logística)
+                name = session = value_text = ""
+            else:
+                if column < len(SEQUENCE_FEATURES):
+                    # El último paso describe la sesión anterior (t-1).
+                    steps_back = k - 1 - np.abs(seq_contribution[i, :, column]).argmax()
+                    session, value = f"t-{steps_back + 1}", sessions[name].iat[row - steps_back]
+                else:
+                    session, value = "actual", sessions[name].iat[row]
+                if name == "box_time_to_yield_ratio":
+                    value = np.expm1(value)  # Viene en logaritmo
+                value_text = "faltante" if pd.isna(value) else f"{value:.4g}"
+            factor[f"factor_{rank}"] = name
+            factor[f"sesion_{rank}"] = session
+            factor[f"valor_{rank}"] = value_text
+            factor[f"aporte_log_odds_{rank}"] = amount
+            factor[f"direccion_{rank}"] = "aumenta riesgo" if amount > 0 else "reduce riesgo"
+        factors.append(factor)
 
-    return factors, pd.DataFrame(contribution, columns=NAMES)
+    # Las columnas se fijan para que la tabla exista aunque no haya alertas.
+    columns = [f"{field}_{rank}" for rank in range(1, TOP_N + 1)
+               for field in ("factor", "sesion", "valor", "aporte_log_odds", "direccion")]
+    return pd.DataFrame(factors, columns=columns), pd.DataFrame(contribution, columns=NAMES)
