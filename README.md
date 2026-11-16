@@ -158,6 +158,64 @@ python3 src/DP/integrar_concentrado.py
 
 **Resultado esperado:** se generan `Data/dataset_concentrado.csv` y `Data/dataset_concentrado_anonimo.csv`. El segundo usa los mismos hashes de vaca que ordeño, y el mapa no se modifica. Los archivos de `Data/` son locales y no se versionan en Git. `Data/dataset_vacas_integrado.csv` conserva todas sus filas y columnas previas, y añade las 4 variables definidas para el concentrado: `conc_sesion_previa`, `tope_sesion_previa`, `conc_d1` y `conc_media_7d`.
 
+## Modelo LSTM
+
+Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. Ejecuta los siguientes comandos desde la raíz del repositorio.
+
+### 1. Agregar las variables de historial
+
+**Windows**
+
+```powershell
+py src/MODELING/LSTM/build_history_features.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/MODELING/LSTM/build_history_features.py
+```
+
+**Resultado esperado:** se actualiza `Data/dataset_vacas_integrado.csv` con el calendario (`mes`, `hora`, `dia_semana`, `dias_en_leche`, `dias_en_hato`), los valores del ordeño previo (`{evento}_previo`, `mdi_previo`, `conductividad_max_previa`, `produccion_previa`, `cuarto_inactivo_previo`) y las tasas de la vaca y del hato.
+
+### 2. Entrenar la LSTM
+
+**Windows**
+
+```powershell
+mkdir src/MODELING/LSTM/modelos/lstm_base
+py -u src/MODELING/LSTM/main.py > src/MODELING/LSTM/modelos/lstm_base/lstm_base.log 2>&1
+```
+
+**macOS y Linux**
+
+```bash
+mkdir -p src/MODELING/LSTM/modelos/lstm_base
+python3 -u src/MODELING/LSTM/main.py >| src/MODELING/LSTM/modelos/lstm_base/lstm_base.log 2>&1
+```
+
+**Resultado esperado:** se generan en `src/MODELING/LSTM/modelos/lstm_base/` el modelo (`lstm.keras`), las métricas por evento (`metrics.json`), las curvas de pérdida (`history.json`) y el log del entrenamiento. La red es multitarea, con una salida para cada evento y otra para `alguna_anomalia` (lo contrario de `successful_milking_event`):
+
+- Lee la secuencia de las 20 sesiones previas de la vaca. Cada paso tiene los valores de esa sesión: FME, `blood_diff_*`, `box_time_to_yield_ratio`, producción, MDI, conductividad máxima, cuarto inactivo, eventos y horas desde el ordeño anterior.
+- Después de la capa LSTM se agrega el contexto de la sesión a predecir: intervalo, máquina, clima, sangre por máquina, calendario y carga del hato.
+- Usa un corte cronológico 70/15/15 sin espacio entre periodos. Con val se detiene el entrenamiento (early stopping cuando el PR-AUC promedio de las 4 salidas en val no mejora en 5 épocas, hasta 50 épocas) y se elige el umbral para un recall ≥ 80 %. Las métricas se calculan en train, val, test y en test separado por vaca, con los mismos grupos que XGBoost y la regresión logística: conocidas (estuvieron en train, `test_vacas_conocidas`), solo en val (`test_vacas_solo_val`) y nuevas (su primer ordeño es en test, `test_vacas_nuevas`).
+
+### 3. Generar las gráficas
+
+**Windows**
+
+```powershell
+py -u src/MODELING/LSTM/plot_results.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 -u src/MODELING/LSTM/plot_results.py
+```
+
+**Resultado esperado:** se generan en `src/MODELING/LSTM/modelos/lstm_base/graficas/` ocho gráficas a partir del modelo guardado, sin reentrenar: curvas de aprendizaje (pérdida, PR-AUC promedio y accuracy por época), ROC y precisión-recall, calibración, matrices de confusión, distribución de probabilidades y desempeño semanal en test; métricas de vacas conocidas, solo en val y nuevas; e importancia por permutación en val (caída del PR-AUC al revolver cada variable).
+
 ## Preparación para reto de datos.
 
 Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. 
@@ -226,12 +284,20 @@ La estructura del repositorio es:
 
 - **[`docs/`](docs/)** — Documentación y entregables.
   - **[`BU/`](docs/BU/)** — Fase de *Entendimiento del negocio*.
-    - Reporte Business Understanding.
+    - [Reporte Business Understanding](docs/BU/Reportes%20de%20fase%20entendimiento%20del%20negocio.pdf).
+    - [Reporte Business Understanding II](docs/BU/Reportes%20de%20fase%20entendimiento%20del%20negocio%20II.pdf): segunda iteración, cambia el criterio de éxito de minería de datos de accuracy a F1.
     - Memorándum de entendimiento.
     - One Page.
     - WBS y su archivo fuente.
   - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
+    - [Reporte Data Understanding](docs/DU/Reportes%20de%20fase%20Data%20Understanding.pdf).
+    - [Reporte Data Understanding II](docs/DU/Reportes%20de%20fase%20Data%20Understanding%20II.pdf): segunda iteración, con su changelog.
     - [Investigación de la fuente de clima](docs/DU/Investigacion_Clima.md).
+  - **[`DP/`](docs/DP/)** — Fase de *Preparación de los datos*.
+    - [Reporte Data Preparation](docs/DP/Reportes%20de%20fase%20Data%20Preparation.pdf).
+    - [Reporte Data Preparation II](docs/DP/Reportes%20de%20fase%20Data%20Preparation%20II.pdf): segunda iteración, con su changelog.
+  - **[`MODELING/`](docs/MODELING/)** — Fase de *Modelado*.
+    - [Reporte Modeling](docs/MODELING/Reportes%20de%20fase%20Modeling.pdf): diseño de pruebas, regresión logística, XGBoost, LSTM y evaluación de los modelos.
   - **[`RETO_DATOS/`](docs/RETO_DATOS/)** — Preparación para el reto de datos.
     - [Reporte del reto de datos](docs/RETO_DATOS/Reporte-RetoDatos.pdf).
   - [`guide_audit_logs.md`](docs/guide_audit_logs.md) y [`data_audit_logs.csv`](docs/data_audit_logs.csv) — Guía y bitácora de auditoría de registros.
@@ -249,6 +315,28 @@ La estructura del repositorio es:
     - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento a `Data/dataset_vacas_integrado.csv`.
     - [`integrar_concentrado.py`](src/DP/integrar_concentrado.py) — Añade cuatro atributos históricos de concentrado a `Data/dataset_vacas_integrado.csv`.
     - [`k_fold.py`](src/DP/k_fold.py) — Separa la muestra en un conjunto de prueba fijo y cinco folds de entrenamiento y validación.
+  - **[`MODELING/`](src/MODELING/)** — Scripts de la fase *Modeling*. Los tres modelos usan el corte cronológico 70/15/15 y tienen una salida por evento de ordeño y otra para alguna anomalía.
+    - **[`logistic/`](src/MODELING/logistic/)** — Regresión logística (versiones v1–v4; `VERSION` en `main.py` elige cuál se guarda).
+      - [`main.py`](src/MODELING/logistic/main.py) — Entrena cuatro regresiones con train y las evalúa con validación y test. Usa `dataset.py`, `evaluation.py` y `logistic_model.py`.
+      - [`dataset.py`](src/MODELING/logistic/dataset.py) — Carga los datos y el historial disponible antes de cada sesión, sin modificar el CSV original.
+      - [`logistic_model.py`](src/MODELING/logistic/logistic_model.py) — Rellena con cero y bandera, escala con train y ajusta la regresión logística.
+      - [`evaluation.py`](src/MODELING/logistic/evaluation.py) — Selección con validación y evaluación de probabilidades y decisiones binarias.
+      - [`plot_results.py`](src/MODELING/logistic/plot_results.py) — Gráficas de evaluación y del avance por iteraciones en [`img/`](src/MODELING/logistic/img/).
+      - [`models/`](src/MODELING/logistic/models/) y [`metrics/`](src/MODELING/logistic/metrics/) — Modelos y métricas de cada versión.
+    - **[`XGBoost/`](src/MODELING/XGBoost/)** — XGBoost calibrado por evento (versiones v1–v5; la final es v5).
+      - [`build_history_features.py`](src/MODELING/XGBoost/build_history_features.py) — Agrega las 21 variables de historial que usa el XGBoost a `Data/dataset_vacas_integrado.csv`.
+      - [`versions.py`](src/MODELING/XGBoost/versions.py) — Hiperparámetros de cada versión; `VERSION` elige cuál corren `main.py` y `plot_results.py`.
+      - [`main.py`](src/MODELING/XGBoost/main.py) — Entrena, calibra y evalúa la versión elegida y guarda los modelos y las métricas en [`models/<versión>/`](src/MODELING/XGBoost/models/). Usa `dataset.py`, `evaluation.py` y `xgboost_model.py`.
+      - [`random_search.py`](src/MODELING/XGBoost/random_search.py) — Búsqueda al azar de hiperparámetros, medida solo en train y val; la mejor combinación es v5 (`models/v5/busqueda.csv`).
+      - [`evaluation.py`](src/MODELING/XGBoost/evaluation.py) — Umbral de recall, métricas por conjunto y los 3 factores SHAP de cada alerta.
+      - [`plot_results.py`](src/MODELING/XGBoost/plot_results.py) — Genera con `plots.py` las gráficas de la versión elegida en [`img/<versión>/`](src/MODELING/XGBoost/img/), sin reentrenar.
+    - **[`LSTM/`](src/MODELING/LSTM/)** — LSTM multitarea (versiones v1–v5; la final es v5).
+      - [`build_history_features.py`](src/MODELING/LSTM/build_history_features.py) — Agrega las variables de calendario, ordeño previo y tasas de la vaca y del hato a `Data/dataset_vacas_integrado.csv`.
+      - [`dataset.py`](src/MODELING/LSTM/dataset.py) — Carga los ordeños, hace el corte cronológico y arma las secuencias y el contexto de la LSTM.
+      - [`main.py`](src/MODELING/LSTM/main.py) — Entrena, calibra y evalúa la LSTM y guarda el modelo y las métricas en [`modelos/<versión>/`](src/MODELING/LSTM/modelos/) y [`metrics/<versión>/`](src/MODELING/LSTM/metrics/).
+      - [`evaluation.py`](src/MODELING/LSTM/evaluation.py) — Umbral, métricas, calibración y tablas CSV.
+      - [`explain.py`](src/MODELING/LSTM/explain.py) — Los 3 factores de cada alerta con Integrated Gradients.
+      - [`plot_results.py`](src/MODELING/LSTM/plot_results.py) — Genera las gráficas de evaluación de la LSTM en [`img/<versión>/`](src/MODELING/LSTM/img/).
   - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
     - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
     - [`dataset_vacas_muestra.csv`](src/RETO_DATOS/dataset_vacas_muestra.csv) — Muestra generada por el script anterior.
@@ -261,6 +349,26 @@ Los entregables de las siguientes fases se incorporarán a esta estructura confo
 El reporte está en un solo documento con una pestaña por fase. Los números de página son los del índice de cada pestaña.
 
 #### [Reporte: Entendimiento del negocio](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.0)
+
+<pre>
+<strong>Adaptaciones de la metodología CRISP-DM.................1</strong>
+<strong>Antecedentes............................................1</strong>
+<strong>Objetivo de negocio.....................................2</strong>
+    Criterios de éxito de negocio.......................3
+<strong>Objetivo de minería de datos............................3</strong>
+    Criterios de éxito de minería de datos..............3
+<strong>Requerimientos del proyecto.............................3</strong>
+<strong><a href="https://docs.google.com/spreadsheets/d/1cll5V8mhmh2yNx-Pf1LDWkmkLIdHjaAfX-hKlmNiJMg/edit?usp=sharing">Plan de valor ganado</a>....................................4</strong>
+<strong>Supuestos del proyecto..................................4</strong>
+<strong>Limitaciones del proyecto...............................4</strong>
+<strong><a href="https://docs.google.com/spreadsheets/d/1WDTALeblrlLVCPUdWbw-YFCtojI6zTDLFODQ9f9Gr6Y/edit?usp=sharing">Inventario de recursos</a>..................................5</strong>
+<strong><a href="https://docs.google.com/document/d/1eC2AxkIQMhPYsphopbgM1sPM5fT8XvkHgX1WiRlCP2M/edit?usp=sharing">Análisis de costo y beneficio</a>...........................5</strong>
+<strong><a href="https://docs.google.com/spreadsheets/d/15yn73QzDFNr9cexEtcF1Ktdak3ik_enyfIcaNqOjK60/edit?usp=sharing">Matriz de riesgos</a>.......................................5</strong>
+<strong>Glosario de terminología................................5</strong>
+<strong>Referencias.............................................7</strong>
+</pre>
+
+#### [Reporte: Entendimiento del negocio II](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.7ytazc1p5l16)
 
 <pre>
 <strong>Adaptaciones de la metodología CRISP-DM.................1</strong>
@@ -310,7 +418,65 @@ El reporte está en un solo documento con una pestaña por fase. Los números de
 <strong>8. Glosario..............................................24</strong>
 </pre>
 
+#### [Reporte: Entendimiento de los datos II](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.rhwdgmtp2831)
+
+<pre>
+<strong>Changelog respecto a la iteración anterior...............1</strong>
+<strong>Resumen..................................................2</strong>
+<strong>1. Adaptaciones de la metodología CRISP-DM...............2</strong>
+<strong>2. Recolección de datos iniciales........................2</strong>
+    2.1 Ubicación y obtención............................2
+    2.2 Problemas encontrados y soluciones...............3
+<strong>3. Descripción de los datos..............................4</strong>
+    3.1 Fuentes..........................................4
+    3.2 Formato y tipos de datos.........................5
+    3.3 Descripción de columnas del dataset original.....6
+        Identificación y resumen (main_*)............6
+        Estado (estado_*)............................6
+        Mediciones por cuarto (DI, DD, TI, TD).......7
+        Contexto (misc_*)............................7
+        Contadores de monitorización.................8
+    3.4 Características del dataset......................8
+    3.5 Clima............................................10
+<strong>4. Satisfacción de los requerimientos....................10</strong>
+<strong>5. Exploración de los datos..............................12</strong>
+    5.1 Visualizar y consultar los datos.................13
+    5.2 Patrones y distribuciones........................14
+    5.3 Problema de cola.................................17
+    5.4 Clima integrado..................................19
+    5.5 Hipótesis iniciales..............................21
+<strong>6. Calidad de los datos..................................21</strong>
+    6.1 Análisis de la calidad...........................21
+    6.2 Datos atípicos...................................23
+    6.3 Métodos de limpieza recomendados.................24
+<strong>7. Implicaciones para el modelado........................25</strong>
+    Anexo: calidad por columna de los historiales CSV....25
+<strong>8. Glosario..............................................27</strong>
+</pre>
+
 #### [Reporte: Preparación de los datos](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.dll5kcgopm0k)
+
+<pre>
+<strong>Adaptaciones de la metodología CRISP-DM.................................1</strong>
+<strong>Reporte de limpieza de datos............................................2</strong>
+<strong>Reporte de construcción e integración de datos..........................4</strong>
+    Integración del clima con las sesiones de ordeño....................4
+    Construcción de los atributos de temperatura........................4
+    Construcción de los atributos derivados.............................5
+    Construcción de los atributos de concentrado........................9
+<strong>Reporte de formato de datos.............................................12</strong>
+    Investigar posibles modelos en base a los datos.....................12
+<strong>Reporte de selección del modelo.........................................14</strong>
+    Técnica seleccionada de los modelos.................................14
+    Supuestos de los modelos............................................15
+    Técnica de modelado y comparación justa entre modelos...............17
+    Ajustes a la preparación de los datos requeridos por los modelos....18
+<strong>Reporte de selección de datos...........................................19</strong>
+<strong>Glosario de terminología................................................26</strong>
+<strong>Fuentes bibliográficas..................................................28</strong>
+</pre>
+
+#### [Reporte: Preparación de los datos II](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.d0jw2eth3804)
 
 <pre>
 <strong>Adaptaciones de la metodología CRISP-DM.................................1</strong>
@@ -335,18 +501,43 @@ El reporte está en un solo documento con una pestaña por fase. Los números de
 #### [Reporte: Modelado de los datos](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.7tfnlrrsx4yq)
 
 <pre>
-<strong>Adaptaciones de la metodología CRISP-DM.......................1</strong>
-<strong>Construcción del modelo de regresión logística (pendiente)....1</strong>
-<strong>Construcción del modelo XGBoost...............................1</strong>
-    Hiperparámetros usados....................................1
-    Evaluación del desempeño del modelo.......................2
-        Falla mecánica........................................2
-        Anomalía de salud.....................................3
-        Interrupción por conducta.............................3
-        Criterios del BU en test..............................4
-        Gráficos..............................................5
-    Interpretación de los resultados..........................8
-    Dificultades identificadas................................9
-<strong>Construcción del modelo LSTM..................................9</strong>
-<strong>Reporte de diseño de pruebas..................................10</strong>
+<strong>Adaptaciones de la metodología CRISP-DM.......................2</strong>
+<strong>Diseño de pruebas.............................................2</strong>
+    Partición de los datos....................................3
+    Plan de entrenamiento y ajuste............................4
+    Evaluación y comparación de los modelos...................5
+    Regla de elección del modelo final........................6
+<strong>Construcción del modelo de regresión logística................7</strong>
+    Comparativa de las versiones de los modelos...............7
+    Hiperparámetros usados....................................8
+    Preparación de los datos..................................10
+    Evaluación del desempeño del modelo.......................11
+    Interpretación de los resultados..........................21
+    Dificultades identificadas................................22
+    Vacas nuevas en test......................................23
+<strong>Construcción del modelo XGBoost...............................26</strong>
+    Comparativa de las versiones de los modelos...............26
+    Hiperparámetros usados....................................27
+    Evaluación del desempeño del modelo.......................28
+    Interpretación de los resultados..........................35
+    Dificultades identificadas................................35
+    Vacas nuevas en test......................................36
+    Interpretación con SHAP...................................38
+<strong>Construcción del modelo LSTM..................................39</strong>
+    Comparativa de las versiones de los modelos...............39
+    Hiperparámetros usados....................................41
+    Preparación de los datos..................................43
+    Evaluación del desempeño del modelo.......................44
+    Criterios del BU en test..................................47
+    Gráficos..................................................48
+    Interpretación de los resultados..........................52
+    Dificultades identificadas................................52
+    Vacas nuevas en test......................................53
+    Conclusión................................................54
+<strong>Evaluación de modelos.........................................55</strong>
+    Comparación de resultados.................................55
+    Cumplimiento de criterios establecidos....................56
+    Diferencias en el comportamiento..........................57
+    Dificultades en los modelos...............................58
+    Elección de modelo........................................58
 </pre>

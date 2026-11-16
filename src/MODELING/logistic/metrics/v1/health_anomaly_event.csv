@@ -1,0 +1,12 @@
+﻿Métrica,Entrenamiento,Validación,Prueba completa
+Observaciones,196421,42090,42091
+F1,0.6205,0.6099,0.6307
+Sensibilidad,0.7899,0.8001,0.8391
+Precisión,0.5110,0.4927,0.5052
+F1 (alertar siempre),0.3134,0.3201,0.3506
+ROC-AUC,0.8858,0.8821,0.8864
+AP,0.6973,0.6781,0.7177
+Brier,0.0913,0.0965,0.0989
+Log loss,0.3056,0.3181,0.3280
+Exactitud,0.8205,0.8050,0.7911
+Exactitud (mayoritaria),0.8142,0.8095,0.7874
