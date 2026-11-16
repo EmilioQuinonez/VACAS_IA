@@ -147,22 +147,42 @@ def probability_distributions(y, probabilities, metrics):
 
 def gain_importance(models):
     """5. Los atributos con más gain de cada modelo."""
+    gains = [pd.Series(model.get_booster().get_score(importance_type="gain")) for model in models]
+    return bars_by_event([gain / gain.sum() for gain in gains], "Proporción del gain total",
+                         lambda value: f"{value:.0%}",
+                         f"Importancia por gain: los {TOP_FEATURES} atributos que más usa cada modelo")
+
+
+def bars_by_event(series, xlabel, label, title):
+    """Barras horizontales de los TOP_FEATURES valores más altos de cada salida, con etiqueta al final."""
     fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.8))
-    for i, model in enumerate(models):
-        gain = pd.Series(model.get_booster().get_score(importance_type="gain"))
-        share = (gain / gain.sum()).sort_values(ascending=False).head(TOP_FEATURES)[::-1]
+    for i, values in enumerate(series):
+        top = values.sort_values(ascending=False).head(TOP_FEATURES)[::-1]
         ax = axes[i]
-        ax.barh(share.index, share.to_numpy(), color=SERIES["train"], height=0.6)
-        for y_pos, value in enumerate(share.to_numpy()):
-            ax.annotate(f"{value:.0%}", (value, y_pos), xytext=(3, 0), textcoords="offset points",
+        ax.barh(top.index, top.to_numpy(), color=SERIES["train"], height=0.6)
+        for y_pos, value in enumerate(top.to_numpy()):
+            ax.annotate(label(value), (value, y_pos), xytext=(3, 0), textcoords="offset points",
                         va="center", fontsize=9, color=MUTED)
         ax.set_title(EVENT_NAMES[i], loc="left")
-        ax.set_xlabel("Proporción del gain total")
-        ax.set_xlim(0, share.max() * 1.2)
+        ax.set_xlabel(xlabel)
+        ax.set_xlim(0, top.max() * 1.2)
         ax.grid(axis="y", visible=False)
-    fig.suptitle(f"Importancia por gain: los {TOP_FEATURES} atributos que más usa cada modelo",
-                 x=0.01, ha="left", fontsize=12)
+    fig.suptitle(title, x=0.01, ha="left", fontsize=12)
     return fig
+
+
+def shap_importance(contributions):
+    """12. Aporte SHAP medio (en valor absoluto) de cada atributo en test."""
+    return bars_by_event([c.abs().mean() for c in contributions], "Aporte medio |SHAP| (log-odds)",
+                         lambda value: f"{value:.2f}",
+                         f"Importancia SHAP en test: los {TOP_FEATURES} atributos que más mueven el riesgo")
+
+
+def top_factor_share(factors):
+    """13. Proporción de alertas de test en que cada atributo es uno de sus 3 factores."""
+    shares = [f.filter(like="factor_").stack().value_counts() / len(f) for f in factors]
+    return bars_by_event(shares, "Proporción de alertas", lambda value: f"{value:.0%}",
+                         f"Factores de las alertas en test: los {TOP_FEATURES} atributos que más aparecen entre los 3")
 
 
 def model_vs_feature(rates, y, probabilities):

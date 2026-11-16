@@ -1,5 +1,7 @@
 """
 Genera en img/<VERSION>/ las gráficas de la versión VERSION de versions.py, sin reentrenar.
+ALERTS_PATH (fuera de Git) tiene una fila por alerta de test con su probabilidad calibrada y sus
+3 factores SHAP, sin el id de la vaca.
 
 Uso, desde la raíz del repo y después de main.py:
     python src/MODELING/XGBoost/plot_results.py
@@ -14,9 +16,13 @@ from xgboost import XGBClassifier
 
 import plots
 from dataset import EVENT_KEYS, EVENTS, build_features, load_sessions, split_by_time
+from evaluation import check_additivity, shap_contributions, top_factors
 from main import CURVES_PATH, INPUT_PATH, METRICS_PATH, TRAIN_FRACTION, VAL_FRACTION
 from versions import FIGURES_DIR, MODELS_DIR, VERSION, VERSIONS
 from xgboost_model import PlattXGB
+
+ALERTS_PATH = INPUT_PATH.parent / "modelos" / "xgboost" / VERSION / "alertas_test.csv"
+ADDITIVITY_TOLERANCE = 1e-3
 
 
 def read_curves(path):
@@ -78,6 +84,32 @@ def save(fig, name):
     plt.close(fig)
 
 
+def explain_alerts(X, start, models, probabilities, metrics):
+    """
+    Aportes SHAP de cada modelo en test y 3 factores de cada alerta (probabilidad calibrada mayor o
+    igual al umbral de recall de val); guarda las alertas en ALERTS_PATH e imprime qué proporción
+    tiene 3 factores positivos y el error de aditividad.
+    """
+    contributions, factors, alerts = [], [], []
+    for event, model, probability in zip(EVENTS, models, probabilities):
+        platt, threshold = metrics[event]["platt"], metrics[event]["threshold_recall_val"]
+        alert = probability >= threshold
+        contribution = shap_contributions(model, X, platt["slope"])
+        error = check_additivity(model, X, contribution, platt)
+        assert error < ADDITIVITY_TOLERANCE, f"{event}: SHAP additivity error {error:.2e}"
+        top = top_factors(contribution[alert], X[alert])
+        print(f"[shap] {event}: {alert.sum():,} alerts, {top['factor_3'].notna().mean():.1%} with 3 factors, "
+              f"additivity error {error:.1e}")
+        contributions.append(contribution)
+        factors.append(top)
+        alerts.append(pd.DataFrame({"inicio": start[alert], "evento": event, "probabilidad": probability[alert],
+                                    "umbral": threshold}).join(top))
+    ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    pd.concat(alerts).to_csv(ALERTS_PATH, index=False)
+
+    return contributions, factors
+
+
 def main():
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     metrics = json.loads(METRICS_PATH.read_text(encoding="utf-8"))
@@ -90,6 +122,9 @@ def main():
     save(plots.calibration(y, probabilities, metrics), "calibracion_test.png")
     save(plots.probability_distributions(y, probabilities, metrics), "distribucion_probabilidades.png")
     save(plots.gain_importance(models), "importancia_gain.png")
+    contributions, factors = explain_alerts(X, start, models, probabilities, metrics)
+    save(plots.shap_importance(contributions), "importancia_shap.png")
+    save(plots.top_factor_share(factors), "factores_alertas.png")
     save(plots.model_vs_feature(rates, y, probabilities), "modelo_vs_una_variable.png")
     save(plots.weekly_performance(y, start, probabilities, metrics), "desempeno_semanal_test.png")
     save(plots.metrics_by_cow_group(y, probabilities, groups, metrics), "vacas_nuevas_metricas.png")
