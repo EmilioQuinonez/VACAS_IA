@@ -285,20 +285,17 @@ La estructura del repositorio es:
 - **[`docs/`](docs/)** — Documentación y entregables.
   - **[`BU/`](docs/BU/)** — Fase de *Entendimiento del negocio*.
     - [Reporte Business Understanding](docs/BU/Reportes%20de%20fase%20entendimiento%20del%20negocio.pdf).
+    - [Reporte Business Understanding II](docs/BU/Reportes%20de%20fase%20entendimiento%20del%20negocio%20II.pdf): segunda iteración, cambia el criterio de éxito de minería de datos de accuracy a F1.
     - Memorándum de entendimiento.
     - One Page.
     - WBS y su archivo fuente.
-  - **[`BU_II/`](docs/BU_II/)** — Segunda iteración de *Entendimiento del negocio*: cambia el criterio de éxito de minería de datos de accuracy a F1.
-    - [Reporte Business Understanding II](docs/BU_II/Reportes%20de%20fase%20entendimiento%20del%20negocio%20II.pdf).
   - **[`DU/`](docs/DU/)** — Fase de *Entendimiento de los datos*
     - [Reporte Data Understanding](docs/DU/Reportes%20de%20fase%20Data%20Understanding.pdf).
+    - [Reporte Data Understanding II](docs/DU/Reportes%20de%20fase%20Data%20Understanding%20II.pdf): segunda iteración, con su changelog.
     - [Investigación de la fuente de clima](docs/DU/Investigacion_Clima.md).
-  - **[`DU_II/`](docs/DU_II/)** — Segunda iteración de *Entendimiento de los datos*, con su changelog.
-    - [Reporte Data Understanding II](docs/DU_II/Reportes%20de%20fase%20Data%20Understanding%20II.pdf).
   - **[`DP/`](docs/DP/)** — Fase de *Preparación de los datos*.
     - [Reporte Data Preparation](docs/DP/Reportes%20de%20fase%20Data%20Preparation.pdf).
-  - **[`DP_II/`](docs/DP_II/)** — Segunda iteración de *Preparación de los datos*, con su changelog.
-    - [Reporte Data Preparation II](docs/DP_II/Reportes%20de%20fase%20Data%20Preparation%20II.pdf).
+    - [Reporte Data Preparation II](docs/DP/Reportes%20de%20fase%20Data%20Preparation%20II.pdf): segunda iteración, con su changelog.
   - **[`MODELING/`](docs/MODELING/)** — Fase de *Modelado*.
     - [Reporte Modeling](docs/MODELING/Reportes%20de%20fase%20Modeling.pdf): diseño de pruebas, regresión logística, XGBoost, LSTM y evaluación de los modelos.
   - **[`RETO_DATOS/`](docs/RETO_DATOS/)** — Preparación para el reto de datos.
