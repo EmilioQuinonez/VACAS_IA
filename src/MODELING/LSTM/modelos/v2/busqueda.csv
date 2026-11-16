@@ -1,0 +1,9 @@
+﻿heads,recurrent,epochs_run,f1_val_mean
+per_event,stacked_lstm,42,0.5949
+per_event,lstm,24,0.5948
+shared,gru,38,0.5945
+per_event,gru,23,0.5944
+shared,stacked_lstm,40,0.5942
+per_event,bidirectional,17,0.5942
+shared,bidirectional,25,0.5935
+shared,lstm,19,0.5914
