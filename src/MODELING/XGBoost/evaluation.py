@@ -1,5 +1,8 @@
-"""Umbral de recall y métricas por conjunto."""
+"""Umbral de recall, métricas por conjunto y factores SHAP de cada alerta."""
 
+import numpy as np
+import pandas as pd
+import xgboost as xgb
 from sklearn.metrics import (
     accuracy_score, average_precision_score, brier_score_loss, f1_score,
     precision_recall_curve, precision_score, recall_score, roc_auc_score,
@@ -42,3 +45,53 @@ def evaluate(model, X, y, sets, recall_threshold):
 
     return metrics
 
+
+def shap_contributions(model, X, slope):
+    """
+    Aporte SHAP de cada atributo a cada sesión, en log-odds calibrados: TreeSHAP de XGBoost
+    multiplicado por la pendiente de Platt, así que el valor base calibrado más la suma de los
+    aportes da el logit de la probabilidad calibrada. Las dummies maquina_* se suman en "maquina".
+    """
+    raw = model.get_booster().predict(xgb.DMatrix(X), pred_contribs=True)
+    # La última columna es el valor base, igual en todas las sesiones.
+    contributions = pd.DataFrame(slope * raw[:, :-1], index=X.index, columns=X.columns)
+    group = lambda column: "maquina" if column.startswith("maquina_") else column
+
+    return contributions.T.groupby(group, sort=False).sum().T
+
+
+def top_factors(contributions, X, k=3):
+    """
+    Los k aportes positivos más grandes de cada sesión: atributo, su valor en la sesión y su
+    aporte. El valor de "maquina" es la máquina (referencia si no tiene dummy); si hay menos de
+    k aportes positivos, los que faltan quedan vacíos.
+    """
+    machines = [column for column in X.columns if column.startswith("maquina_")]
+    has_dummy = X[machines].eq(1).any(axis=1)
+    machine = X[machines].idxmax(axis=1).str.removeprefix("maquina_").where(has_dummy, "referencia")
+    values = X.drop(columns=machines).assign(maquina=machine)[contributions.columns].to_numpy()
+
+    names = contributions.columns.to_numpy()
+    order = np.argsort(-contributions.to_numpy(), axis=1)[:, :k]
+    rows = np.arange(len(contributions))[:, None]
+    top = contributions.to_numpy()[rows, order]
+    factors = {}
+    for i in range(k):
+        positive = top[:, i] > 0
+        factors[f"factor_{i + 1}"] = np.where(positive, names[order[:, i]], None)
+        factors[f"valor_{i + 1}"] = np.where(positive, values[rows[:, 0], order[:, i]], None)
+        factors[f"aporte_{i + 1}"] = np.where(positive, top[:, i], np.nan)
+
+    return pd.DataFrame(factors, index=contributions.index)
+
+
+def check_additivity(model, X, contributions, platt):
+    """
+    Error máximo entre el logit calibrado y el valor base calibrado más la suma de los aportes
+    ya agrupados (comprueba la escala de Platt y que el agrupamiento de maquina_* no pierda aportes).
+    """
+    base = model.get_booster().predict(xgb.DMatrix(X.iloc[:1]), pred_contribs=True)[0, -1]
+    logit = platt["slope"] * model.predict(X, output_margin=True) + platt["intercept"]
+    calibrated_base = platt["slope"] * base + platt["intercept"]
+
+    return float(np.abs(contributions.sum(axis=1).to_numpy() + calibrated_base - logit).max())

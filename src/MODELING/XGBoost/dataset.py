@@ -42,6 +42,10 @@ def build_features(sessions):
     X (FEATURES; los NaN se conservan) e y (una columna 0/1 por evento y alguna_anomalia, que es
     lo contrario de successful_milking_event).
     """
+    missing = [column for column in FEATURES if column not in sessions]
+    if missing:
+        raise SystemExit(f"The dataset lacks {len(missing)} model columns ({', '.join(missing)}). "
+                         "Run python src/MODELING/XGBoost/build_history_features.py first.")
     X = sessions[FEATURES]
     print(f"[features] {X.shape[1]} columns")
 
