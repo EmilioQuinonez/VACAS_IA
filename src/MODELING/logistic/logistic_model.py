@@ -125,8 +125,8 @@ def explain(model, preprocessor, transformed, X, top_n=3):
         names = np.asarray(group_names, dtype=object)[indices]
         nonzero = amounts > 0
         output[f"factor_{rank + 1}"] = np.where(nonzero, names, "")
-        output[f"aporte_log_odds_{rank + 1}"] = amounts
-        output[f"direccion_{rank + 1}"] = np.where(~nonzero, "sin aporte", np.where(amounts > 0, "aumenta riesgo", "reduce riesgo"))
+        output[f"aporte_log_odds_{rank + 1}"] = np.where(nonzero, amounts, np.nan)
+        output[f"direccion_{rank + 1}"] = np.where(nonzero, "aumenta riesgo", "sin aporte")
         values = np.full(len(X), "", dtype=object)
         
         for name in np.unique(names[nonzero]):
