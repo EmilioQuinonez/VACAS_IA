@@ -8,10 +8,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap
 from sklearn.calibration import calibration_curve
-from sklearn.metrics import (
-    average_precision_score, brier_score_loss, confusion_matrix, precision_recall_curve,
-    precision_score, recall_score, roc_auc_score, roc_curve,
-)
+from sklearn.metrics import brier_score_loss, confusion_matrix, f1_score, precision_score, recall_score
 
 from dataset import EVENTS
 
@@ -65,41 +62,6 @@ def learning_curves(log, n_trees, val_label):
     axes[0].legend(loc="upper right")
     fig.suptitle("Curvas de aprendizaje: log loss por árbol (menor es mejor)",
                  x=0.01, ha="left", fontsize=12)
-    return fig
-
-
-def roc_pr(y, probabilities, metrics, test_period):
-    """2. Curvas ROC y PR en test con el punto del umbral elegido en val."""
-    fig, axes = plt.subplots(2, len(EVENTS), figsize=(17.5, 8))
-    for i, event in enumerate(EVENTS):
-        actual, p, m = y[event].to_numpy(), probabilities[i], metrics[event]
-        threshold = m["threshold_recall_val"]
-        predicted = p >= threshold
-        fpr_t = (predicted & (actual == 0)).sum() / (actual == 0).sum()
-        tpr_t = (predicted & (actual == 1)).sum() / (actual == 1).sum()
-        precision_t = (predicted & (actual == 1)).sum() / predicted.sum()
-
-        ax = axes[0, i]
-        fpr, tpr, _ = roc_curve(actual, p)
-        ax.plot([0, 1], [0, 1], color=REFERENCE, linestyle="--", linewidth=1, label="Azar / prevalencia")
-        ax.plot(fpr, tpr, color=SERIES["train"], label="Modelo")
-        ax.plot(fpr_t, tpr_t, "o", color=SERIES["val"], markersize=8, label="Umbral elegido en val")
-        ax.set_title(f"{EVENT_NAMES[i]}\nROC-AUC {m['test']['roc_auc']:.3f} · umbral {threshold:.2f}", loc="left")
-        ax.set_xlabel("Falsos positivos (1 − especificidad)")
-
-        ax = axes[1, i]
-        precision, recall, _ = precision_recall_curve(actual, p)
-        ax.axhline(actual.mean(), color=REFERENCE, linestyle="--", linewidth=1)
-        ax.plot(recall, precision, color=SERIES["train"])
-        ax.plot(tpr_t, precision_t, "o", color=SERIES["val"], markersize=8)
-        ax.set_title(f"PR-AUC {m['test']['pr_auc']:.3f} · prevalencia {actual.mean():.1%}\n"
-                     f"en el umbral: recall {tpr_t:.0%}, precisión {precision_t:.0%}", loc="left")
-        ax.set_xlabel("Recall (sensibilidad)")
-        ax.set_ylim(0, 1)
-    axes[0, 0].set_ylabel("Verdaderos positivos (recall)")
-    axes[1, 0].set_ylabel("Precisión")
-    fig.legend(*axes[0, 0].get_legend_handles_labels(), loc="upper right", ncol=3)
-    fig.suptitle(f"Curvas ROC (arriba) y PR (abajo) en test, {test_period}", x=0.01, ha="left", fontsize=12)
     return fig
 
 
@@ -179,38 +141,35 @@ def shap_importance(contributions):
 
 
 def top_factor_share(factors):
-    """13. Proporción de alertas de test en que cada atributo es uno de sus 3 factores."""
-    shares = [f.filter(like="factor_").stack().value_counts() / len(f) for f in factors]
-    return bars_by_event(shares, "Proporción de alertas", lambda value: f"{value:.0%}",
-                         f"Factores de las alertas en test: los {TOP_FEATURES} atributos que más aparecen entre los 3")
-
-
-def model_vs_feature(rates, y, probabilities):
     """
-    6. ROC del modelo contra la tasa del evento de la vaca en 30 días usada sola; rates trae una
-    columna por salida, en el orden de EVENTS.
+    13. Proporción de alertas de test en que cada atributo es uno de sus 3 factores (mayor aporte en
+    valor absoluto), separada según si el aporte sube (naranja) o baja (azul) el riesgo.
     """
-    fig, axes = plt.subplots(1, len(EVENTS), figsize=(17.5, 4.5), sharey=True)
-    for i, event in enumerate(EVENTS):
-        feature = rates.columns[i]
-        known = rates[feature].notna().to_numpy()
-        actual, p, f = y[event].to_numpy()[known], probabilities[i][known], rates[feature].to_numpy()[known]
+    fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.8))
+    for i, f in enumerate(factors):
+        names = f.filter(like="factor_").to_numpy().ravel()
+        up = f.filter(like="aporte_").to_numpy().ravel() > 0
+        share = pd.DataFrame({"sube": pd.Series(names[up]).value_counts(),
+                              "baja": pd.Series(names[~up]).value_counts()}).fillna(0) / len(f)
+        top = share.assign(total=share.sum(axis=1)).sort_values("total").tail(TOP_FEATURES)
         ax = axes[i]
-        ax.plot([0, 1], [0, 1], color=REFERENCE, linestyle="--", linewidth=1, label="Azar")
-        for name, score, color in [("Modelo", p, SERIES["train"]), (feature, f, SERIES["val"])]:
-            fpr, tpr, _ = roc_curve(actual, score)
-            ax.plot(fpr, tpr, color=color, label=f"{name} (AUC {roc_auc_score(actual, score):.3f})")
+        ax.barh(top.index, top["sube"], color=SERIES["val"], height=0.6, label="Sube el riesgo")
+        ax.barh(top.index, top["baja"], left=top["sube"], color=SERIES["train"], height=0.6, label="Baja el riesgo")
+        for y_pos, value in enumerate(top["total"]):
+            ax.annotate(f"{value:.0%}", (value, y_pos), xytext=(3, 0), textcoords="offset points",
+                        va="center", fontsize=9, color=MUTED)
         ax.set_title(EVENT_NAMES[i], loc="left")
-        ax.set_xlabel("Falsos positivos")
-        ax.legend(loc="lower right")
-    axes[0].set_ylabel("Verdaderos positivos")
-    fig.suptitle("Modelo contra la tasa de la vaca a 30 días como única variable, en test "
-                 "(sesiones con tasa a 30 días)", x=0.01, ha="left", fontsize=12)
+        ax.set_xlabel("Proporción de alertas")
+        ax.set_xlim(0, top["total"].max() * 1.2)
+        ax.grid(axis="y", visible=False)
+    fig.legend(*axes[0].get_legend_handles_labels(), loc="upper right", ncol=2)
+    fig.suptitle(f"Factores de las alertas en test: los {TOP_FEATURES} atributos que más aparecen entre "
+                 "los 3 de mayor aporte", x=0.01, ha="left", fontsize=12)
     return fig
 
 
 def weekly_performance(y, start, probabilities, metrics):
-    """7. Recall, precisión y prevalencia por semana en test."""
+    """7. Sensibilidad, precisión y prevalencia por semana en test."""
     week = start.dt.to_period("W-SUN").dt.start_time.to_numpy()
     fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.2), sharey=True)
     for i, event in enumerate(EVENTS):
@@ -223,7 +182,7 @@ def weekly_performance(y, start, probabilities, metrics):
                                            alerts=("alert", "sum"), hits=("hit", "sum"))
         weekly = weekly[weekly["n"] >= MIN_WEEK_SESSIONS]
         series = [
-            ("Recall", weekly["hits"] / weekly["events"], SERIES["train"], "-"),
+            ("Sensibilidad", weekly["hits"] / weekly["events"], SERIES["train"], "-"),
             ("Precisión", weekly["hits"] / weekly["alerts"], SERIES["val"], "-"),
             ("Prevalencia", weekly["events"] / weekly["n"], REFERENCE, "--"),
         ]
@@ -244,8 +203,8 @@ def weekly_performance(y, start, probabilities, metrics):
 
 
 def metrics_by_cow_group(y, probabilities, groups, metrics):
-    """8. ROC-AUC, PR-AUC y, con el umbral de val, recall y precisión en test por grupo de vaca."""
-    names = ["ROC-AUC", "PR-AUC", "Recall", "Precisión"]
+    """8. Con el umbral de val, F1, sensibilidad y precisión en test por grupo de vaca, y su Brier."""
+    names = ["F1", "Sensibilidad", "Precisión", "Brier"]
     width = 0.26
     fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.4), sharey=True)
     for i, event in enumerate(EVENTS):
@@ -254,8 +213,8 @@ def metrics_by_cow_group(y, probabilities, groups, metrics):
             rows = groups == group
             actual, p = y[event].to_numpy()[rows], probabilities[i][rows]
             alert = p >= threshold
-            values = [roc_auc_score(actual, p), average_precision_score(actual, p),
-                      recall_score(actual, alert), precision_score(actual, alert)]
+            values = [f1_score(actual, alert), recall_score(actual, alert),
+                      precision_score(actual, alert, zero_division=0), brier_score_loss(actual, p)]
             x = np.arange(len(names)) + (j - 1) * width
             ax.bar(x, values, width, color=color, label=f"{group} ({rows.sum():,} ordeños)")
             for xi, value in zip(x, values):
@@ -267,13 +226,13 @@ def metrics_by_cow_group(y, probabilities, groups, metrics):
         ax.grid(axis="x", visible=False)
     axes[0].set_ylabel("Valor en test")
     fig.legend(*axes[0].get_legend_handles_labels(), loc="upper right", ncol=3)
-    fig.suptitle("Desempeño en test por grupo de vaca", x=0.01, ha="left", fontsize=12)
+    fig.suptitle("Desempeño en test por grupo de vaca (Brier: más bajo es mejor)", x=0.01, ha="left", fontsize=12)
     return fig
 
 
 def new_cow_ramp(y, probabilities, days_in_herd, groups, metrics):
     """
-    9. Recall, precisión y prevalencia de las vacas que no estuvieron en train según sus días en el
+    9. Sensibilidad, precisión y prevalencia de las vacas que no estuvieron en train según sus días en el
     hato; la línea punteada es el valor de las vacas conocidas.
     """
     new = groups != "Conocida"
@@ -287,7 +246,7 @@ def new_cow_ramp(y, probabilities, days_in_herd, groups, metrics):
                                                           alerts=("alert", "sum"), hits=("hit", "sum"))
         known_actual, known_alert = actual[~new] == 1, alert[~new]
         series = [
-            ("Recall", by_bin["hits"] / by_bin["events"], SERIES["train"], "-",
+            ("Sensibilidad", by_bin["hits"] / by_bin["events"], SERIES["train"], "-",
              (known_actual & known_alert).sum() / known_actual.sum()),
             ("Precisión", by_bin["hits"] / by_bin["alerts"], SERIES["val"], "-",
              (known_actual & known_alert).sum() / known_alert.sum()),

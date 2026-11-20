@@ -62,9 +62,9 @@ def shap_contributions(model, X, slope):
 
 def top_factors(contributions, X, k=3):
     """
-    Los k aportes positivos más grandes de cada sesión: atributo, su valor en la sesión y su
-    aporte. El valor de "maquina" es la máquina (referencia si no tiene dummy); si hay menos de
-    k aportes positivos, los que faltan quedan vacíos.
+    Los k aportes de mayor valor absoluto de cada sesión, como pide el diseño de pruebas: atributo,
+    su valor en la sesión y su aporte, cuyo signo es la dirección (positivo sube el riesgo y
+    negativo lo baja). El valor de "maquina" es la máquina (referencia si no tiene dummy).
     """
     machines = [column for column in X.columns if column.startswith("maquina_")]
     has_dummy = X[machines].eq(1).any(axis=1)
@@ -72,15 +72,14 @@ def top_factors(contributions, X, k=3):
     values = X.drop(columns=machines).assign(maquina=machine)[contributions.columns].to_numpy()
 
     names = contributions.columns.to_numpy()
-    order = np.argsort(-contributions.to_numpy(), axis=1)[:, :k]
+    order = np.argsort(-np.abs(contributions.to_numpy()), axis=1)[:, :k]
     rows = np.arange(len(contributions))[:, None]
     top = contributions.to_numpy()[rows, order]
     factors = {}
     for i in range(k):
-        positive = top[:, i] > 0
-        factors[f"factor_{i + 1}"] = np.where(positive, names[order[:, i]], None)
-        factors[f"valor_{i + 1}"] = np.where(positive, values[rows[:, 0], order[:, i]], None)
-        factors[f"aporte_{i + 1}"] = np.where(positive, top[:, i], np.nan)
+        factors[f"factor_{i + 1}"] = names[order[:, i]]
+        factors[f"valor_{i + 1}"] = values[rows[:, 0], order[:, i]]
+        factors[f"aporte_{i + 1}"] = top[:, i]
 
     return pd.DataFrame(factors, index=contributions.index)
 
