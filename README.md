@@ -218,7 +218,7 @@ python3 -u src/MODELING/LSTM/plot_results.py
 
 ## Preparación para reto de datos.
 
-Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. 
+Para generar la muestra a partir de un dataset integrado existente, sigue los pasos 1 y 2. Primero debes completar la sección **¿Cómo obtener y preparar los datos?** y contar con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas.
 
 Ejecuta los siguientes comandos desde la raíz del repositorio.
 
@@ -247,13 +247,13 @@ Ejecuta `k_fold.py` para separar primero un 20% de la muestra como conjunto de p
 **Windows**
 
 ```powershell
-py src/DP/k_fold.py
+py src/RETO_DATOS/k_fold.py
 ```
 
 **macOS y Linux**
 
 ```bash
-python3 src/DP/k_fold.py
+python3 src/RETO_DATOS/k_fold.py
 ```
 
 **Resultado esperado:** la terminal muestra el número de registros de `train`, `val` y `test` en cada fold, además de las primeras cinco filas de los conjuntos del primer fold.
@@ -261,7 +261,7 @@ python3 src/DP/k_fold.py
 Para obtener los conjuntos desde otro script, importa `get_k_folds` y selecciona un fold:
 
 ```python
-from src.DP.k_fold import INPUT_DIR, get_k_folds
+from src.RETO_DATOS.k_fold import INPUT_DIR, get_k_folds
 
 dataset, folds = get_k_folds(INPUT_DIR)
 fold = folds[0]
@@ -271,7 +271,25 @@ val = dataset.iloc[fold["val"]]
 test = dataset.iloc[fold["test"]]
 ```
 
-> **Nota:** esta separación al azar corresponde al reto de datos. Para el modelado, el [Reporte de diseño de pruebas](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.7tfnlrrsx4yq) define un corte cronológico 70/15/15: el 70 % más antiguo para entrenamiento, el 15 % siguiente para validación y el 15 % más reciente para prueba.
+> **Nota:** esta separación corresponde al reto de datos. Para el modelado, el [Reporte de diseño de pruebas](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.eaxe6c7fw3yo) define un corte cronológico 70/15/15: el 70 % más antiguo para entrenamiento, el 15 % siguiente para validación y el 15 % más reciente para prueba.
+
+### 3. Medir el tiempo de ejecución del pipeline.
+
+El ejecutor realiza diez vueltas completas de los once scripts de preparación, desde la generación de los datos hasta la muestra y la separación en folds. Antes de ejecutarlo, prepara los archivos originales de vacas y concentrado, configura `COWSKEY` e instala las dependencias como se indica en **¿Cómo obtener y preparar los datos?**.
+
+**Windows**
+
+```powershell
+py src/RETO_DATOS/run_pipeline.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/RETO_DATOS/run_pipeline.py
+```
+
+**Resultado esperado:** la consola muestra los datos del equipo, una estimación de la velocidad de descarga antes de cada vuelta y el tiempo de cada script. Al finalizar, presenta el promedio, la desviación estándar, el mínimo y el máximo de los tiempos por script y del pipeline completo. El clima se descarga nuevamente en cada vuelta.
 
 
 ## ¿Cómo acceder a los entregables?
@@ -314,7 +332,6 @@ La estructura del repositorio es:
     - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones limpias los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) y crea `Data/dataset_vacas_integrado.csv`.
     - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento a `Data/dataset_vacas_integrado.csv`.
     - [`integrar_concentrado.py`](src/DP/integrar_concentrado.py) — Añade cuatro atributos históricos de concentrado a `Data/dataset_vacas_integrado.csv`.
-    - [`k_fold.py`](src/DP/k_fold.py) — Separa la muestra en un conjunto de prueba fijo y cinco folds de entrenamiento y validación.
   - **[`MODELING/`](src/MODELING/)** — Scripts de la fase *Modeling*. Los tres modelos usan el corte cronológico 70/15/15 y tienen una salida por evento de ordeño y otra para alguna anomalía.
     - **[`logistic/`](src/MODELING/logistic/)** — Regresión logística (versiones v1–v4; `VERSION` en `main.py` elige cuál se guarda).
       - [`main.py`](src/MODELING/logistic/main.py) — Entrena cuatro regresiones con train y las evalúa con validación y test. Usa `dataset.py`, `evaluation.py` y `logistic_model.py`.
@@ -340,6 +357,8 @@ La estructura del repositorio es:
   - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
     - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
     - [`dataset_vacas_muestra.csv`](src/RETO_DATOS/dataset_vacas_muestra.csv) — Muestra generada por el script anterior.
+    - [`k_fold.py`](src/RETO_DATOS/k_fold.py) — Separa la muestra en un conjunto de prueba fijo y cinco folds de entrenamiento y validación.
+    - [`run_pipeline.py`](src/RETO_DATOS/run_pipeline.py) — Ejecuta diez veces la preparación completa y resume sus tiempos.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
