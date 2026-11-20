@@ -1,7 +1,8 @@
 """
 Genera en img/<VERSION>/ las gráficas de la versión VERSION de versions.py, sin reentrenar.
-ALERTS_PATH (fuera de Git) tiene una fila por alerta de test con su probabilidad calibrada y sus
-3 factores SHAP, sin el id de la vaca.
+ALERTS_PATH (models/<VERSION>/) tiene una fila por alerta de test: id anonimizado de la vaca, inicio,
+evento, si ocurrió (real), probabilidad calibrada y sus 3 factores SHAP, con las mismas columnas que
+el alertas_test.csv.gz de la LSTM.
 
 Uso, desde la raíz del repo y después de main.py:
     python src/MODELING/XGBoost/plot_results.py
@@ -21,7 +22,7 @@ from main import CURVES_PATH, INPUT_PATH, METRICS_PATH, TRAIN_FRACTION, VAL_FRAC
 from versions import FIGURES_DIR, MODELS_DIR, VERSION, VERSIONS
 from xgboost_model import PlattXGB
 
-ALERTS_PATH = INPUT_PATH.parent / "modelos" / "xgboost" / VERSION / "alertas_test.csv"
+ALERTS_PATH = MODELS_DIR / "alertas_test.csv.gz"
 ADDITIVITY_TOLERANCE = 1e-3
 
 
@@ -37,8 +38,8 @@ def read_curves(path):
 
 def load_test(metrics):
     """
-    Atributos, etiquetas, inicio y probabilidades calibradas de los modelos guardados en test; fechas de val y
-    grupo de la vaca de cada sesión de test (Conocida si estuvo en train, Solo en val o Nueva).
+    Atributos, etiquetas, inicio y probabilidades calibradas de los modelos guardados en test; fechas de val,
+    grupo de la vaca de cada sesión de test (Conocida si estuvo en train, Solo en val o Nueva) y su id.
     """
     sessions = load_sessions(INPUT_PATH)
     X, labels = build_features(sessions)
@@ -58,7 +59,8 @@ def load_test(metrics):
     groups = np.select([test_cows.isin(cows.iloc[idx["train"]]), test_cows.isin(cows.iloc[idx["val"]])],
                        ["Conocida", "Solo en val"], default="Nueva")
 
-    return X.iloc[test], labels.iloc[test], sessions["inicio"].iloc[test], models, probabilities, val_label, groups
+    return (X.iloc[test], labels.iloc[test], sessions["inicio"].iloc[test], models, probabilities, val_label, groups,
+            test_cows)
 
 
 def save(fig, name):
@@ -67,7 +69,14 @@ def save(fig, name):
     plt.close(fig)
 
 
-def explain_alerts(X, start, models, probabilities, metrics):
+def as_text(value):
+    """Valor de un factor como en la LSTM: 4 cifras significativas, «faltante» o el texto (máquina)."""
+    if isinstance(value, str):
+        return value
+    return "faltante" if pd.isna(value) else f"{value:.4g}"
+
+
+def explain_alerts(X, y, cows, start, models, probabilities, metrics):
     """
     Aportes SHAP de cada modelo en test y 3 factores de cada alerta (probabilidad calibrada mayor o
     igual al umbral de recall de val); guarda las alertas en ALERTS_PATH e imprime qué proporción
@@ -85,8 +94,14 @@ def explain_alerts(X, start, models, probabilities, metrics):
               f"additivity error {error:.1e}")
         contributions.append(contribution)
         factors.append(top)
-        alerts.append(pd.DataFrame({"inicio": start[alert], "evento": event, "probabilidad": probability[alert],
-                                    "umbral": threshold}).join(top))
+        shown = top.copy()
+        for i in range(1, 4):
+            empty = shown[f"factor_{i}"].isna()  # menos de 3 aportes positivos: el factor queda vacío
+            shown[f"valor_{i}"] = shown[f"valor_{i}"].map(as_text).mask(empty, "")
+            shown[f"factor_{i}"] = shown[f"factor_{i}"].fillna("")
+        alerts.append(pd.DataFrame({"id_vaca": cows[alert], "inicio": start[alert], "evento": event,
+                                    "real": y[event][alert].astype(int), "probabilidad": probability[alert]})
+                      .join(shown))
     ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     pd.concat(alerts).to_csv(ALERTS_PATH, index=False)
 
@@ -97,13 +112,13 @@ def main():
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     metrics = json.loads(METRICS_PATH.read_text(encoding="utf-8"))
 
-    X, y, start, models, probabilities, val_label, groups = load_test(metrics)
+    X, y, start, models, probabilities, val_label, groups, cows = load_test(metrics)
     log = read_curves(CURVES_PATH)
     save(plots.learning_curves(log, VERSIONS[VERSION]["n_estimators"], val_label), "curvas_aprendizaje.png")
     save(plots.calibration(y, probabilities, metrics), "calibracion_test.png")
     save(plots.probability_distributions(y, probabilities, metrics), "distribucion_probabilidades.png")
     save(plots.gain_importance(models), "importancia_gain.png")
-    contributions, factors = explain_alerts(X, start, models, probabilities, metrics)
+    contributions, factors = explain_alerts(X, y, cows, start, models, probabilities, metrics)
     save(plots.shap_importance(contributions), "importancia_shap.png")
     save(plots.top_factor_share(factors), "factores_alertas.png")
     save(plots.weekly_performance(y, start, probabilities, metrics), "desempeno_semanal_test.png")
