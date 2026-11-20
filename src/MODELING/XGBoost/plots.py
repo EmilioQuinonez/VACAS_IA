@@ -108,11 +108,14 @@ def probability_distributions(y, probabilities, metrics):
 
 
 def gain_importance(models):
-    """5. Los atributos con más gain de cada modelo."""
-    gains = [pd.Series(model.get_booster().get_score(importance_type="gain")) for model in models]
+    """
+    5. Los atributos con más gain total de cada modelo (suma de la mejora de la pérdida en todos sus
+    cortes, medida en train al entrenar).
+    """
+    gains = [pd.Series(model.get_booster().get_score(importance_type="total_gain")) for model in models]
     return bars_by_event([gain / gain.sum() for gain in gains], "Proporción del gain total",
                          lambda value: f"{value:.0%}",
-                         f"Importancia por gain: los {TOP_FEATURES} atributos que más usa cada modelo")
+                         f"Importancia por gain total en train: los {TOP_FEATURES} atributos que más usa cada modelo")
 
 
 def bars_by_event(series, xlabel, label, title):
