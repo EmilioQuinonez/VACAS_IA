@@ -156,7 +156,7 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
         frame["prediction"] = (frame["probability"] >= threshold).astype(int)
         alert_positions = np.flatnonzero(frame["prediction"])
         explanation = explain(model, preprocessor, transformed["test"][alert_positions], X.iloc[test_rows[alert_positions]].reset_index(drop=True))
-        # Solo las alertas reciben factores; los datos se conservan en memoria.
+        # Solo las alertas reciben factores.
         explanation.index = alert_positions
         frame = frame.join(explanation)
         for column in [c for c in explanation if c.startswith(("factor_", "valor_", "direccion_"))]:
@@ -186,6 +186,19 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
     }
     coefficient_data = coefficient_table(models, preprocessor)
     prediction_data = pd.concat(predictions, ignore_index=True)
+    alert_columns = ["id_vaca", "inicio", "event", "actual", "probability"]
+    alert_columns += [f"{field}_{rank}" for rank in range(1, 4)
+                      for field in ("factor", "valor", "aporte_log_odds")]
+    alerts = prediction_data.loc[prediction_data["prediction"].eq(1), alert_columns].copy()
+    alerts = alerts.rename(columns={
+        "event": "evento", "actual": "real", "probability": "probabilidad",
+        **{f"aporte_log_odds_{rank}": f"aporte_{rank}" for rank in range(1, 4)},
+    })
+    for rank in range(1, 4):
+        alerts.loc[alerts[f"factor_{rank}"].eq(""), f"aporte_{rank}"] = np.nan
+    metrics_dir = output_dir / "metrics" / VERSION
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+    alerts.to_csv(metrics_dir / "alertas_test.csv.gz", index=False)
     prediction_data["probability_alguna_anomalia"] = np.tile(predictions[-1]["probability"].to_numpy(), len(EVENTS))
     bundle = {
         "preprocessor": preprocessor,
@@ -201,7 +214,7 @@ def run(input_path=INPUT_PATH, output_dir=OUTPUT_DIR, config=None):
         json.dump(selected_configs, file, ensure_ascii=False, indent=2)
         file.write("\n")
     save_plots(metrics, prediction_data, coefficient_data, images_dir)
-    save_metric_tables(metrics, output_dir / "metrics" / VERSION)
+    save_metric_tables(metrics, metrics_dir)
     metrics["status"] = "evaluation_complete"
     print(f"[done] Gráficas en {images_dir}; modelos en {models_dir}", flush=True)
     return metrics

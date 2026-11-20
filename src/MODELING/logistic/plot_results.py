@@ -92,15 +92,18 @@ def coefficients(frame):
     fig, axes = plt.subplots(2, 2, figsize=(16, 12), constrained_layout=True)
     
     for event, name, ax in zip(EVENTS, EVENT_NAMES, axes.ravel()):
-        data = frame[frame["event"].eq(event)].copy()
-        data = data.iloc[np.argsort(np.abs(data["coeficiente"].to_numpy()))[-10:]]
+        data = frame[frame["event"].eq(event) & frame["coeficiente"].gt(0)]
+        data = data.nlargest(10, "coeficiente").sort_values("coeficiente")
         weights = data["coeficiente"].to_numpy()
-        ax.barh(data["variable"], weights, color=np.where(weights >= 0, ORANGE, BLUE))
+        bars = ax.barh(data["variable"], weights, color=ORANGE)
+        ax.bar_label(bars, labels=[f"{weight:.3g}" for weight in weights], padding=3, fontsize=9)
+        if len(weights):
+            ax.set_xlim(0, weights.max() * 1.2)
         ax.axvline(0, color=REFERENCE, linewidth=1)
         ax.set(title=name, xlabel="Coeficiente: numéricas por 1 DE; binarias de 0 a 1")
         ax.grid(axis="y", visible=False)
     
-    fig.suptitle("Coeficientes de mayor magnitud de los modelos de evaluación")
+    fig.suptitle("Coeficientes positivos de los modelos de evaluación")
     return fig
 
 
