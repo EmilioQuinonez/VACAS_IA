@@ -32,7 +32,7 @@ OUTPUT_PATH = Path(__file__).resolve().parent / "metrics" / "lineas_base.json"
 
 # Mismo corte que los modelos: se reutiliza su función para que train, val y test sean idénticos.
 sys.path.insert(0, str(ROOT / "src" / "MODELING" / "XGBoost"))
-from dataset import split_by_time  # noqa: E402
+from dataset import split_by_time
 
 EVENTS = [
     "mechanical_connection_failure_event", "health_anomaly_event",
