@@ -70,8 +70,8 @@ def save(fig, name):
 def explain_alerts(X, start, models, probabilities, metrics):
     """
     Aportes SHAP de cada modelo en test y 3 factores de cada alerta (probabilidad calibrada mayor o
-    igual al umbral de recall de val); guarda las alertas en ALERTS_PATH e imprime en qué proporción
-    los 3 factores suben el riesgo y el error de aditividad.
+    igual al umbral de recall de val); guarda las alertas en ALERTS_PATH e imprime qué proporción
+    tiene 3 factores positivos y el error de aditividad.
     """
     contributions, factors, alerts = [], [], []
     for event, model, probability in zip(EVENTS, models, probabilities):
@@ -81,8 +81,7 @@ def explain_alerts(X, start, models, probabilities, metrics):
         error = check_additivity(model, X, contribution, platt)
         assert error < ADDITIVITY_TOLERANCE, f"{event}: SHAP additivity error {error:.2e}"
         top = top_factors(contribution[alert], X[alert])
-        all_up = (top.filter(like="aporte_") > 0).all(axis=1).mean()
-        print(f"[shap] {event}: {alert.sum():,} alerts, {all_up:.1%} with the 3 factors raising the risk, "
+        print(f"[shap] {event}: {alert.sum():,} alerts, {top['factor_3'].notna().mean():.1%} with 3 factors, "
               f"additivity error {error:.1e}")
         contributions.append(contribution)
         factors.append(top)

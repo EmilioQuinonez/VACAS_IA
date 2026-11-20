@@ -141,31 +141,11 @@ def shap_importance(contributions):
 
 
 def top_factor_share(factors):
-    """
-    13. Proporción de alertas de test en que cada atributo es uno de sus 3 factores (mayor aporte en
-    valor absoluto), separada según si el aporte sube (naranja) o baja (azul) el riesgo.
-    """
-    fig, axes = plt.subplots(1, len(EVENTS), figsize=(18.5, 4.8))
-    for i, f in enumerate(factors):
-        names = f.filter(like="factor_").to_numpy().ravel()
-        up = f.filter(like="aporte_").to_numpy().ravel() > 0
-        share = pd.DataFrame({"sube": pd.Series(names[up]).value_counts(),
-                              "baja": pd.Series(names[~up]).value_counts()}).fillna(0) / len(f)
-        top = share.assign(total=share.sum(axis=1)).sort_values("total").tail(TOP_FEATURES)
-        ax = axes[i]
-        ax.barh(top.index, top["sube"], color=SERIES["val"], height=0.6, label="Sube el riesgo")
-        ax.barh(top.index, top["baja"], left=top["sube"], color=SERIES["train"], height=0.6, label="Baja el riesgo")
-        for y_pos, value in enumerate(top["total"]):
-            ax.annotate(f"{value:.0%}", (value, y_pos), xytext=(3, 0), textcoords="offset points",
-                        va="center", fontsize=9, color=MUTED)
-        ax.set_title(EVENT_NAMES[i], loc="left")
-        ax.set_xlabel("Proporción de alertas")
-        ax.set_xlim(0, top["total"].max() * 1.2)
-        ax.grid(axis="y", visible=False)
-    fig.legend(*axes[0].get_legend_handles_labels(), loc="upper right", ncol=2)
-    fig.suptitle(f"Factores de las alertas en test: los {TOP_FEATURES} atributos que más aparecen entre "
-                 "los 3 de mayor aporte", x=0.01, ha="left", fontsize=12)
-    return fig
+    """13. Proporción de alertas de test en que cada atributo es uno de sus 3 factores (mayor aporte positivo)."""
+    shares = [f.filter(like="factor_").stack().value_counts() / len(f) for f in factors]
+    return bars_by_event(shares, "Proporción de alertas", lambda value: f"{value:.0%}",
+                         f"Factores de las alertas en test: los {TOP_FEATURES} atributos que más aparecen entre "
+                         "los 3 de mayor aporte positivo")
 
 
 def weekly_performance(y, start, probabilities, metrics):
