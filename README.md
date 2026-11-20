@@ -216,6 +216,30 @@ python3 -u src/MODELING/LSTM/plot_results.py
 
 **Resultado esperado:** se generan en `src/MODELING/LSTM/modelos/lstm_base/graficas/` ocho gráficas a partir del modelo guardado, sin reentrenar: curvas de aprendizaje (pérdida, PR-AUC promedio y accuracy por época), ROC y precisión-recall, calibración, matrices de confusión, distribución de probabilidades y desempeño semanal en test; métricas de vacas conocidas, solo en val y nuevas; e importancia por permutación en val (caída del PR-AUC al revolver cada variable).
 
+## Líneas base de la evaluación
+
+Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`. El script no necesita los modelos ni las variables de historial, y no modifica el CSV.
+
+**Windows**
+
+```powershell
+py src/EVALUATION/lineas_base.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/EVALUATION/lineas_base.py
+```
+
+**Resultado esperado:** se genera `src/EVALUATION/metrics/lineas_base.json` y la terminal muestra, para cada evento y para alguna anomalía, el F1, el recall y la precisión en test de tres reglas sin modelo:
+
+- **Alertar siempre:** alerta en todos los ordeños; su F1 es 2p / (1 + p), con p la prevalencia.
+- **Persistencia:** alerta si el ordeño anterior de la vaca, en el mismo bloque de historial, tuvo el evento.
+- **Tasa de la vaca en 30 días:** alerta si la proporción de ordeños de la vaca con el evento en los 30 días previos supera el umbral fijado en val para un recall ≥ 80 %, con la misma regla que XGBoost.
+
+Usa los mismos ordeños, etiquetas y corte cronológico 70/15/15 que los modelos (reutiliza `split_by_time` de XGBoost), así que sus resultados se comparan directo con los de test de cada modelo.
+
 ## Preparación para reto de datos.
 
 Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. 
@@ -337,6 +361,8 @@ La estructura del repositorio es:
       - [`evaluation.py`](src/MODELING/LSTM/evaluation.py) — Umbral, métricas, calibración y tablas CSV.
       - [`explain.py`](src/MODELING/LSTM/explain.py) — Los 3 factores de cada alerta con Integrated Gradients.
       - [`plot_results.py`](src/MODELING/LSTM/plot_results.py) — Genera las gráficas de evaluación de la LSTM en [`img/<versión>/`](src/MODELING/LSTM/img/).
+  - **[`EVALUATION/`](src/EVALUATION/)** — Scripts de la fase *Evaluation*.
+    - [`lineas_base.py`](src/EVALUATION/lineas_base.py) — Mide en test tres líneas base sin modelo (alertar siempre, persistencia y tasa de la vaca en 30 días) con el mismo corte 70/15/15 de los modelos, y las guarda en [`metrics/lineas_base.json`](src/EVALUATION/metrics/lineas_base.json).
   - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
     - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
     - [`dataset_vacas_muestra.csv`](src/RETO_DATOS/dataset_vacas_muestra.csv) — Muestra generada por el script anterior.
