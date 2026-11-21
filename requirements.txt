@@ -5,6 +5,7 @@ seaborn
 scipy
 notebook
 requests
+psutil>=5.9,<8
 python-dotenv
 openpyxl
 scikit-learn

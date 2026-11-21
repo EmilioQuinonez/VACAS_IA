@@ -216,9 +216,33 @@ python3 -u src/MODELING/LSTM/plot_results.py
 
 **Resultado esperado:** se generan en `src/MODELING/LSTM/modelos/lstm_base/graficas/` ocho gráficas a partir del modelo guardado, sin reentrenar: curvas de aprendizaje (pérdida, PR-AUC promedio y accuracy por época), ROC y precisión-recall, calibración, matrices de confusión, distribución de probabilidades y desempeño semanal en test; métricas de vacas conocidas, solo en val y nuevas; e importancia por permutación en val (caída del PR-AUC al revolver cada variable).
 
+## Líneas base de la evaluación
+
+Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`. El script no necesita los modelos ni las variables de historial, y no modifica el CSV.
+
+**Windows**
+
+```powershell
+py src/EVALUATION/lineas_base.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/EVALUATION/lineas_base.py
+```
+
+**Resultado esperado:** se genera `src/EVALUATION/metrics/lineas_base.json` y la terminal muestra, para cada evento y para alguna anomalía, el F1, el recall y la precisión en test de tres reglas sin modelo:
+
+- **Alertar siempre:** alerta en todos los ordeños; su F1 es 2p / (1 + p), con p la prevalencia.
+- **Persistencia:** alerta si el ordeño anterior de la vaca, en el mismo bloque de historial, tuvo el evento.
+- **Tasa de la vaca en 30 días:** alerta si la proporción de ordeños de la vaca con el evento en los 30 días previos supera el umbral fijado en val para un recall ≥ 80 %, con la misma regla que XGBoost.
+
+Usa los mismos ordeños, etiquetas y corte cronológico 70/15/15 que los modelos (reutiliza `split_by_time` de XGBoost), así que sus resultados se comparan directo con los de test de cada modelo.
+
 ## Preparación para reto de datos.
 
-Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y cuenta con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas. 
+Para generar la muestra a partir de un dataset integrado existente, sigue los pasos 1 y 2. Primero debes completar la sección **¿Cómo obtener y preparar los datos?** y contar con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas.
 
 Ejecuta los siguientes comandos desde la raíz del repositorio.
 
@@ -247,13 +271,13 @@ Ejecuta `k_fold.py` para separar primero un 20% de la muestra como conjunto de p
 **Windows**
 
 ```powershell
-py src/DP/k_fold.py
+py src/RETO_DATOS/k_fold.py
 ```
 
 **macOS y Linux**
 
 ```bash
-python3 src/DP/k_fold.py
+python3 src/RETO_DATOS/k_fold.py
 ```
 
 **Resultado esperado:** la terminal muestra el número de registros de `train`, `val` y `test` en cada fold, además de las primeras cinco filas de los conjuntos del primer fold.
@@ -261,7 +285,7 @@ python3 src/DP/k_fold.py
 Para obtener los conjuntos desde otro script, importa `get_k_folds` y selecciona un fold:
 
 ```python
-from src.DP.k_fold import INPUT_DIR, get_k_folds
+from src.RETO_DATOS.k_fold import INPUT_DIR, get_k_folds
 
 dataset, folds = get_k_folds(INPUT_DIR)
 fold = folds[0]
@@ -271,7 +295,25 @@ val = dataset.iloc[fold["val"]]
 test = dataset.iloc[fold["test"]]
 ```
 
-> **Nota:** esta separación al azar corresponde al reto de datos. Para el modelado, el [Reporte de diseño de pruebas](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.7tfnlrrsx4yq) define un corte cronológico 70/15/15: el 70 % más antiguo para entrenamiento, el 15 % siguiente para validación y el 15 % más reciente para prueba.
+> **Nota:** esta separación corresponde al reto de datos. Para el modelado, el [Reporte de diseño de pruebas](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.eaxe6c7fw3yo) define un corte cronológico 70/15/15: el 70 % más antiguo para entrenamiento, el 15 % siguiente para validación y el 15 % más reciente para prueba.
+
+### 3. Medir el tiempo de ejecución del pipeline.
+
+El ejecutor realiza diez vueltas completas de los once scripts de preparación, desde la generación de los datos hasta la muestra y la separación en folds. Antes de ejecutarlo, prepara los archivos originales de vacas y concentrado, configura `COWSKEY` e instala las dependencias como se indica en **¿Cómo obtener y preparar los datos?**.
+
+**Windows**
+
+```powershell
+py src/RETO_DATOS/run_pipeline.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/RETO_DATOS/run_pipeline.py
+```
+
+**Resultado esperado:** la consola muestra los datos del equipo, una estimación de la velocidad de descarga antes de cada vuelta y el tiempo de cada script. Al finalizar, presenta el promedio, la desviación estándar, el mínimo y el máximo de los tiempos por script y del pipeline completo. El clima se descarga nuevamente en cada vuelta.
 
 
 ## ¿Cómo acceder a los entregables?
@@ -298,6 +340,12 @@ La estructura del repositorio es:
     - [Reporte Data Preparation II](docs/DP/Reportes%20de%20fase%20Data%20Preparation%20II.pdf): segunda iteración, con su changelog.
   - **[`MODELING/`](docs/MODELING/)** — Fase de *Modelado*.
     - [Reporte Modeling](docs/MODELING/Reportes%20de%20fase%20Modeling.pdf): diseño de pruebas, regresión logística, XGBoost, LSTM y evaluación de los modelos.
+    - [Reporte Modeling II](docs/MODELING/Modeling%20II.pdf): segunda iteración, con su changelog, diseño de pruebas y comparación de los modelos.
+    - [Anexo I: Regresión logística](docs/MODELING/Anexo%20I%20-%20Regresi%C3%B3n%20logistica.pdf).
+    - [Anexo II: XGBoost](docs/MODELING/Anexo%20II%20-%20XGBoost.pdf).
+    - [Anexo III: LSTM](docs/MODELING/Anexo%20III%20-%20LSTM.pdf).
+  - **[`EVALUATION/`](docs/EVALUATION/)** — Fase de *Evaluación*.
+    - [Reporte Evaluation](docs/EVALUATION/Evaluation.pdf): evaluación de resultados frente a los criterios de éxito de negocio, revisión del proceso y decisión.
   - **[`RETO_DATOS/`](docs/RETO_DATOS/)** — Preparación para el reto de datos.
     - [Reporte del reto de datos](docs/RETO_DATOS/Reporte-RetoDatos.pdf).
   - [`guide_audit_logs.md`](docs/guide_audit_logs.md) y [`data_audit_logs.csv`](docs/data_audit_logs.csv) — Guía y bitácora de auditoría de registros.
@@ -314,7 +362,6 @@ La estructura del repositorio es:
     - [`integrar_clima.py`](src/DP/integrar_clima.py) — Agrega a las sesiones limpias los atributos de clima de NASA POWER (temperatura, THI y horas con THI alto) y crea `Data/dataset_vacas_integrado.csv`.
     - [`integrate_derivates.py`](src/DP/integrate_derivates.py) — Agrega diez atributos derivados del historial de cada vaca y cuatro etiquetas de evento a `Data/dataset_vacas_integrado.csv`.
     - [`integrar_concentrado.py`](src/DP/integrar_concentrado.py) — Añade cuatro atributos históricos de concentrado a `Data/dataset_vacas_integrado.csv`.
-    - [`k_fold.py`](src/DP/k_fold.py) — Separa la muestra en un conjunto de prueba fijo y cinco folds de entrenamiento y validación.
   - **[`MODELING/`](src/MODELING/)** — Scripts de la fase *Modeling*. Los tres modelos usan el corte cronológico 70/15/15 y tienen una salida por evento de ordeño y otra para alguna anomalía.
     - **[`logistic/`](src/MODELING/logistic/)** — Regresión logística (versiones v1–v4; `VERSION` en `main.py` elige cuál se guarda).
       - [`main.py`](src/MODELING/logistic/main.py) — Entrena cuatro regresiones con train y las evalúa con validación y test. Usa `dataset.py`, `evaluation.py` y `logistic_model.py`.
@@ -337,9 +384,13 @@ La estructura del repositorio es:
       - [`evaluation.py`](src/MODELING/LSTM/evaluation.py) — Umbral, métricas, calibración y tablas CSV.
       - [`explain.py`](src/MODELING/LSTM/explain.py) — Los 3 factores de cada alerta con Integrated Gradients.
       - [`plot_results.py`](src/MODELING/LSTM/plot_results.py) — Genera las gráficas de evaluación de la LSTM en [`img/<versión>/`](src/MODELING/LSTM/img/).
+  - **[`EVALUATION/`](src/EVALUATION/)** — Scripts de la fase *Evaluation*.
+    - [`lineas_base.py`](src/EVALUATION/lineas_base.py) — Mide en test tres líneas base sin modelo (alertar siempre, persistencia y tasa de la vaca en 30 días) con el mismo corte 70/15/15 de los modelos, y las guarda en [`metrics/lineas_base.json`](src/EVALUATION/metrics/lineas_base.json).
   - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
     - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
     - [`dataset_vacas_muestra.csv`](src/RETO_DATOS/dataset_vacas_muestra.csv) — Muestra generada por el script anterior.
+    - [`k_fold.py`](src/RETO_DATOS/k_fold.py) — Separa la muestra en un conjunto de prueba fijo y cinco folds de entrenamiento y validación.
+    - [`run_pipeline.py`](src/RETO_DATOS/run_pipeline.py) — Ejecuta diez veces la preparación completa y resume sus tiempos.
 
 Los entregables de las siguientes fases se incorporarán a esta estructura conforme se desarrollen.
 
@@ -540,4 +591,139 @@ El reporte está en un solo documento con una pestaña por fase. Los números de
     Diferencias en el comportamiento..........................57
     Dificultades en los modelos...............................58
     Elección de modelo........................................58
+</pre>
+
+#### [Reporte: Modelado de los datos II](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.eaxe6c7fw3yo)
+
+<pre>
+<strong>Changelog respecto a la iteración anterior de Modeling..........2</strong>
+<strong>Adaptaciones de la metodología CRISP-DM.........................2</strong>
+<strong>Diseño de pruebas...............................................3</strong>
+    Partición de los datos......................................4
+    Plan de entrenamiento y ajuste..............................5
+    Evaluación y comparación de los modelos.....................6
+    Regla de elección de modelos finales........................6
+<strong>Construcción del modelo de regresión logística..................7</strong>
+    Qué hace el modelo..........................................7
+    Cómo se entrenó y se eligió la versión......................8
+    Resultado en test...........................................9
+    Importancia de las variables y 3 factores de cada alerta...11
+    Dificultades identificadas.................................12
+    Vacas nuevas en test.......................................12
+    Conclusión.................................................12
+<strong>Construcción del modelo XGBoost................................13</strong>
+    Qué hace el modelo.........................................13
+    Cómo se entrenó y se eligió la versión.....................14
+    Resultado en test..........................................16
+    Importancia de las variables y 3 factores de cada alerta...17
+    Dificultades identificadas.................................19
+    Vacas nuevas en test.......................................20
+    Conclusión.................................................20
+<strong>Construcción del modelo LSTM...................................21</strong>
+    Qué hace el modelo.........................................21
+    Cómo se entrenó y se eligió la versión.....................22
+    Resultado en test..........................................23
+    Importancia de las variables y 3 factores de cada alerta...24
+    Criterios del BU en test...................................25
+    Dificultades identificadas.................................26
+    Vacas nuevas en test.......................................27
+    Conclusión.................................................27
+<strong>Evaluación de modelos..........................................27</strong>
+    Comparación de resultados..................................27
+    Cumplimiento de criterios establecidos.....................28
+    Diferencias en el comportamiento...........................29
+    Dificultades en los modelos................................29
+<strong>Referencias....................................................30</strong>
+</pre>
+
+#### [Anexo 1: Regresión logística](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.o0oj2yrcn78s)
+
+<pre>
+<strong>Comparativa de las versiones de los modelos.....................1</strong>
+<strong>Hiperparámetros usados..........................................3</strong>
+<strong>Preparación de los datos........................................4</strong>
+<strong>Evaluación del desempeño del modelo.............................6</strong>
+    Falla mecánica..............................................6
+    Anomalía de salud...........................................7
+    Interrupción por conducta...................................8
+    Alguna anomalía.............................................8
+<strong>Criterios del BU en test........................................9</strong>
+<strong>Gráficos.......................................................10</strong>
+    Curvas de aprendizaje: Pérdida logarítmica.................10
+    Matrices de confusión (en el conjunto de test).............12
+    ROC y PR (en el conjunto de test)..........................13
+    Calibración (en el conjunto de test).......................13
+<strong>Interpretación de los resultados...............................15</strong>
+<strong>Dificultades identificadas.....................................16</strong>
+<strong>Vacas nuevas en test...........................................17</strong>
+    Desempeño por grupo de vaca................................18
+    Calidad de las probabilidades por grupo....................19
+<strong>Conclusión.....................................................19</strong>
+</pre>
+
+#### [Anexo 2: XGBoost](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.xpypjci3s25w)
+
+<pre>
+<strong>Comparativa de las versiones del modelo.........................1</strong>
+<strong>Hiperparámetros usados..........................................2</strong>
+<strong>Preparación de los datos........................................3</strong>
+<strong>Evaluación del desempeño del modelo.............................3</strong>
+    Falla mecánica (umbral de 0.120)............................3
+    Anomalía de salud (umbral de 0.208).........................4
+    Interrupción por conducta (umbral de 0.128).................4
+    Alguna anomalía (umbral de 0.338)...........................4
+<strong>Criterios del BU en test........................................5</strong>
+<strong>Gráficos........................................................5</strong>
+    Curvas de aprendizaje.......................................5
+    Calibración en test.........................................6
+    Distribución de probabilidades en test......................6
+    Importancia por gain........................................7
+    Importancia SHAP............................................7
+    Desempeño semanal en test...................................8
+<strong>Vacas nuevas en test............................................8</strong>
+</pre>
+
+#### [Anexo 3: LSTM](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.73mzsvi35mgs)
+
+<pre>
+<strong>Comparativa de las versiones del modelo.........................1</strong>
+<strong>Hiperparámetros usados..........................................2</strong>
+<strong>Preparación de los datos........................................4</strong>
+<strong>Evaluación del desempeño del modelo.............................5</strong>
+<strong>Criterios del BU en test........................................6</strong>
+<strong>3 factores por alerta...........................................7</strong>
+<strong>Gráficos........................................................7</strong>
+    Curvas de aprendizaje.......................................7
+    Calibración en test.........................................8
+    Importancia con Integrated Gradients........................9
+<strong>Vacas nuevas en test............................................9</strong>
+</pre>
+
+#### [Reporte: Evaluación](https://docs.google.com/document/d/1z871uI4bhOET6Eb1gTy_JprbtWaXhmogy0pr0fnJYk4/edit?tab=t.wxkcbo5t63ty)
+
+<pre>
+<strong>Reporte: Evaluación..........................................................1</strong>
+    Por PINU.................................................................1
+<strong>Reporte de evaluación de resultados..........................................2</strong>
+    Resultados de minería de datos...........................................2
+        Interpretar en términos de la aplicación.............................2
+        Impactos del objetivo de minería.....................................3
+        Comparar con la base de conocimiento.................................4
+    Evaluar con los criterios de éxito de negocio............................5
+        Comparar la evaluación con su interpretación.........................5
+        Clasificar los resultados según los criterios de éxito de negocio....6
+        Impactos contra el objetivo inicial..................................7
+        Declaración final....................................................7
+    Modelos aprobados........................................................8
+<strong>Revisar el Proceso...........................................................8</strong>
+    Business Understanding...................................................8
+    Data Understanding.......................................................8
+    Data Preparation.........................................................9
+    Modeling.................................................................9
+    Pasos engañosos.........................................................10
+    Resultados frente a los criterios de éxito..............................10
+<strong>Lista de posibles acciones..................................................10</strong>
+<strong>Decisión....................................................................11</strong>
+    Nuevos objetivos o proyectos............................................12
+<strong>Conclusiones para futuros proyectos.........................................12</strong>
 </pre>

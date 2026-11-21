@@ -62,9 +62,10 @@ def shap_contributions(model, X, slope):
 
 def top_factors(contributions, X, k=3):
     """
-    Los k aportes positivos más grandes de cada sesión: atributo, su valor en la sesión y su
-    aporte. El valor de "maquina" es la máquina (referencia si no tiene dummy); si hay menos de
-    k aportes positivos, los que faltan quedan vacíos.
+    Los k aportes positivos más grandes de cada sesión (los que más suben el riesgo), como pide el
+    diseño de pruebas: atributo, su valor en la sesión y su aporte. El valor de "maquina" es la
+    máquina (referencia si no tiene dummy); si hay menos de k aportes positivos, los que faltan
+    quedan vacíos.
     """
     machines = [column for column in X.columns if column.startswith("maquina_")]
     has_dummy = X[machines].eq(1).any(axis=1)

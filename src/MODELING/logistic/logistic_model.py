@@ -100,7 +100,7 @@ def train_event(transformed, actual, config=None, target_recall=0.80, show_param
 
 
 def explain(model, preprocessor, transformed, X, top_n=3):
-    """Tres asociaciones de mayor contribución absoluta, agrupadas por variable."""
+    """Hasta tres contribuciones positivas, agrupadas por variable."""
     weights = model.coef_[0]
     contribution = (transformed - preprocessor.reference) * weights
     groups = [feature_group(c.removesuffix("__faltante")) for c in preprocessor.transformed_names]
@@ -110,7 +110,7 @@ def explain(model, preprocessor, transformed, X, top_n=3):
         for name in group_names
     ])
     
-    ranking = np.argsort(-np.abs(grouped), axis=1, kind="stable")[:, :top_n]
+    ranking = np.argsort(-grouped, axis=1, kind="stable")[:, :top_n]
     output = pd.DataFrame(index=X.index)
     
     for rank in range(top_n):
@@ -123,10 +123,10 @@ def explain(model, preprocessor, transformed, X, top_n=3):
         indices = ranking[:, rank]
         amounts = grouped[np.arange(len(X)), indices]
         names = np.asarray(group_names, dtype=object)[indices]
-        nonzero = np.abs(amounts) > 1e-12
+        nonzero = amounts > 0
         output[f"factor_{rank + 1}"] = np.where(nonzero, names, "")
-        output[f"aporte_log_odds_{rank + 1}"] = amounts
-        output[f"direccion_{rank + 1}"] = np.where(~nonzero, "sin aporte", np.where(amounts > 0, "aumenta riesgo", "reduce riesgo"))
+        output[f"aporte_log_odds_{rank + 1}"] = np.where(nonzero, amounts, np.nan)
+        output[f"direccion_{rank + 1}"] = np.where(nonzero, "aumenta riesgo", "sin aporte")
         values = np.full(len(X), "", dtype=object)
         
         for name in np.unique(names[nonzero]):
