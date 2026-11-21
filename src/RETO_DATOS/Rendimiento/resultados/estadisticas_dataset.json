@@ -1,0 +1,75 @@
+{
+  "originales": {
+    "ordeno": {
+      "archivos": 235,
+      "formatos": {
+        ".xlsx": 201,
+        ".csv": 34
+      },
+      "tamano_mb": 58.0
+    },
+    "concentrado": {
+      "archivos": 203,
+      "formatos": {
+        ".xlsx": 203
+      },
+      "tamano_mb": 3.7
+    },
+    "clima": {
+      "archivos": 7,
+      "formatos": {
+        ".csv": 2,
+        ".json": 5
+      },
+      "tamano_mb": 12.3
+    }
+  },
+  "crudo": {
+    "filas": 286217,
+    "columnas": 44,
+    "vacas": 207,
+    "tamano_disco_mb": 55.6,
+    "memoria_pandas_mb": 220.4,
+    "celdas_nulas_pct": 20.9
+  },
+  "calidad_crudo": {
+    "nulos_alertas_pct": {
+      "estado_patada": 83.9,
+      "estado_incompleto": 88.0,
+      "estado_pezones_no_encontrados": 88.1,
+      "estado_amd_pezon": 90.6
+    },
+    "columnas_vacias_pct": {
+      "estado_rcs_1000_celulas_ml": 100.0,
+      "misc_usuario": 100.0
+    },
+    "conductividad_en_cero_pct": {
+      "conductividad_ms_cm_di": 1.7,
+      "conductividad_ms_cm_dd": 3.2,
+      "conductividad_ms_cm_ti": 8.3,
+      "conductividad_ms_cm_td": 28.0
+    },
+    "filas_identicas": 2,
+    "mdi_nulo_pct": 10.1
+  },
+  "anonimizado": {
+    "filas": 286217,
+    "columnas": 44,
+    "vacas": 207,
+    "tamano_disco_mb": 57.5,
+    "memoria_pandas_mb": 234.6,
+    "celdas_nulas_pct": 20.9
+  },
+  "integrado": {
+    "filas": 280833,
+    "columnas": 100,
+    "vacas": 204,
+    "tamano_disco_mb": 117.4,
+    "memoria_pandas_mb": 243.5,
+    "celdas_nulas_pct": 2.3,
+    "periodo": [
+      "2022-07-13 00:05:28",
+      "2026-01-28 11:47:54"
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+etapa,descripcion,tiempo_s,memoria_maxima_mb
+extraccion,Extracción y carga de 235 archivos CSV y XLSX (generate_data.py),38.2,624
+anonimizacion,Anonimización (anonymize_data.py),2.4,439
+limpieza,Limpieza de ordeños y clima (clean_data.py),7.2,1473
+clima,Integración climática (integrar_clima.py),3.3,533
+derivadas,Variables derivadas y etiquetas (integrate_derivates.py),4.9,804
+historial,Variables de historial (build_history_features.py),5.9,923
+regresion_logistica,"Entrenamiento y evaluación de la regresión logística, 4 salidas (logistic/main.py)",41.2,1790
+xgboost,"Entrenamiento y calibración de XGBoost v5, 4 salidas",15.6,1103
+lstm,"Entrenamiento y calibración de la LSTM v5, 4 salidas",244.8,2269
