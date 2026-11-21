@@ -33,12 +33,18 @@ CONTEXT_FEATURES = [
 
 
 def load_sessions(path):
-    """
-    Lee el dataset integrado y deja solo los ordeños, ordenados por vaca e inicio. Agrega
-    alguna_anomalia (objetivo invertido de successful_milking_event), las variables desfasadas
-    de la secuencia, el logaritmo de box_time_to_yield_ratio y el seno y coseno del calendario.
-    """
+    """Lee el dataset integrado y lo prepara con prepare_sessions."""
     sessions = pd.read_csv(path, dtype={"id_vaca": str}, parse_dates=["inicio"], low_memory=False)
+
+    return prepare_sessions(sessions)
+
+
+def prepare_sessions(sessions):
+    """
+    Deja solo los ordeños, ordenados por vaca e inicio. Agrega alguna_anomalia (objetivo
+    invertido de successful_milking_event), las variables desfasadas de la secuencia, el
+    logaritmo de box_time_to_yield_ratio y el seno y coseno del calendario.
+    """
     not_milking = sessions[["accion_rechazada", "accion_echada_sin_ordenar"]].eq(1).any(axis=1)
     print(f"[data] {len(sessions):,} visits; {not_milking.sum():,} rejections and lie-downs removed")
     sessions = sessions[~not_milking].sort_values(["id_vaca", "inicio"], kind="stable").reset_index(drop=True)
@@ -88,24 +94,29 @@ def split_test_by_cow(cows, idx):
     return groups
 
 
-def build_inputs(sessions, train_rows, k):
+def build_inputs(sessions, train_rows, k, scaler=None):
     """
     X_seq (sesiones, k, variables): para la sesión t, las filas t - k + 1 ... t de la misma vaca y
     bloque, que describen las sesiones t - k ... t - 1. Los pasos sin sesión previa quedan en 0
     para la capa Masking. X_ctx: contexto de la sesión t. Ambos se imputan con la mediana y se
     estandarizan con la media y desviación de train. y: una columna 0/1 por evento. scaler: la
     mediana, media y desviación de train de cada variable, para preparar sesiones nuevas igual.
+    Si se pasa scaler (el de scaler.json), se usan sus valores y train_rows no se lee.
     """
-    scaler = {}
+    fitted = {}
 
     def scale(columns):
         values = sessions[columns].astype(float)
-        median = values.iloc[train_rows].median()
-        values = values.fillna(median)
-        mean, std = values.iloc[train_rows].mean(), values.iloc[train_rows].std().replace(0, 1)
-        scaler.update({column: {"median": median[column], "mean": mean[column], "std": std[column]}
+        if scaler is None:
+            median = values.iloc[train_rows].median()
+            filled = values.fillna(median)
+            mean, std = filled.iloc[train_rows].mean(), filled.iloc[train_rows].std().replace(0, 1)
+        else:
+            stats = pd.DataFrame(scaler).T.loc[columns].astype(float)
+            median, mean, std = stats["median"], stats["mean"], stats["std"]
+        fitted.update({column: {"median": median[column], "mean": mean[column], "std": std[column]}
                        for column in columns})
-        return (values - mean) / std
+        return (values.fillna(median) - mean) / std
 
     steps = scale(SEQUENCE_FEATURES)
     # Sin produccion_previa no hay sesión previa en el bloque: el paso es relleno.
@@ -120,4 +131,4 @@ def build_inputs(sessions, train_rows, k):
     y = sessions[EVENTS].to_numpy(dtype="float32")
     print(f"[features] sequence {X_seq.shape}, context {X_ctx.shape}, targets {y.shape}")
 
-    return X_seq, X_ctx, y, scaler
+    return X_seq, X_ctx, y, fitted

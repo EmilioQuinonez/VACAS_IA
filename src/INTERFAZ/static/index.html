@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predicción de ordeño</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>Predicción de eventos de ordeño</h1>
+  <p>Probabilidad calibrada de cada evento y las 3 variables con mayor aporte en cada modelo.</p>
+</header>
+<main>
+  <aside class="panel">
+    <h2>Sesión</h2>
+    <div class="modes">
+      <button type="button" data-mode="nueva" class="active">Nueva sesión</button>
+      <button type="button" data-mode="existente">Del dataset</button>
+    </div>
+    <p class="hint" id="mode-hint"></p>
+    <form id="form">
+      <label for="vaca">Vaca</label>
+      <select id="vaca"></select>
+      <p class="hint" id="ultimo"></p>
+
+      <div id="nueva">
+        <div class="row">
+          <div><label for="fecha">Fecha</label><input type="date" id="fecha"></div>
+          <div><label for="hora">Hora</label><input type="time" id="hora"></div>
+        </div>
+        <div class="row">
+          <div><label for="maquina">Máquina</label><select id="maquina"></select></div>
+          <div><label for="numero">Núm. de ordeño</label><input type="number" id="numero" min="1" max="10"></div>
+        </div>
+        <div class="row">
+          <div><label for="temperatura">Temperatura (°C)</label><input type="number" id="temperatura" step="0.1"></div>
+          <div><label for="humedad">Humedad (%)</label><input type="number" id="humedad" min="0" max="100"></div>
+        </div>
+        <label for="horas">Horas con THI ≥ 68 (24 h previas)</label>
+        <input type="number" id="horas" min="0" max="24">
+        <p class="hint" id="thi"></p>
+      </div>
+
+      <div id="existente" hidden>
+        <label for="ordeno">Ordeño</label>
+        <select id="ordeno"></select>
+      </div>
+
+      <label>Modelos</label>
+      <div class="checks" id="modelos"></div>
+      <button class="primary" id="predecir" type="submit" disabled>Cargando...</button>
+      <p class="error" id="error"></p>
+    </form>
+  </aside>
+
+  <section class="panel">
+    <div class="tabs">
+      <button type="button" data-tab="resultados" class="active">Resultados</button>
+      <button type="button" data-tab="variables">Variables de la sesión</button>
+      <button type="button" data-tab="desempeno">Desempeño de los modelos</button>
+    </div>
+    <div id="tab-resultados"><p class="empty">Elige una vaca, captura la sesión y presiona <b>Predecir</b>.</p></div>
+    <div id="tab-variables" hidden><p class="empty">Aquí aparecen las variables calculadas para la sesión.</p></div>
+    <div id="tab-desempeno" hidden></div>
+    <p class="note">Los factores son asociaciones que encontró cada modelo, no causas. El aporte está en log-odds:
+      positivo sube la probabilidad del evento y negativo la baja. La línea en cada barra marca el umbral de alerta
+      (elegido en validación para detectar al menos 80 % de los eventos).</p>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
