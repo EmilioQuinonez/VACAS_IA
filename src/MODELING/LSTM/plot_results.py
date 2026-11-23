@@ -85,17 +85,16 @@ def confusion(y, probability, metrics):
 
 
 def contributions(frame):
-    """Variables de mayor aporte promedio en las alertas de test."""
+    """Variables de mayor aporte promedio positivo en las alertas de test."""
     fig, axes = plt.subplots(2, 2, figsize=(16, 12), constrained_layout=True)
     for event, name, ax in zip(EVENTS, EVENT_NAMES, axes.ravel()):
-        data = frame[frame["event"] == event]
-        data = data.loc[data["aporte_medio"].abs().sort_values().index[-TOP_FEATURES:]]
-        weights = data["aporte_medio"].to_numpy()
-        ax.barh(data["variable"], weights, color=np.where(weights >= 0, ORANGE, BLUE))
+        data = frame[(frame["event"] == event) & (frame["aporte_medio"] > 0)]
+        data = data.sort_values("aporte_medio").tail(TOP_FEATURES)
+        ax.barh(data["variable"], data["aporte_medio"], color=ORANGE)
         ax.axvline(0, color=REFERENCE, linewidth=1)
-        ax.set(title=name, xlabel="Aporte promedio al log-odds (naranja: aumenta el riesgo; azul: lo reduce)")
+        ax.set(title=name, xlabel="Aporte promedio al log-odds (aumenta el riesgo)")
         ax.grid(axis="y", visible=False)
-    fig.suptitle("Aportes de mayor magnitud en las alertas de test (Integrated Gradients; asociaciones, no causas)")
+    fig.suptitle("Aportes positivos más altos en las alertas de test (Integrated Gradients; asociaciones, no causas)")
     return fig
 
 
