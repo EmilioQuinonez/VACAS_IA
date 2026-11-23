@@ -71,7 +71,7 @@ def explain(model, X_seq, X_ctx, rows, sessions, output, batch_size, scale):
     """
     Los 3 factores de cada sesión de rows para la salida output: los mayores aportes positivos por
     variable agrupada; si hay menos de 3, los demás quedan vacíos. scale es la pendiente a de la
-    calibración. Devuelve los factores y el aporte de cada columna, sin agrupar.
+    calibración. Devuelve los factores y el aporte de cada variable agrupada.
     """
     seq_contribution, ctx_contribution = integrated_gradients(model, X_seq[rows], X_ctx[rows], output, batch_size)
     seq_contribution, ctx_contribution = seq_contribution * scale, ctx_contribution * scale
@@ -107,4 +107,4 @@ def explain(model, X_seq, X_ctx, rows, sessions, output, batch_size, scale):
     # Las columnas se fijan para que la tabla exista aunque no haya alertas.
     columns = [f"{field}_{rank}" for rank in range(1, TOP_N + 1)
                for field in ("factor", "valor", "aporte", "sesion")]
-    return pd.DataFrame(factors, columns=columns), pd.DataFrame(contribution, columns=NAMES)
+    return pd.DataFrame(factors, columns=columns), pd.DataFrame(grouped, columns=GROUP_NAMES)
