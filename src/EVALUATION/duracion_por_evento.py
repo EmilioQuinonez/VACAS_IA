@@ -11,18 +11,14 @@ Con los ordeños de test (mismo filtro y corte que los modelos):
 4. De los minutos extra, qué porcentaje cae en ordeños que cada modelo alertó (salida alguna anomalía).
    Es lo más que podría atender el personal si actuara sobre cada alerta.
 
-Lee Data/dataset_vacas_integrado.csv y las alertas de test con "git show <ref>:<ruta>". Solo escribe en
-src/EVALUATION/metrics/.
+Lee Data/dataset_vacas_integrado.csv y las alertas de test de los tres modelos desde el repo. Solo escribe
+en src/EVALUATION/metrics/.
 
-Uso, desde la raíz del repo:
+Uso, desde la raíz del repo y en develop:
     python -B src/EVALUATION/duracion_por_evento.py
-    python -B src/EVALUATION/duracion_por_evento.py --lstm-ref origin/develop
 """
 
-import argparse
-import io
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -118,33 +114,21 @@ def waiting_minutes(minutes, days):
     return rho, rho * mean * (1 + cv**2) / (2 * (1 - rho))
 
 
-def alerted_keys(ref, path):
+def alerted_keys(path):
     """Parejas (id_vaca, inicio) con alerta de alguna anomalía en el archivo de un modelo."""
-    raw = subprocess.run(
-        ["git", "show", f"{ref}:{path}"], cwd=ROOT, capture_output=True, check=True
-    ).stdout
-    alerts = pd.read_csv(
-        io.BytesIO(raw), compression="gzip", dtype={"id_vaca": str, "inicio": str}
-    )
+    alerts = pd.read_csv(ROOT / path, dtype={"id_vaca": str, "inicio": str})
     alerts = alerts[alerts["evento"].str.contains("alguna", case=False)]
     return set(zip(alerts["id_vaca"], alerts["inicio"]))
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--lr-ref", default="origin/develop")
-    parser.add_argument("--xgb-ref", default="origin/develop")
-    parser.add_argument("--lstm-ref", default="update/lstm_model")
-    args = parser.parse_args()
-    refs = dict(zip(ALERTS, (args.lr_ref, args.xgb_ref, args.lstm_ref)))
-
     test = add_extra_minutes(load_test())
     days = (test["inicio"].max() - test["inicio"].min()).total_seconds() / 86400
     busy = test["minutos"].sum()
     keys = list(zip(test["id_vaca"], test["inicio_texto"]))
     alerted = {}
     for model, path in ALERTS.items():
-        model_keys = alerted_keys(refs[model], path)  # Se lee una sola vez por modelo
+        model_keys = alerted_keys(path)  # Se lee una sola vez por modelo
         alerted[model] = np.array([k in model_keys for k in keys])
         print(
             f"[alertas] {model}: {alerted[model].sum():,} ordeños de test con alerta de alguna anomalía"
@@ -216,7 +200,7 @@ def main():
         "ordenos_test": len(test),
         "ordenos_por_categoria": test["categoria"].value_counts().to_dict(),
         "minutos_ocupados_por_dia": busy / days,
-        "refs_alertas": refs,
+        "archivos_alertas": ALERTS,
         "resumen": summary.round(3).to_dict(orient="records"),
         "espera_por_maquina": waits.round(3).to_dict(orient="records"),
     }

@@ -1,0 +1,131 @@
+{
+  "periodo_test": [
+    "2025-10-05 16:27:38",
+    "2026-01-28 11:47:54"
+  ],
+  "dias": 114.80574074074075,
+  "ordenos_test": 42091,
+  "ordenos_por_categoria": {
+    "Sin evento": 24703,
+    "Solo salud": 6048,
+    "Dos o más": 4031,
+    "Solo conducta": 3948,
+    "Solo falla mecánica": 3361
+  },
+  "minutos_ocupados_por_dia": 2995.008621649131,
+  "archivos_alertas": {
+    "Regresión logística": "src/MODELING/logistic/metrics/v4/alertas_test.csv.gz",
+    "XGBoost": "src/MODELING/XGBoost/models/v5/alertas_test.csv.gz",
+    "LSTM": "src/MODELING/LSTM/metrics/v5/alertas_test.csv.gz"
+  },
+  "resumen": [
+    {
+      "categoria": "Solo falla mecánica",
+      "ordenos_por_dia": 29.276,
+      "minutos_extra_mediana": 0.933,
+      "minutos_extra_media": 1.309,
+      "minutos_extra_por_dia": 38.316,
+      "pct_tiempo_ocupado": 1.279,
+      "pct_minutos_extra_con_alerta_Regresión logística": 75.684,
+      "pct_minutos_extra_con_alerta_XGBoost": 76.843,
+      "pct_minutos_extra_con_alerta_LSTM": 77.732
+    },
+    {
+      "categoria": "Solo salud",
+      "ordenos_por_dia": 52.68,
+      "minutos_extra_mediana": 0.367,
+      "minutos_extra_media": 0.562,
+      "minutos_extra_por_dia": 29.599,
+      "pct_tiempo_ocupado": 0.988,
+      "pct_minutos_extra_con_alerta_Regresión logística": 86.205,
+      "pct_minutos_extra_con_alerta_XGBoost": 89.4,
+      "pct_minutos_extra_con_alerta_LSTM": 91.06
+    },
+    {
+      "categoria": "Solo conducta",
+      "ordenos_por_dia": 34.389,
+      "minutos_extra_mediana": 0.2,
+      "minutos_extra_media": 0.415,
+      "minutos_extra_por_dia": 14.275,
+      "pct_tiempo_ocupado": 0.477,
+      "pct_minutos_extra_con_alerta_Regresión logística": 71.024,
+      "pct_minutos_extra_con_alerta_XGBoost": 72.348,
+      "pct_minutos_extra_con_alerta_LSTM": 74.751
+    },
+    {
+      "categoria": "Dos o más",
+      "ordenos_por_dia": 35.111,
+      "minutos_extra_mediana": 0.683,
+      "minutos_extra_media": 0.87,
+      "minutos_extra_por_dia": 30.545,
+      "pct_tiempo_ocupado": 1.02,
+      "pct_minutos_extra_con_alerta_Regresión logística": 89.724,
+      "pct_minutos_extra_con_alerta_XGBoost": 90.312,
+      "pct_minutos_extra_con_alerta_LSTM": 91.497
+    },
+    {
+      "categoria": "Cualquier evento",
+      "ordenos_por_dia": 151.456,
+      "minutos_extra_mediana": 0.458,
+      "minutos_extra_media": 0.744,
+      "minutos_extra_por_dia": 112.736,
+      "pct_tiempo_ocupado": 3.764,
+      "pct_minutos_extra_con_alerta_Regresión logística": 81.963,
+      "pct_minutos_extra_con_alerta_XGBoost": 83.526,
+      "pct_minutos_extra_con_alerta_LSTM": 84.945
+    }
+  ],
+  "espera_por_maquina": [
+    {
+      "maquina": "7063e4b1",
+      "ordenos_por_dia": 119.358,
+      "ocupacion": 0.66,
+      "duracion_media_min": 7.964,
+      "espera_min": 8.65,
+      "espera_sin_Solo falla mecánica": 7.929,
+      "ahorro_Solo falla mecánica": 0.721,
+      "espera_sin_Solo salud": 7.93,
+      "ahorro_Solo salud": 0.72,
+      "espera_sin_Solo conducta": 8.286,
+      "ahorro_Solo conducta": 0.364,
+      "espera_sin_Dos o más": 7.811,
+      "ahorro_Dos o más": 0.839,
+      "espera_sin_Cualquier evento": 6.252,
+      "ahorro_Cualquier evento": 2.398
+    },
+    {
+      "maquina": "86696b37",
+      "ordenos_por_dia": 122.111,
+      "ocupacion": 0.686,
+      "duracion_media_min": 8.093,
+      "espera_min": 9.697,
+      "espera_sin_Solo falla mecánica": 9.231,
+      "ahorro_Solo falla mecánica": 0.466,
+      "espera_sin_Solo salud": 9.024,
+      "ahorro_Solo salud": 0.673,
+      "espera_sin_Solo conducta": 9.316,
+      "ahorro_Solo conducta": 0.381,
+      "espera_sin_Dos o más": 9.221,
+      "ahorro_Dos o más": 0.477,
+      "espera_sin_Cualquier evento": 7.841,
+      "ahorro_Cualquier evento": 1.856
+    },
+    {
+      "maquina": "b96e85be",
+      "ordenos_por_dia": 125.159,
+      "ocupacion": 0.733,
+      "duracion_media_min": 8.438,
+      "espera_min": 12.932,
+      "espera_sin_Solo falla mecánica": 11.526,
+      "ahorro_Solo falla mecánica": 1.406,
+      "espera_sin_Solo salud": 12.066,
+      "ahorro_Solo salud": 0.866,
+      "espera_sin_Solo conducta": 12.32,
+      "ahorro_Solo conducta": 0.612,
+      "espera_sin_Dos o más": 11.527,
+      "ahorro_Dos o más": 1.405,
+      "espera_sin_Cualquier evento": 9.151,
+      "ahorro_Cualquier evento": 3.781
+    }
+  ]
+}
