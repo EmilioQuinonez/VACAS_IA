@@ -42,13 +42,16 @@ async function loadCow() {
   updateThi();
 }
 
+// Los factores son las variables que más aumentan el riesgo (aporte positivo), hasta 3.
 function factorList(factors) {
-  if (!factors.length) return `<p class="hint">Sin factores con aporte.</p>`;
+  if (!factors.length) return `<p class="hint factors-note">Ninguna variable aumenta el riesgo frente a una vaca promedio.</p>`;
+  const note = factors.length < 3
+    ? `<p class="hint factors-note">Solo ${factors.length === 1 ? "1 variable aumenta" : `${factors.length} variables aumentan`} el riesgo.</p>` : "";
   return `<ol class="factors">${factors.map((f, i) => `
     <li><span class="name">${i + 1}. ${esc(f.variable)}</span>${f.sesion && f.sesion !== "actual" ? ` <span class="value">(${esc(f.sesion)})</span>` : ""}
       <div class="value">valor: ${esc(f.valor)}</div>
-      <div class="${f.aporte > 0 ? "up" : "down"}">${f.aporte > 0 ? "▲" : "▼"} ${esc(f.direccion)} (${f.aporte > 0 ? "+" : ""}${f.aporte.toFixed(3)})</div>
-    </li>`).join("")}</ol>`;
+      <div class="up">▲ aumenta el riesgo (+${f.aporte.toFixed(3)})</div>
+    </li>`).join("")}</ol>${note}`;
 }
 
 function renderResults(data) {
@@ -71,7 +74,8 @@ function renderResults(data) {
     </div>`;
   }).join("")}</div></div>`).join("");
 
-  $("tab-resultados").innerHTML = `<h2>Vaca ${esc(data.vaca)} · ${fmtDate(data.inicio)}</h2>
+  const notes = (data.avisos || []).map((a) => `<p class="notice">${esc(a)}</p>`).join("");
+  $("tab-resultados").innerHTML = `<h2>Vaca ${esc(data.vaca)} · ${fmtDate(data.inicio)}</h2>${notes}
     <div class="table-wrap"><table>${header}${rows}</table></div>${detail}`;
   $("tab-variables").innerHTML = `<p class="hint">Valores con los que se predijo la sesión. Las variables de historial
     (*_previo, tasas, FME, sangre) describen ordeños anteriores de la vaca o del hato.</p>
@@ -79,16 +83,25 @@ function renderResults(data) {
       `<tr><td>${esc(k)}</td><td class="num">${v === null ? "faltante" : typeof v === "number" ? +v.toFixed(4) : esc(v)}</td></tr>`).join("")}</table></div>`;
 }
 
+function performanceTable(name, performance) {
+  const metrics = Object.keys(Object.values(performance)[0]);
+  return `<div class="model"><h3>${esc(name)}</h3><div class="table-wrap"><table>
+    <tr><th>Evento</th>${metrics.map((k) => `<th>${k}</th>`).join("")}</tr>
+    ${info.eventos.map((e) => `<tr><td>${esc(e.nombre)}</td>${metrics.map((k) => {
+      const v = performance[e.id][k];
+      return `<td class="num">${v === null ? "—" : v.toFixed(3)}</td>`;
+    }).join("")}</tr>`).join("")}
+  </table></div></div>`;
+}
+
 function renderPerformance() {
-  $("tab-desempeno").innerHTML = `<p class="hint">Métricas en test (el 15 % más reciente de las sesiones) con el umbral elegido en validación.</p>` +
-    info.modelos.map((m) => {
-      const metrics = Object.keys(Object.values(m.desempeno)[0]);
-      return `<div class="model"><h3>${esc(m.nombre)}</h3><div class="table-wrap"><table>
-        <tr><th>Evento</th>${metrics.map((k) => `<th>${k}</th>`).join("")}</tr>
-        ${info.eventos.map((e) => `<tr><td>${esc(e.nombre)}</td>${metrics.map((k) =>
-          `<td class="num">${m.desempeno[e.id][k].toFixed(3)}</td>`).join("")}</tr>`).join("")}
-      </table></div></div>`;
-    }).join("");
+  const baseline = info.linea_base
+    ? performanceTable("Línea base sin modelo: persistencia", info.linea_base) +
+      `<p class="hint">Alerta si el ordeño anterior de la vaca tuvo el evento (src/EVALUATION/lineas_base.py). No da probabilidad, así que no tiene Brier.</p>`
+    : "";
+  $("tab-desempeno").innerHTML = `<p class="hint">Métricas en test (el 15 % más reciente de las sesiones). F1, recall y precisión usan el umbral
+    elegido en validación para detectar al menos 80 % de los eventos; Brier mide la calibración de la probabilidad (más bajo es mejor).</p>` +
+    info.modelos.map((m) => performanceTable(m.nombre, m.desempeno)).join("") + baseline;
 }
 
 $("form").addEventListener("submit", async (event) => {
@@ -138,6 +151,8 @@ $("vaca").addEventListener("change", () => loadCow().catch((e) => { $("error").t
   try {
     info = await api("/api/info");
     $("vaca").innerHTML = info.vacas.map((v) => `<option value="${esc(v.id)}">${esc(v.id)} (último ${fmtDate(v.ultimo).slice(0, 10)})</option>`).join("");
+    $("fecha").max = info.fecha_maxima;
+    $("fecha-hint").textContent = `Fecha máxima: ${fmtDate(info.fecha_maxima + " 00:00").slice(0, 10)}, el día siguiente al fin del dataset.`;
     $("maquina").innerHTML = info.maquinas.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
     $("modelos").innerHTML = info.modelos.map((m) => `<label><input type="checkbox" value="${esc(m.nombre)}" checked> ${esc(m.nombre)}</label>`).join("");
     renderPerformance();

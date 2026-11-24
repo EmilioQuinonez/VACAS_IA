@@ -1,8 +1,9 @@
 """
 Carga los modelos finales (LSTM v5, regresión logística v4 y la versión del XGBoost de
 versions.py) y, para la última sesión de un historial, da la probabilidad calibrada de cada
-evento, si pasa el umbral elegido en val y los 3 factores con mayor aporte al log-odds.
-Los factores son asociaciones, no causas.
+evento, si pasa el umbral elegido en val y sus 3 factores: las variables que más aumentan el
+riesgo, con la misma función que usa cada modelo para sus alertas de test (si menos de 3
+variables suben el riesgo, se dan menos). Los factores son asociaciones, no causas.
 """
 
 import json
@@ -21,6 +22,7 @@ MODELING = ROOT / "src" / "MODELING"
 LSTM_DIR = MODELING / "LSTM"
 XGB_DIR = MODELING / "XGBoost"
 LOGISTIC_DIR = MODELING / "logistic"
+BASELINES_PATH = ROOT / "src" / "EVALUATION" / "metrics" / "lineas_base.json"
 
 # La LSTM importa sus módulos por nombre (dataset, evaluation); la logística es un paquete de src.
 sys.path[:0] = [str(LSTM_DIR), str(ROOT)]
@@ -52,13 +54,35 @@ def result(probability, threshold, factors):
             "alerta": bool(probability >= threshold), "factores": factors}
 
 
-def factor(name, value, amount, session=""):
-    return {"variable": name, "valor": value, "aporte": float(amount), "sesion": session,
-            "direccion": "aumenta riesgo" if amount > 0 else "reduce riesgo"}
+def top_factors(top, amount):
+    """
+    Factores de una fila con las columnas factor_N, valor_N y <amount>_N (y sesion_N en la LSTM)
+    de los explain de cada modelo; los vacíos son los que no aumentan el riesgo y se omiten.
+    """
+    found = []
+    for n in range(1, TOP_N + 1):
+        name = top[f"factor_{n}"]
+        if isinstance(name, str) and name:
+            found.append({"variable": name, "valor": text(top[f"valor_{n}"]),
+                          "aporte": float(top[f"{amount}_{n}"]), "sesion": top.get(f"sesion_{n}", "")})
+    return found
 
 
-def performance(f1, recall, precision, pr_auc):
-    return {"F1": f1, "Recall": recall, "Precisión": precision, "PR-AUC": pr_auc}
+def text(value):
+    """Valor de un factor como en las alertas de test: 4 cifras significativas, «faltante» o el texto."""
+    if isinstance(value, str):
+        return value
+    return "faltante" if pd.isna(value) else f"{value:.4g}"
+
+
+def performance(f1, recall, precision, brier):
+    return {"F1": f1, "Recall": recall, "Precisión": precision, "Brier": brier}
+
+
+def from_threshold(test):
+    """Métricas de test de metrics.json (LSTM y XGBoost) con el umbral elegido en val."""
+    t = test["threshold_recall"]
+    return performance(t["f1"], t["recall"], t["precision"], test["brier"])
 
 
 class LSTMModel:
@@ -74,11 +98,7 @@ class LSTMModel:
         self.calibration = read_json(folder / "calibracion.json")
         metrics = read_json(folder / "metrics.json")
         self.thresholds = {event: metrics[event]["threshold_recall_val"] for event in EVENTS}
-        self.performance = {}
-        for event in EVENTS:
-            test = metrics[event]["test"]
-            t = test["threshold_recall"]
-            self.performance[event] = performance(t["f1"], t["recall"], t["precision"], test["pr_auc"])
+        self.performance = {event: from_threshold(metrics[event]["test"]) for event in EVENTS}
 
     def predict(self, sessions, herd):
         """sessions: historial de una vaca con la sesión a predecir al final."""
@@ -92,10 +112,8 @@ class LSTMModel:
         for number, event in enumerate(EVENTS):
             factors, _ = lstm_explain(self.compiled, X_seq, X_ctx, rows, sessions, number,
                                       self.config["batch_size"], self.calibration[event]["a"])
-            top = factors.iloc[0]
-            found = [factor(top[f"factor_{n}"], top[f"valor_{n}"], top[f"aporte_log_odds_{n}"], top[f"sesion_{n}"])
-                     for n in range(1, TOP_N + 1) if top[f"factor_{n}"]]
-            results[event] = result(probabilities[number], self.thresholds[event], found)
+            results[event] = result(probabilities[number], self.thresholds[event],
+                                    top_factors(factors.iloc[0], "aporte"))
         return results
 
 
@@ -108,38 +126,18 @@ class LogisticModel:
         for event in EVENTS:
             table = pd.read_csv(LOGISTIC_DIR / "metrics" / LOGISTIC_VERSION / f"{event}.csv",
                                 index_col=0, encoding="utf-8-sig")["Prueba completa"].astype(float)
-            self.performance[event] = performance(table["F1"], table["Sensibilidad"], table["Precisión"], table["AP"])
-
-        self.machine_names = None
-
-    def match_machines(self, herd):
-        """
-        Las dummies de máquina usan el hash de la COWSKEY de quien entrenó; si el dataset local
-        usa otra llave, cada máquina se empareja con la de igual frecuencia en train (la
-        referencia del preprocesador es esa frecuencia).
-        """
-        trained = self.bundle["machine_columns"]
-        local = sorted(c for c in herd if c.startswith("maquina_"))
-        if set(trained) <= set(local):
-            return {}
-        reference = dict(zip(self.bundle["preprocessor"].transformed_names, self.bundle["preprocessor"].reference))
-        train = herd[herd["inicio"] < pd.Timestamp(self.bundle["split"]["train_end"])]
-        frequency = train[local].mean()
-        return {min(local, key=lambda c: abs(frequency[c] - reference[column])): column for column in trained}
+            self.performance[event] = performance(table["F1"], table["Sensibilidad"], table["Precisión"], table["Brier"])
 
     def predict(self, sessions, herd):
         """
         sessions: historial de una vaca con la sesión a predecir al final. herd: ordeños del
         resto del hato, para las tasas del hato.
         """
-        if self.machine_names is None:
-            self.machine_names = self.match_machines(herd)
-        sessions = sessions.rename(columns=self.machine_names)
         milkings = sessions[is_milking(sessions)]
         start = sessions["inicio"].iloc[-1]
         recent = (herd["inicio"] < start) & (herd["inicio"] >= start.normalize() - pd.Timedelta(days=HERD_DAYS))
         others = herd[recent & (herd["id_vaca"] != sessions["id_vaca"].iloc[-1])]
-        history = pd.concat([others.rename(columns=self.machine_names), milkings], ignore_index=True)
+        history = pd.concat([others, milkings], ignore_index=True)
         X = logistic_features(sessions.iloc[[-1]], history=history,
                               machine_columns=self.bundle["machine_columns"])[self.bundle["input_columns"]]
         transformed = self.bundle["preprocessor"].transform(X)
@@ -149,9 +147,7 @@ class LogisticModel:
             model = self.bundle["models"][event]
             probability = model.predict_proba(transformed)[0, 1]
             top = logistic_explain(model, self.bundle["preprocessor"], transformed, X, TOP_N).iloc[0]
-            found = [factor(top[f"factor_{n}"], top[f"valor_{n}"], top[f"aporte_log_odds_{n}"])
-                     for n in range(1, TOP_N + 1) if top[f"factor_{n}"]]
-            results[event] = result(probability, self.bundle["thresholds"][event], found)
+            results[event] = result(probability, self.bundle["thresholds"][event], top_factors(top, "aporte_log_odds"))
         return results
 
 
@@ -160,16 +156,14 @@ class XGBoostModel:
 
     def __init__(self):
         metrics = read_json(xgb_versions.MODELS_DIR / "metrics.json")
-        self.models, self.platt, self.thresholds, self.performance = {}, {}, {}, {}
+        self.models, self.platt, self.thresholds = {}, {}, {}
         for event in EVENTS:
             model = XGBClassifier()
             model.load_model(xgb_versions.MODELS_DIR / f"{event}.json")
             self.models[event] = model
             self.platt[event] = metrics[event]["platt"]
             self.thresholds[event] = metrics[event]["threshold_recall_val"]
-            test = metrics[event]["test"]
-            t = test["threshold_recall"]
-            self.performance[event] = performance(t["f1"], t["recall"], t["precision"], test["pr_auc"])
+        self.performance = {event: from_threshold(metrics[event]["test"]) for event in EVENTS}
 
     def predict(self, sessions, herd):
         """sessions: historial de una vaca con la sesión a predecir al final."""
@@ -180,26 +174,19 @@ class XGBoostModel:
             model, platt = self.models[event], self.platt[event]
             probability = xgb_model.PlattXGB(model, platt["slope"], platt["intercept"]).predict_proba(X)[0, 1]
             # TreeSHAP en log-odds calibrados, con las dummies de máquina sumadas en "maquina".
-            contributions = xgb_evaluation.shap_contributions(model, X, platt["slope"]).iloc[0]
-            found = []
-            for name in contributions.abs().sort_values(ascending=False).index[:TOP_N]:
-                if abs(contributions[name]) <= 1e-12:
-                    continue
-                value = X.iloc[0][name] if name in X else _machine(X.iloc[0])
-                found.append(factor(name, _format(value), contributions[name]))
-            results[event] = result(probability, self.thresholds[event], found)
+            contributions = xgb_evaluation.shap_contributions(model, X, platt["slope"])
+            top = xgb_evaluation.top_factors(contributions, X, TOP_N).iloc[0]
+            results[event] = result(probability, self.thresholds[event], top_factors(top, "aporte"))
         return results
 
 
-def _machine(row):
-    active = [c.removeprefix("maquina_") for c in row.index if c.startswith("maquina_") and row[c] == 1]
-    return active[0] if active else "referencia"
-
-
-def _format(value):
-    if isinstance(value, str):
-        return value
-    return "faltante" if pd.isna(value) else f"{value:.4g}"
+def baseline():
+    """Persistencia (alertar si el ordeño anterior tuvo el evento), de src/EVALUATION/lineas_base.py."""
+    if not BASELINES_PATH.exists():
+        return None
+    baselines = read_json(BASELINES_PATH)
+    return {event: performance(*(baselines[event]["persistencia"][k] for k in ("f1", "recall", "precision")), None)
+            for event in EVENTS}
 
 
 def load_models():

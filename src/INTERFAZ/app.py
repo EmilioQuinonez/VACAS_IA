@@ -44,8 +44,10 @@ async def lifespan(app):
 
 
 app = FastAPI(title="Predicción de eventos de ordeño", lifespan=lifespan)
-# Permite abrir index.html desde otro lado (doble clic, Live Server) y llamar a esta API.
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Permite abrir index.html desde otro lado de esta computadora (doble clic, cuyo origen es "null",
+# o Live Server) y llamar a esta API; páginas de otros sitios no pueden leerla.
+app.add_middleware(CORSMiddleware, allow_origin_regex=r"(null|https?://(localhost|127\.0\.0\.1)(:\d+)?)",
+                   allow_methods=["*"], allow_headers=["*"])
 
 
 class Capture(BaseModel):
@@ -81,6 +83,8 @@ def info():
         "eventos": [{"id": event, "nombre": modelos.EVENT_NAMES[event]} for event in modelos.EVENTS],
         "modelos": [{"nombre": m.name, "desempeno": {e: {k: plain(v) for k, v in p.items()} for e, p in m.performance.items()}}
                     for m in state["models"]],
+        "linea_base": modelos.baseline(),
+        "fecha_maxima": f"{ns.last_date(state['visits']):%Y-%m-%d}",
     }
 
 
@@ -107,7 +111,7 @@ def cow_defaults(cow: str):
 def predict(capture: Capture):
     visits, herd, modelos = state["visits"], state["herd"], state["modelos"]
     start = pd.Timestamp(capture.inicio)
-    actual = None
+    actual, notes = None, []
     with lock:
         if capture.modo == "nueva":
             fields = [capture.maquina, capture.temperatura, capture.humedad,
@@ -123,6 +127,7 @@ def predict(capture: Capture):
                 })
             except ValueError as error:
                 raise HTTPException(422, str(error))
+            notes = ns.notices(sessions)
         else:
             sessions = ns.existing_session(visits, capture.vaca, start)
             if sessions.empty or sessions["inicio"].iloc[-1] != start:
@@ -137,7 +142,7 @@ def predict(capture: Capture):
     row = sessions.iloc[-1]
     columns = list(dict.fromkeys(modelos.xgb_dataset.FEATURES + modelos.lstm_dataset.CONTEXT_FEATURES))
     return {
-        "vaca": capture.vaca, "inicio": plain(row["inicio"]), "real": actual,
+        "vaca": capture.vaca, "inicio": plain(row["inicio"]), "real": actual, "avisos": notes,
         "resultados": {name: {event: {**r, "factores": [{k: plain(v) for k, v in f.items()} for f in r["factores"]]}
                               for event, r in res.items()} for name, res in results.items()},
         "variables": {column: plain(row.get(column)) for column in columns},

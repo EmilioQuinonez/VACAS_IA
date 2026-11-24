@@ -9,7 +9,7 @@
 <body>
 <header>
   <h1>Predicción de eventos de ordeño</h1>
-  <p>Probabilidad calibrada de cada evento y las 3 variables con mayor aporte en cada modelo.</p>
+  <p>Probabilidad calibrada de cada evento y las 3 variables que más aumentan el riesgo en cada modelo.</p>
 </header>
 <main>
   <aside class="panel">
@@ -29,6 +29,7 @@
           <div><label for="fecha">Fecha</label><input type="date" id="fecha"></div>
           <div><label for="hora">Hora</label><input type="time" id="hora"></div>
         </div>
+        <p class="hint" id="fecha-hint"></p>
         <div class="row">
           <div><label for="maquina">Máquina</label><select id="maquina"></select></div>
           <div><label for="numero">Núm. de ordeño</label><input type="number" id="numero" min="1" max="10"></div>
@@ -63,9 +64,10 @@
     <div id="tab-resultados"><p class="empty">Elige una vaca, captura la sesión y presiona <b>Predecir</b>.</p></div>
     <div id="tab-variables" hidden><p class="empty">Aquí aparecen las variables calculadas para la sesión.</p></div>
     <div id="tab-desempeno" hidden></div>
-    <p class="note">Los factores son asociaciones que encontró cada modelo, no causas. El aporte está en log-odds:
-      positivo sube la probabilidad del evento y negativo la baja. La línea en cada barra marca el umbral de alerta
-      (elegido en validación para detectar al menos 80 % de los eventos).</p>
+    <p class="note">Los factores son las variables que más subieron la probabilidad del evento frente a una vaca promedio,
+      con su aporte en log-odds; son asociaciones que encontró cada modelo, no causas. Si menos de 3 variables suben el
+      riesgo, se muestran menos. La línea en cada barra marca el umbral de alerta (elegido en validación para detectar al
+      menos 80 % de los eventos).</p>
   </section>
 </main>
 

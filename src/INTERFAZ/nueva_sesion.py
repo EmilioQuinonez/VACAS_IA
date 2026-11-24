@@ -98,6 +98,10 @@ def build_session(visits, cow, capture):
     horas_thi_alto_24h y estado_numero_de_ordeno.
     """
     start = pd.Timestamp(capture["inicio"])
+    latest = last_date(visits)
+    if start.normalize() > latest:
+        raise ValueError(f"La fecha debe ser a más tardar el {latest:%d/%m/%Y}: el dataset termina el "
+                         f"{visits['inicio'].max():%d/%m/%Y} y las tasas del hato usan los 7 días anteriores.")
     past = visits[(visits["id_vaca"] == cow) & (visits["inicio"] < start)]
     milkings = past[is_milking(past)]
     if milkings.empty:
@@ -153,6 +157,28 @@ def build_session(visits, cow, capture):
 
 
 def existing_session(visits, cow, start):
-    """Historial de la vaca hasta una sesión del dataset, que queda al final."""
+    """
+    Historial de la vaca hasta un ordeño del dataset, que queda al final. Si una visita sin ordeño
+    tiene el mismo inicio, se deja fuera para que la última fila sea el ordeño.
+    """
     cow_visits = visits[visits["id_vaca"] == cow]
-    return cow_visits[cow_visits["inicio"] <= pd.Timestamp(start)].reset_index(drop=True)
+    start = pd.Timestamp(start)
+    keep = (cow_visits["inicio"] < start) | ((cow_visits["inicio"] == start) & is_milking(cow_visits))
+    return cow_visits[keep].reset_index(drop=True)
+
+
+def last_date(visits):
+    """Último día que se puede capturar: el siguiente al fin del dataset, el último con tasas del hato."""
+    return visits["inicio"].max().normalize() + pd.Timedelta(days=1)
+
+
+def notices(sessions):
+    """Avisos sobre la sesión capturada (la última fila), para leer sus probabilidades con cuidado."""
+    row, notes = sessions.iloc[-1], []
+    if len(sessions) > 1 and row["bloque_historial"] != sessions["bloque_historial"].iloc[-2]:
+        notes.append(f"Pasaron {RESTART_DAYS} días o más desde la última visita: empieza un bloque de historial "
+                     "nuevo, así que no hay ordeño previo ni secuencia para la LSTM.")
+    elif row["regreso_tras_periodo_seco"] == 1:
+        notes.append(f"Pasaron más de {LONG_INTERVAL_HOURS} h desde el último ordeño: la sesión se marca como "
+                     "regreso tras periodo seco, una situación poco común en los datos.")
+    return notes
