@@ -30,33 +30,39 @@ En cada celda de `dataset_id / versión` escribir **solo una versión**, por eje
 
 
 ## Políticas de Uso de Datos del CAETEC
-1. Los datos del CAETEC se usan únicamente para los fines autorizados del proyecto: análisis descriptivo, preparación de datos, modelado predictivo de detección de anomalías de ordeño, los entregables académicos y al socio formador.
-
-2. El equipo reconoce que no es titular de los datos. Obtenerlos no otorga derecho de publicarlos, cederlos ni reutilizarlos fuera de lo autorizado.
-
-3. Antes de cualquier uso adicional (nuevo proyecto, publicación, tesis, concurso, entrega a terceros) se debe obtener autorización por escrito del titular.
-
-4. Los datos que se compartieron del CAETEC nunca se versionan en Git ni se publican; permanecen fuera del repositorio, se mantienen de forma local.
-
-5. Se aplica mínimo privilegio: solo accede quien lo necesita para el proyecto, y solo a los datos necesarios (miembros del equipo, profesores y socio formadores).
-
-6. Si se detecta que un archivo contiene datos personales (nombres de operadores, empleados o propietarios, imágenes de personas), se avisa al responsable de datos y se anonimiza o retira antes de continuar. Si llegara a tratarse información de personas, se aplican los principios de la ley federal de protección de datos personales en posesión de particulares.
-
-7. Los datos se tratan como información confidencial del CAETEC; no se divulgan datos, ubicaciones, claves del establo ni parámetros operativos que permitan identificar la unidad de producción sin autorización.
-
-8. Todo uso, copia y modificación de los datos debe quedar trazable (quién, cuándo, con qué versión, con qué código y para qué) en el archivo logs.csv.
-
-    - Modificación de original,
-    - Copia,
-    - Integración,
-    - Eliminación,
-    - Restauración,
-    - Exportación o acceso
-    - Corrección de registro.
-
-9. Los modelos y resultados son apoyo a la decisión: 
-no sustituyen el diagnóstico veterinario ni las obligaciones de reportar enfermedades a la autoridad.
-
-10. Se trabaja con los datos directos pero a la hora de publicar descubrimientos y resultados, no se menciona la fuente de los datos ni se comparten los mismos.
-
-11. Ante alguna filtración de información, se para el análisis, se detecta que ocasionó la fuga para corregir, se elimina el dato publicado y se avisa al socio sobre la situación. 
+1. Obtener y acceder a los datos
+    - Los datos se descargan del Drive proporcionado por los profesores.
+    - Crea las carpetas Data/vacas/ y Data/concentrado en la raíz del repositorio.
+    - Mueve a la carpeta de Data/vacas/ los archivos Producciones de leche por sesion XXXX.xlsx de TEC-UAQ-UNAM y los archivos .csv de DATOS vacas en establo marzo_junio_2025 cuyo nombre sea un número, los demás puedes ignorarlos.
+    - Mueve a la carpeta de Data/concentrado los archivos Concentrado consumido XXXX.xlsx de TEC-UAQ-UNAM
+    - Los datos se usan solo para: análisis descriptivo, preparación de datos, modelado de detección de anomalías de ordeño y los entregables académicos y al socio.
+2. Proteger el entorno local
+    - En caso de que la carpeta de Data y el archivo .env no estén en el gitignore agregarlos.
+    - Agregar la llave de cowskey y un valor que servirá para seudonimizar las columnas con datos sensibles.
+    - Por cada uno de los scripts ejecutados, se debe agregar a la bitacora la acción que se realizó, la guía para rellenar la bitacora está en docs/guide_audit_logs.md.
+    - Ejecutar el script generate_data.py, para generar el dataset con los datos crudos.
+    - Ejecutar el script anonymize_data.py, para aplicar un hash y seudonimizar los valores de las columnas sensibles.
+3. Construir los datos.
+    - Descargar los datos del clima ejecutando el script de descargar_clima.py
+    - Limpiar los datos ejecutando el script de clean_data.py
+    - Integrar los datos del clima al dataset ejecutando el script de integrar_clima.py
+    - Integrar los datos de las variables construidas al dataset ejecutando el script de integrate_derivates.py
+    - Obtener los datos de concentrado ejecutando el script de generate_concentrado.py
+    - Aplicar una seudonimización a los datos de concentrado ejecutando el script de anonymize_concentrado.py
+    - Integrar los datos de concentrado al dataset ejecutando el script de integrar_concentrado.py
+4. Trabajar con los datos
+    - Antes de trabajar con el dataset se debe ejecutar los pasos anteriores para brindar seguridad a los datos.
+    - Consultar los datos originales y el mapa de equivalencias solo cuando sea necesario para verificar la información, corregir un problema, utilizar datos en un reporte o presentación.
+    - Mantener de forma local el dataset.
+    - Registrar en docs/data_audit_logs.csv los accesos para análisis, entrenamiento y evaluación, así como las copias, modificaciones y exportaciones realizadas, siguiendo el punto 5.
+5. Registrar en la bitácora
+    - Por cada uno de los scripts ejecutados que se especifican en este archivo, se debe agregar a la bitacora la acción que se realizó, la guía para llenar la bitacora está en docs/guide_audit_logs.md.
+    - Cada nueva acción sobre los datos (uso, copia, modificación, integración, eliminación) es una fila en docs/data_audit_logs.csv.
+    - La fila nueva se pone en la primera fila de datos, debajo del encabezado, así el registro queda del más reciente al más antiguo.
+    - Si hay un error en una fila, se agrega una fila de Corrección de registro que la identifique; la original no se borra.
+6. Revisar antes de subir al repositorio
+    - Antes de cada commit y push, quien subió el cambio revisa que no incluya datos crudos, anonimizados ni intermedios, el mapa de equivalencias, .env ni llaves. En figuras y reportes solo van resultados agregados y hashes.
+    - El revisor, distinto del autor, comprueba que no suban datos ni secretos y que la bitácora esté actualizada. Sin eso, no se aprueba.
+7. Publicar y entregar resultados
+    - Los entregables académicos y los del socio formador contienen resultados agregados. Cuando se entrega la muestra a los profesores, se registra una fila de Exportación o acceso.
+    - Los modelos y resultados se presentan como apoyo a la decisión: no sustituyen el diagnóstico veterinario ni las obligaciones de reportar enfermedades a la autoridad.
