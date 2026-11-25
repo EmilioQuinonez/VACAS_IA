@@ -10,7 +10,6 @@ Uso, desde la raíz del repo y después de preparar los datos y build_history_fe
 y abrir http://localhost:8000
 """
 
-import re
 import threading
 
 import numpy as np
@@ -20,9 +19,6 @@ from flask import Flask, jsonify, request
 import nueva_sesion as ns
 
 PORT = 8000
-# Permite abrir index.html desde otro lado de esta computadora (doble clic, cuyo origen es "null",
-# o Live Server) y llamar a esta API; páginas de otros sitios no pueden leerla.
-LOCAL_ORIGIN = re.compile(r"(null|https?://(localhost|127\.0\.0\.1)(:\d+)?)")
 CAPTURE_FIELDS = {"temperatura": float, "humedad": float, "horas_thi_alto_24h": float, "numero_ordeno": int}
 state = {}
 lock = threading.Lock()  # Una predicción a la vez: TensorFlow y los DataFrames se comparten
@@ -42,17 +38,6 @@ class ApiError(Exception):
 @app.errorhandler(ApiError)
 def api_error(error):
     return jsonify(detail=str(error)), error.status
-
-
-@app.after_request
-def allow_local_origins(response):
-    origin = request.headers.get("Origin")
-    if origin and LOCAL_ORIGIN.fullmatch(origin):
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        response.headers["Vary"] = "Origin"
-    return response
 
 
 def load():

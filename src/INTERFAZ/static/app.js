@@ -4,11 +4,8 @@ const pct = (v) => (100 * v).toFixed(1) + " %";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const fmtDate = (s) => { const [d, t] = s.split(" "); const [y, m, dd] = d.split("-"); return `${dd}/${m}/${y} ${t.slice(0, 5)}`; };
 
-// Si la página no la sirve app.py (doble clic en index.html, Live Server), se usa el servidor local.
-const API = location.port === "8000" ? "" : "http://localhost:8000";
-
 async function api(path, body) {
-  const response = await fetch(API + path, body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {});
+  const response = await fetch(path, body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {});
   const data = await response.json();
   if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Error en la petición");
   return data;
