@@ -61,7 +61,10 @@ def plain(value):
 
 
 def read_capture():
-    """El JSON de /api/predecir validado: modo, vaca e inicio siempre; el clima y la máquina en una sesión nueva."""
+    """
+    El JSON de /api/predecir validado: modo, vaca e inicio siempre. En una sesión nueva agrega
+    session, la captura con los nombres de columna que espera ns.build_session.
+    """
     data = request.get_json(silent=True) or {}
     if data.get("modo") not in ("nueva", "existente") or not data.get("vaca") or not data.get("inicio"):
         raise ApiError(422, "Faltan el modo, la vaca o la fecha.")
@@ -73,9 +76,14 @@ def read_capture():
         if any(data.get(field) is None for field in ["maquina", *CAPTURE_FIELDS]):
             raise ApiError(422, "Faltan datos de la captura.")
         try:
-            data.update({field: kind(data[field]) for field, kind in CAPTURE_FIELDS.items()})
+            values = {field: kind(data[field]) for field, kind in CAPTURE_FIELDS.items()}
         except (TypeError, ValueError):
             raise ApiError(422, "La temperatura, la humedad, las horas y el número de ordeño deben ser números.")
+        data["session"] = {
+            "inicio": data["inicio"], "maquina": data["maquina"], "t_sesion": values["temperatura"],
+            "thi_sesion": ns.thi(values["temperatura"], values["humedad"]),
+            "horas_thi_alto_24h": values["horas_thi_alto_24h"], "estado_numero_de_ordeno": values["numero_ordeno"],
+        }
     return data
 
 
@@ -92,8 +100,7 @@ def info():
         "vacas": [{"id": cow, "ultimo": plain(start)} for cow, start in last.items()],
         "maquinas": ns.machines(state["visits"]),
         "eventos": [{"id": event, "nombre": modelos.EVENT_NAMES[event]} for event in modelos.EVENTS],
-        "modelos": [{"nombre": m.name, "desempeno": {e: {k: plain(v) for k, v in p.items()} for e, p in m.performance.items()}}
-                    for m in state["models"]],
+        "modelos": [{"nombre": m.name, "desempeno": m.performance} for m in state["models"]],
         "linea_base": modelos.baseline(),
         "fecha_maxima": f"{ns.last_date(state['visits']):%Y-%m-%d}",
     }
@@ -127,12 +134,7 @@ def predict():
     with lock:
         if capture["modo"] == "nueva":
             try:
-                sessions = ns.build_session(visits, capture["vaca"], {
-                    "inicio": start, "maquina": capture["maquina"], "t_sesion": capture["temperatura"],
-                    "thi_sesion": ns.thi(capture["temperatura"], capture["humedad"]),
-                    "horas_thi_alto_24h": capture["horas_thi_alto_24h"],
-                    "estado_numero_de_ordeno": capture["numero_ordeno"],
-                })
+                sessions = ns.build_session(visits, capture["vaca"], capture["session"])
             except ValueError as error:
                 raise ApiError(422, str(error))
             notes = ns.notices(sessions)
@@ -151,8 +153,7 @@ def predict():
     columns = list(dict.fromkeys(modelos.xgb_dataset.FEATURES + modelos.lstm_dataset.CONTEXT_FEATURES))
     return {
         "vaca": capture["vaca"], "inicio": plain(row["inicio"]), "real": actual, "avisos": notes,
-        "resultados": {name: {event: {**r, "factores": [{k: plain(v) for k, v in f.items()} for f in r["factores"]]}
-                              for event, r in res.items()} for name, res in results.items()},
+        "resultados": results,
         "variables": {column: plain(row.get(column)) for column in columns},
     }
 

@@ -24,7 +24,6 @@ def load_module(name, path):
 
 
 derivates = load_module("integrate_derivates", ROOT / "src" / "DP" / "integrate_derivates.py")
-climate = load_module("integrar_clima", ROOT / "src" / "DP" / "integrar_clima.py")
 # La versión del XGBoost también agrega las banderas de MDI del ordeño previo.
 history = load_module("xgb_build_history_features", ROOT / "src" / "MODELING" / "XGBoost" / "build_history_features.py")
 
@@ -149,8 +148,7 @@ def build_session(visits, cow, capture):
     herd = pd.concat([visits[visits["inicio"] < start.normalize()], sessions.loc[[new]]], ignore_index=True)
     herd_rates = pd.DataFrame(index=herd.index)
     history.add_herd_rates(herd, is_milking(herd), herd_rates)
-    for column in herd_rates:
-        computed.loc[new, column] = herd_rates[column].iloc[-1]
+    computed.loc[new, herd_rates.columns] = herd_rates.iloc[-1]
     sessions.loc[new, history.NEW_COLUMNS] = computed.loc[new, history.NEW_COLUMNS]
 
     return sessions
