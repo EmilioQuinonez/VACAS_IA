@@ -39,7 +39,7 @@ En cada celda de `dataset_id / versión` escribir **solo una versión**, por eje
 2. Proteger el entorno local
     - En caso de que la carpeta de Data y el archivo .env no estén en el gitignore agregarlos.
     - Agregar la llave de cowskey y un valor que servirá para seudonimizar las columnas con datos sensibles.
-    - Por cada uno de los scripts ejecutados, se debe agregar a la bitacora la acción que se realizó, la guía para rellenar la bitacora está en docs/guide_audit:_logs.py.
+    - Por cada uno de los scripts ejecutados, se debe agregar a la bitacora la acción que se realizó, la guía para rellenar la bitacora está en docs/guide_audit_logs.md.
     - Ejecutar el script generate_data.py, para generar el dataset con los datos crudos.
     - Ejecutar el script anonymize_data.py, para aplicar un hash y seudonimizar los valores de las columnas sensibles.
 3. Construir los datos.
@@ -56,7 +56,7 @@ En cada celda de `dataset_id / versión` escribir **solo una versión**, por eje
     - Mantener de forma local el dataset.
     - Registrar en docs/data_audit_logs.csv los accesos para análisis, entrenamiento y evaluación, así como las copias, modificaciones y exportaciones realizadas, siguiendo el punto 5.
 5. Registrar en la bitácora
-    - Por cada uno de los scripts ejecutados que se especifican en este archivo, se debe agregar a la bitacora la acción que se realizó, la guía para llenar la bitacora está en docs/guide_audit:_logs.py.
+    - Por cada uno de los scripts ejecutados que se especifican en este archivo, se debe agregar a la bitacora la acción que se realizó, la guía para llenar la bitacora está en docs/guide_audit_logs.md.
     - Cada nueva acción sobre los datos (uso, copia, modificación, integración, eliminación) es una fila en docs/data_audit_logs.csv.
     - La fila nueva se pone en la primera fila de datos, debajo del encabezado, así el registro queda del más reciente al más antiguo.
     - Si hay un error en una fila, se agrega una fila de Corrección de registro que la identifique; la original no se borra.
