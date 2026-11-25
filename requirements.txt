@@ -11,5 +11,4 @@ openpyxl
 scikit-learn
 xgboost
 tensorflow
-fastapi
-uvicorn
+flask

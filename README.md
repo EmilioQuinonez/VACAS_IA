@@ -412,7 +412,7 @@ La estructura del repositorio es:
   - **[`EVALUATION/`](src/EVALUATION/)** — Scripts de la fase *Evaluation*.
     - [`lineas_base.py`](src/EVALUATION/lineas_base.py) — Mide en test tres líneas base sin modelo (alertar siempre, persistencia y tasa de la vaca en 30 días) con el mismo corte 70/15/15 de los modelos, y las guarda en [`metrics/lineas_base.json`](src/EVALUATION/metrics/lineas_base.json).
   - **[`INTERFAZ/`](src/INTERFAZ/)** — Interfaz web para probar los modelos.
-    - [`app.py`](src/INTERFAZ/app.py) — Servidor FastAPI: sirve la página y la API de predicción.
+    - [`app.py`](src/INTERFAZ/app.py) — Servidor Flask: sirve la página y la API de predicción.
     - [`nueva_sesion.py`](src/INTERFAZ/nueva_sesion.py) — Arma las variables de una sesión capturada con el historial de la vaca.
     - [`modelos.py`](src/INTERFAZ/modelos.py) — Carga los tres modelos y da la probabilidad y los 3 factores de cada evento.
     - [`static/`](src/INTERFAZ/static/) — La página (`index.html`), sus estilos (`styles.css`) y su código (`app.js`).
