@@ -415,7 +415,7 @@ La estructura del repositorio es:
     - [`app.py`](src/INTERFAZ/app.py) — Servidor Flask: sirve la página y la API de predicción.
     - [`nueva_sesion.py`](src/INTERFAZ/nueva_sesion.py) — Arma las variables de una sesión capturada con el historial de la vaca.
     - [`modelos.py`](src/INTERFAZ/modelos.py) — Carga los tres modelos y da la probabilidad y los 3 factores de cada evento.
-    - [`static/`](src/INTERFAZ/static/) — La página (`index.html`), sus estilos (`styles.css`) y su código (`app.js`).
+    - [`static/`](src/INTERFAZ/static/) — La página (`index.html`), sus estilos (`styles.css`) y su código (`script.js`).
   - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
     - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
     - [`dataset_vacas_muestra.csv`](src/RETO_DATOS/dataset_vacas_muestra.csv) — Muestra generada por el script anterior.

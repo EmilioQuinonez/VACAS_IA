@@ -1,6 +1,6 @@
 """
 Servidor Flask de la interfaz para probar los modelos: sirve la página de static/ (index.html,
-styles.css y app.js) y una API JSON.
+styles.css y script.js) y una API JSON.
 Con el dataset integrado ya cargado, se elige una vaca y se captura una sesión nueva (o se elige
 una del dataset), y los tres modelos dan la probabilidad de cada evento y las 3 variables que
 más aumentan el riesgo.
