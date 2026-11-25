@@ -265,6 +265,8 @@ En Mac, XGBoost necesita OpenMP: si falla al cargar `libxgboost.dylib`, instala 
 - Cada modelo da la probabilidad calibrada de los 4 eventos, si pasa el umbral de alerta elegido en val y las 3 variables que más aumentan el riesgo, como en las alertas de test de cada modelo (Integrated Gradients en la LSTM, coeficiente por diferencia con la referencia en la regresión logística y SHAP en el XGBoost). Si menos de 3 variables suben el riesgo, se muestran menos. Son asociaciones, no causas.
 - La pestaña **Desempeño de los modelos** muestra F1, recall, precisión y Brier de cada modelo en test, y la línea base de persistencia de `src/EVALUATION/metrics/lineas_base.json`.
 
+El [manual de uso de la interfaz](docs/DEPLOYMENT/Manual_interfaz.md) explica cada campo, cómo leer los resultados, los avisos y errores, y los problemas comunes.
+
 ## Preparación para reto de datos.
 
 Para generar la muestra a partir de un dataset integrado existente, sigue los pasos 1 y 2. Primero debes completar la sección **¿Cómo obtener y preparar los datos?** y contar con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas.
@@ -371,6 +373,8 @@ La estructura del repositorio es:
     - [Anexo III: LSTM](docs/MODELING/Anexo%20III%20-%20LSTM.pdf).
   - **[`EVALUATION/`](docs/EVALUATION/)** — Fase de *Evaluación*.
     - [Reporte Evaluation](docs/EVALUATION/Evaluation.pdf): evaluación de resultados frente a los criterios de éxito de negocio, revisión del proceso y decisión.
+  - **[`DEPLOYMENT/`](docs/DEPLOYMENT/)** — Fase de *Despliegue*.
+    - [Manual de uso de la interfaz](docs/DEPLOYMENT/Manual_interfaz.md).
   - **[`RETO_DATOS/`](docs/RETO_DATOS/)** — Preparación para el reto de datos.
     - [Reporte del reto de datos](docs/RETO_DATOS/Reporte-RetoDatos.pdf).
   - [`guide_audit_logs.md`](docs/guide_audit_logs.md) y [`data_audit_logs.csv`](docs/data_audit_logs.csv) — Guía y bitácora de auditoría de registros.
