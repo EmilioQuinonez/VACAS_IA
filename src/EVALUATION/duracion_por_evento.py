@@ -30,7 +30,7 @@ INPUT_PATH = ROOT / "Data" / "dataset_vacas_integrado.csv"
 OUTPUT_DIR = Path(__file__).resolve().parent / "metrics"
 
 sys.path.insert(0, str(ROOT / "src" / "MODELING" / "XGBoost"))
-from dataset import split_by_time  # noqa: E402  Mismo corte que los modelos
+from dataset import split_by_time
 
 TRAIN_FRACTION, VAL_FRACTION = 0.70, 0.15
 EVENTS = {
@@ -107,7 +107,7 @@ def add_extra_minutes(test):
 
 
 def waiting_minutes(minutes, days):
-    """Espera estimada de una máquina con Pollaczek-Khinchine: rho·E[S]·(1 + CV²) / (2·(1 − rho))."""
+    """Espera estimada de una máquina con Pollaczek-Khinchine"""
     rho = minutes.sum() / (days * 24 * 60)
     mean = minutes.mean()
     cv = minutes.std() / mean
