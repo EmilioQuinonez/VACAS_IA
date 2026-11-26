@@ -240,6 +240,33 @@ python3 src/EVALUATION/lineas_base.py
 
 Usa los mismos ordeños, etiquetas y corte cronológico 70/15/15 que los modelos (reutiliza `split_by_time` de XGBoost), así que sus resultados se comparan directo con los de test de cada modelo.
 
+## Interfaz de predicción
+
+Se asume que se realizaron los pasos de la sección **¿Cómo obtener y preparar los datos?** y `build_history_features.py` de la LSTM (o del XGBoost), y que están los modelos versionados en `src/MODELING/`. La interfaz no reentrena: carga la LSTM v5, la regresión logística v4 y el XGBoost de `versions.py`.
+
+**Windows**
+
+```powershell
+py src/INTERFAZ/app.py
+```
+
+**macOS y Linux**
+
+```bash
+python3 src/INTERFAZ/app.py
+```
+
+En Mac, XGBoost necesita OpenMP: si falla al cargar `libxgboost.dylib`, instala `brew install libomp`.
+
+**Resultado esperado:** la terminal muestra `[app] Lista en http://localhost:8000` (tarda unos segundos en cargar el dataset y los modelos). Al abrir esa dirección en el navegador:
+
+- **Nueva sesión:** eliges una vaca y capturas lo que se sabe al entrar al robot (fecha y hora, máquina, número de ordeño, temperatura, humedad y horas con THI alto). El resto de las variables (FME, sangre, ordeño previo, tasas de la vaca y del hato, calendario y la secuencia de la LSTM) se calcula con el historial de la vaca, con las mismas funciones de `integrate_derivates.py` y `build_history_features.py`. La fecha puede ser a lo más el día siguiente al fin del dataset, porque las tasas del hato usan los 7 días anteriores; si pasaron más de 48 h desde el último ordeño o 45 días desde la última visita, la página lo avisa.
+- **Del dataset:** eliges un ordeño que ya está en los datos y además ves si cada evento ocurrió.
+- Cada modelo da la probabilidad calibrada de los 4 eventos, si pasa el umbral de alerta elegido en val y las 3 variables que más aumentan el riesgo, como en las alertas de test de cada modelo (Integrated Gradients en la LSTM, coeficiente por diferencia con la referencia en la regresión logística y SHAP en el XGBoost). Si menos de 3 variables suben el riesgo, se muestran menos. Son asociaciones, no causas.
+- La pestaña **Desempeño de los modelos** muestra F1, recall, precisión y Brier de cada modelo en test, y la línea base de persistencia de `src/EVALUATION/metrics/lineas_base.json`.
+
+El [manual de uso de la interfaz](docs/DEPLOYMENT/Manual_interfaz.md) explica cada campo, cómo leer los resultados, los avisos y errores, y los problemas comunes.
+
 ## Preparación para reto de datos.
 
 Para generar la muestra a partir de un dataset integrado existente, sigue los pasos 1 y 2. Primero debes completar la sección **¿Cómo obtener y preparar los datos?** y contar con `Data/dataset_vacas_integrado.csv`, incluidas las variables de clima y las variables derivadas.
@@ -346,6 +373,8 @@ La estructura del repositorio es:
     - [Anexo III: LSTM](docs/MODELING/Anexo%20III%20-%20LSTM.pdf).
   - **[`EVALUATION/`](docs/EVALUATION/)** — Fase de *Evaluación*.
     - [Reporte Evaluation](docs/EVALUATION/Evaluation.pdf): evaluación de resultados frente a los criterios de éxito de negocio, revisión del proceso y decisión.
+  - **[`DEPLOYMENT/`](docs/DEPLOYMENT/)** — Fase de *Despliegue*.
+    - [Manual de uso de la interfaz](docs/DEPLOYMENT/Manual_interfaz.md).
   - **[`RETO_DATOS/`](docs/RETO_DATOS/)** — Preparación para el reto de datos.
     - [Reporte del reto de datos](docs/RETO_DATOS/Reporte-RetoDatos.pdf).
   - [`guide_audit_logs.md`](docs/guide_audit_logs.md) y [`data_audit_logs.csv`](docs/data_audit_logs.csv) — Guía y bitácora de auditoría de registros.
@@ -386,6 +415,11 @@ La estructura del repositorio es:
       - [`plot_results.py`](src/MODELING/LSTM/plot_results.py) — Genera las gráficas de evaluación de la LSTM en [`img/<versión>/`](src/MODELING/LSTM/img/).
   - **[`EVALUATION/`](src/EVALUATION/)** — Scripts de la fase *Evaluation*.
     - [`lineas_base.py`](src/EVALUATION/lineas_base.py) — Mide en test tres líneas base sin modelo (alertar siempre, persistencia y tasa de la vaca en 30 días) con el mismo corte 70/15/15 de los modelos, y las guarda en [`metrics/lineas_base.json`](src/EVALUATION/metrics/lineas_base.json).
+  - **[`INTERFAZ/`](src/INTERFAZ/)** — Interfaz web para probar los modelos.
+    - [`app.py`](src/INTERFAZ/app.py) — Servidor Flask: sirve la página y la API de predicción.
+    - [`nueva_sesion.py`](src/INTERFAZ/nueva_sesion.py) — Arma las variables de una sesión capturada con el historial de la vaca.
+    - [`modelos.py`](src/INTERFAZ/modelos.py) — Carga los tres modelos y da la probabilidad y los 3 factores de cada evento.
+    - [`static/`](src/INTERFAZ/static/) — La página (`index.html`), sus estilos (`styles.css`) y su código (`script.js`).
   - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
     - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
     - [`dataset_vacas_muestra.csv`](src/RETO_DATOS/dataset_vacas_muestra.csv) — Muestra generada por el script anterior.

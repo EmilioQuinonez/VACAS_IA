@@ -1,0 +1,164 @@
+"""
+Servidor Flask de la interfaz para probar los modelos: sirve la página de static/ (index.html,
+styles.css y script.js) y una API JSON.
+Con el dataset integrado ya cargado, se elige una vaca y se captura una sesión nueva (o se elige
+una del dataset), y los tres modelos dan la probabilidad de cada evento y las 3 variables que
+más aumentan el riesgo.
+
+Uso, desde la raíz del repo y después de preparar los datos y build_history_features.py:
+    python src/INTERFAZ/app.py
+y abrir http://localhost:8000
+"""
+
+import threading
+
+import numpy as np
+import pandas as pd
+from flask import Flask, jsonify, request
+
+import nueva_sesion as ns
+
+PORT = 8000
+CAPTURE_FIELDS = {"temperatura": float, "humedad": float, "horas_thi_alto_24h": float, "numero_ordeno": int}
+state = {}
+lock = threading.Lock()  # Una predicción a la vez: TensorFlow y los DataFrames se comparten
+
+app = Flask(__name__, static_folder="static", static_url_path="")
+app.json.sort_keys = False  # La página usa el orden de modelos, eventos, métricas y variables
+
+
+class ApiError(Exception):
+    """Error que la página muestra tal cual: se responde como {"detail": mensaje}."""
+
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
+
+
+@app.errorhandler(ApiError)
+def api_error(error):
+    return jsonify(detail=str(error)), error.status
+
+
+def load():
+    print("[app] Cargando el dataset integrado...", flush=True)
+    visits = ns.load_visits()
+    import modelos  # TensorFlow tarda en importar
+
+    print("[app] Cargando los modelos...", flush=True)
+    state.update(visits=visits, herd=visits[ns.is_milking(visits)], modelos=modelos, models=modelos.load_models())
+
+
+def plain(value):
+    """Valor que se puede mandar en JSON (sin tipos de numpy ni NaN)."""
+    if isinstance(value, (np.integer, np.floating)):
+        value = value.item()
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    if isinstance(value, pd.Timestamp):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    return value
+
+
+def read_capture():
+    """
+    El JSON de /api/predecir validado: modo, vaca e inicio siempre. En una sesión nueva agrega
+    session, la captura con los nombres de columna que espera ns.build_session.
+    """
+    data = request.get_json(silent=True) or {}
+    if data.get("modo") not in ("nueva", "existente") or not data.get("vaca") or not data.get("inicio"):
+        raise ApiError(422, "Faltan el modo, la vaca o la fecha.")
+    try:
+        data["inicio"] = pd.Timestamp(data["inicio"])
+    except ValueError:
+        raise ApiError(422, "La fecha no es válida.")
+    if data["modo"] == "nueva":
+        if any(data.get(field) is None for field in ["maquina", *CAPTURE_FIELDS]):
+            raise ApiError(422, "Faltan datos de la captura.")
+        try:
+            values = {field: kind(data[field]) for field, kind in CAPTURE_FIELDS.items()}
+        except (TypeError, ValueError):
+            raise ApiError(422, "La temperatura, la humedad, las horas y el número de ordeño deben ser números.")
+        data["session"] = {
+            "inicio": data["inicio"], "maquina": data["maquina"], "t_sesion": values["temperatura"],
+            "thi_sesion": ns.thi(values["temperatura"], values["humedad"]),
+            "horas_thi_alto_24h": values["horas_thi_alto_24h"], "estado_numero_de_ordeno": values["numero_ordeno"],
+        }
+    return data
+
+
+@app.get("/")
+def index():
+    return app.send_static_file("index.html")
+
+
+@app.get("/api/info")
+def info():
+    herd, modelos = state["herd"], state["modelos"]
+    last = herd.groupby("id_vaca")["inicio"].max().sort_values(ascending=False)
+    return {
+        "vacas": [{"id": cow, "ultimo": plain(start)} for cow, start in last.items()],
+        "maquinas": ns.machines(state["visits"]),
+        "eventos": [{"id": event, "nombre": modelos.EVENT_NAMES[event]} for event in modelos.EVENTS],
+        "modelos": [{"nombre": m.name, "desempeno": m.performance} for m in state["models"]],
+        "linea_base": modelos.baseline(),
+        "fecha_maxima": f"{ns.last_date(state['visits']):%Y-%m-%d}",
+    }
+
+
+@app.get("/api/vacas/<cow>")
+def cow_defaults(cow):
+    milkings = state["herd"][state["herd"]["id_vaca"] == cow]
+    if milkings.empty:
+        raise ApiError(404, "Vaca no encontrada")
+    last = milkings.iloc[-1]
+    interval = last["intervalo_horas"] if pd.notna(last["intervalo_horas"]) and last["intervalo_horas"] > 0 else 10
+    return {
+        "ultimo": plain(last["inicio"]),
+        "sugerido": plain((last["inicio"] + pd.Timedelta(hours=float(interval))).floor("min")),
+        "maquina": ns.machine_of(last),
+        "temperatura": round(float(last["t_sesion"]), 1),
+        "humedad": round(ns.humidity_from_thi(float(last["t_sesion"]), float(last["thi_sesion"]))),
+        "horas_thi_alto_24h": plain(last["horas_thi_alto_24h"]) or 0,
+        "numero_ordeno": int(last["estado_numero_de_ordeno"]) or 1,
+        "ordenos": [plain(start) for start in milkings["inicio"].iloc[::-1]],
+    }
+
+
+@app.post("/api/predecir")
+def predict():
+    capture = read_capture()
+    visits, herd, modelos = state["visits"], state["herd"], state["modelos"]
+    start = capture["inicio"]
+    actual, notes = None, []
+    with lock:
+        if capture["modo"] == "nueva":
+            try:
+                sessions = ns.build_session(visits, capture["vaca"], capture["session"])
+            except ValueError as error:
+                raise ApiError(422, str(error))
+            notes = ns.notices(sessions)
+        else:
+            sessions = ns.existing_session(visits, capture["vaca"], start)
+            if sessions.empty or sessions["inicio"].iloc[-1] != start:
+                raise ApiError(404, "No existe ese ordeño de la vaca.")
+            row = sessions.iloc[-1]
+            actual = {event: bool(row[event]) for event in modelos.EVENTS[:3]}
+            actual["alguna_anomalia"] = not bool(row["successful_milking_event"])
+
+        chosen = capture.get("modelos") or [m.name for m in state["models"]]
+        results = {m.name: m.predict(sessions, herd) for m in state["models"] if m.name in chosen}
+
+    row = sessions.iloc[-1]
+    columns = list(dict.fromkeys(modelos.xgb_dataset.FEATURES + modelos.lstm_dataset.CONTEXT_FEATURES))
+    return {
+        "vaca": capture["vaca"], "inicio": plain(row["inicio"]), "real": actual, "avisos": notes,
+        "resultados": results,
+        "variables": {column: plain(row.get(column)) for column in columns},
+    }
+
+
+if __name__ == "__main__":
+    load()
+    print(f"[app] Lista en http://localhost:{PORT}", flush=True)
+    app.run(host="127.0.0.1", port=PORT, threaded=True)
