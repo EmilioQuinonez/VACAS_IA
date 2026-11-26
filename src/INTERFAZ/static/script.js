@@ -43,21 +43,19 @@ async function loadCow() {
   updateThi();
 }
 
-// Los factores son las variables que más aumentan el riesgo (aporte positivo), hasta 3, con su
-// explicación sin tecnicismos y qué revisar.
+// La variable que más aumenta el riesgo (mayor aporte positivo), con su explicación sin
+// tecnicismos y qué revisar.
 function factorList(factors) {
   if (!factors.length) return `<p class="hint factors-note">Ninguna variable aumenta el riesgo frente a una vaca promedio.</p>`;
-  const note = factors.length < 3
-    ? `<p class="hint factors-note">Solo ${factors.length === 1 ? "1 variable aumenta" : `${factors.length} variables aumentan`} el riesgo.</p>` : "";
-  return `<ol class="factors">${factors.map((f, i) => `
-    <li><span class="name">${i + 1}. ${esc(f.nombre)}</span>${f.cuando ? ` <span class="value">(${esc(f.cuando)})</span>` : ""}
+  return `<ol class="factors"><li class="factors-title">Variable más importante</li>${factors.map((f) => `
+    <li><span class="name">${esc(f.nombre)}</span>${f.cuando ? ` <span class="value">(${esc(f.cuando)})</span>` : ""}
       <div class="value">${esc(f.valor_legible)}</div>
       <div class="up">▲ aumenta el riesgo</div>
       <details><summary>¿Qué significa y qué hacer?</summary>
         ${f.significado ? `<p>${esc(f.significado)}</p><p class="action"><b>Qué revisar:</b> ${esc(f.accion)}</p>` : ""}
         <p class="tech">Variable ${esc(f.variable)} · valor ${esc(f.valor)} · aporte +${f.aporte.toFixed(3)} log-odds</p>
       </details>
-    </li>`).join("")}</ol>${note}`;
+    </li>`).join("")}</ol>`;
 }
 
 function renderResults(data) {

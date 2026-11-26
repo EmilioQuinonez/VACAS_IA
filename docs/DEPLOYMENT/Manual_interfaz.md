@@ -4,7 +4,7 @@ La interfaz permite probar los tres modelos del proyecto (LSTM v5, regresión lo
 
 - la **probabilidad** de cada uno de los 4 eventos: falla mecánica, salud, conducta y alguna anomalía;
 - si esa probabilidad genera una **alerta**;
-- las **3 variables que más aumentan el riesgo** en ese ordeño, explicadas sin tecnicismos y con qué revisar.
+- la **variable que más aumenta el riesgo** en ese ordeño, explicada sin tecnicismos y con qué revisar.
 
 La interfaz no entrena ni modifica los modelos ni los datos: usa los modelos guardados en el repositorio y el dataset integrado que ya está en la computadora.
 
@@ -63,10 +63,10 @@ La pantalla tiene dos partes:
 
 - **Panel izquierdo, "Sesión":** aquí eliges el modo, la vaca, los datos del ordeño y los modelos que quieres correr.
 - **Panel derecho:** tiene cuatro pestañas.
-  - **Resultados:** las probabilidades, las alertas y los factores de cada modelo.
+  - **Resultados:** las probabilidades, las alertas y la variable más importante de cada modelo.
   - **Variables de la sesión:** todos los valores con los que se hizo la predicción.
   - **Desempeño de los modelos:** qué tan bien funciona cada modelo en los datos de prueba.
-  - **Glosario:** qué significa cada variable que puede aparecer como factor y qué revisar cuando aparece.
+  - **Glosario:** qué significa cada variable que puede aparecer como la más importante y qué revisar cuando aparece.
 
 ### Nombres de vacas y robots
 
@@ -142,11 +142,11 @@ Debajo, cada modelo tiene una tarjeta por evento con:
 | **Barra** | La parte de color es la probabilidad; la línea vertical marca el **umbral de alerta**. |
 | **Alerta / Sin alerta** | Hay alerta cuando la probabilidad llega al umbral. Cada modelo y evento tiene su propio umbral, elegido para detectar al menos el 80 % de los eventos en validación. Por eso un 15 % puede ser alerta en falla mecánica y un 30 % no serlo en alguna anomalía. |
 | **Real** | Solo en el modo **Del dataset**: si el evento ocurrió. |
-| **Factores** | Las variables que más aumentaron el riesgo en este ordeño (ver abajo). |
+| **Variable más importante** | La variable que más aumentó el riesgo en este ordeño (ver abajo). |
 
-### Los 3 factores
+### La variable más importante
 
-Cada factor muestra:
+Cada tarjeta muestra solo la variable que más aumentó el riesgo, que es la que mejor explica la predicción del modelo. Muestra:
 
 - **El nombre de la variable en palabras.** Por ejemplo "MDI del ordeño anterior" o "Patada en el ordeño anterior".
 - **Para la LSTM, de qué ordeño viene:** "ordeño anterior", "hace 3 ordeños", etc. Si no dice nada, la variable es del ordeño actual.
@@ -156,9 +156,9 @@ Cada factor muestra:
 
 Las acciones son sugerencias de qué revisar, no un diagnóstico: confirma con el veterinario o el técnico. Las variables del hato, del calendario o del robot (por ejemplo "Vacas ordeñadas en la semana" o "Hora del ordeño") no dicen nada de la vaca en sí; su acción lo indica.
 
-Cada factor se compara contra una "vaca promedio" del entrenamiento. Si menos de 3 variables suben el riesgo, se muestran solo las que lo suben, y la tarjeta lo indica ("Solo 1 variable aumenta el riesgo" o "Ninguna variable aumenta el riesgo frente a una vaca promedio").
+La variable se compara contra una "vaca promedio" del entrenamiento. Si ninguna variable sube el riesgo, la tarjeta dice "Ninguna variable aumenta el riesgo frente a una vaca promedio".
 
-> **Los factores son asociaciones, no causas.** Indican qué variables pesaron más en la predicción del modelo, no qué provocó el evento.
+> **La variable más importante es una asociación, no una causa.** Indica qué pesó más en la predicción del modelo, no qué provocó el evento.
 
 ## 7. Variables de la sesión y desempeño de los modelos
 
@@ -168,7 +168,7 @@ Esta pestaña muestra los valores con los que se predijo el último ordeño, con
 
 ### Glosario
 
-Una tarjeta por variable con qué significa y qué revisar. Es la misma explicación que aparece en "¿Qué significa y qué hacer?" de cada factor.
+Una tarjeta por variable con qué significa y qué revisar. Es la misma explicación que aparece en "¿Qué significa y qué hacer?" en cada tarjeta.
 
 ### Desempeño de los modelos
 

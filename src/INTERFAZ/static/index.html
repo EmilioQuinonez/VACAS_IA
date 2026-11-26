@@ -9,7 +9,7 @@
 <body>
 <header>
   <h1>Predicción de eventos de ordeño</h1>
-  <p>Probabilidad de cada evento y las 3 variables que más aumentan el riesgo en cada modelo, con qué revisar.</p>
+  <p>Probabilidad de cada evento y la variable que más aumenta el riesgo en cada modelo, con qué revisar.</p>
 </header>
 <main>
   <aside class="panel">
@@ -66,9 +66,9 @@
     <div id="tab-variables" hidden><p class="empty">Aquí aparecen las variables calculadas para la sesión.</p></div>
     <div id="tab-desempeno" hidden></div>
     <div id="tab-glosario" hidden></div>
-    <p class="note">Los factores son las variables que más subieron la probabilidad del evento frente a una vaca promedio;
-      son asociaciones que encontró cada modelo, no causas. En cada factor, «¿Qué significa y qué hacer?» lo explica sin
-      tecnicismos y da su aporte en log-odds. Si menos de 3 variables suben el riesgo, se muestran menos. La línea en cada barra marca el umbral de alerta (elegido en validación para detectar al
+    <p class="note">La variable más importante es la que más subió la probabilidad del evento frente a una vaca promedio;
+      es una asociación que encontró cada modelo, no una causa. «¿Qué significa y qué hacer?» la explica sin tecnicismos y
+      da su aporte en log-odds. Si ninguna variable sube el riesgo, no se muestra ninguna. La línea en cada barra marca el umbral de alerta (elegido en validación para detectar al
       menos 80 % de los eventos).</p>
   </section>
 </main>

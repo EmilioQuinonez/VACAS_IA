@@ -1,9 +1,9 @@
 """
 Carga los modelos finales (LSTM v5, regresión logística v4 y la versión del XGBoost de
 versions.py) y, para la última sesión de un historial, da la probabilidad calibrada de cada
-evento, si pasa el umbral elegido en val y sus 3 factores: las variables que más aumentan el
-riesgo, con la misma función que usa cada modelo para sus alertas de test (si menos de 3
-variables suben el riesgo, se dan menos). Los factores son asociaciones, no causas.
+evento, si pasa el umbral elegido en val y la variable que más aumenta el riesgo, con la misma
+función que usa cada modelo para sus alertas de test (si ninguna variable sube el riesgo, no se da
+ninguna). Es una asociación, no una causa.
 """
 
 import json
@@ -40,7 +40,7 @@ xgb_versions = load_module("xgb_versions", XGB_DIR / "versions.py")
 EVENTS = lstm_dataset.EVENTS
 EVENT_NAMES = dict(zip(EVENTS, ("Falla mecánica", "Salud", "Conducta", "Alguna anomalía")))
 LSTM_VERSION, LOGISTIC_VERSION = "v5", "v4"
-TOP_N = 3
+TOP_N = 1  # Solo la variable más relevante (objetivo 2 de minería de datos)
 HERD_DAYS = 10  # Las tasas del hato de la logística usan los 7 días anteriores; se pasa un margen
 
 

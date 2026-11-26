@@ -2,8 +2,8 @@
 Servidor Flask de la interfaz para probar los modelos: sirve la página de static/ (index.html,
 styles.css y script.js) y una API JSON.
 Con el dataset integrado ya cargado, se elige una vaca y se captura una sesión nueva (o se elige
-una del dataset), y los tres modelos dan la probabilidad de cada evento y las 3 variables que
-más aumentan el riesgo, traducidas a lenguaje no técnico con qué revisar (traduccion.py). Si existe
+una del dataset), y los tres modelos dan la probabilidad de cada evento y la variable que
+más aumenta el riesgo, traducida a lenguaje no técnico con qué revisar (traduccion.py). Si existe
 Data/mapa_id_vacas.csv, las vacas y las máquinas se muestran con su nombre real (VMS 1, VMS 2, VMS 3).
 
 Uso, desde la raíz del repo y después de preparar los datos y build_history_features.py:
