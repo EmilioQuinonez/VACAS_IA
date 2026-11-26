@@ -4,7 +4,7 @@ La interfaz permite probar los tres modelos del proyecto (LSTM v5, regresión lo
 
 - la **probabilidad** de cada uno de los 4 eventos: falla mecánica, salud, conducta y alguna anomalía;
 - si esa probabilidad genera una **alerta**;
-- las **3 variables que más aumentan el riesgo** en ese ordeño.
+- las **3 variables que más aumentan el riesgo** en ese ordeño, explicadas sin tecnicismos y con qué revisar.
 
 La interfaz no entrena ni modifica los modelos ni los datos: usa los modelos guardados en el repositorio y el dataset integrado que ya está en la computadora.
 
@@ -62,10 +62,17 @@ Deja la terminal abierta mientras usas la interfaz. Para cerrarla, regresa a la 
 La pantalla tiene dos partes:
 
 - **Panel izquierdo, "Sesión":** aquí eliges el modo, la vaca, los datos del ordeño y los modelos que quieres correr.
-- **Panel derecho:** tiene tres pestañas.
+- **Panel derecho:** tiene cuatro pestañas.
   - **Resultados:** las probabilidades, las alertas y los factores de cada modelo.
   - **Variables de la sesión:** todos los valores con los que se hizo la predicción.
   - **Desempeño de los modelos:** qué tan bien funciona cada modelo en los datos de prueba.
+  - **Glosario:** qué significa cada variable que puede aparecer como factor y qué revisar cuando aparece.
+
+### Nombres de vacas y robots
+
+Las vacas y los robots aparecen con su nombre real (el número de la vaca y **VMS 1**, **VMS 2** o **VMS 3**) si en la computadora está el archivo `Data/mapa_id_vacas.csv`, que se genera al anonimizar los datos (`src/scripts/anonymize_data.py`). Sin ese archivo aparecen los identificadores anonimizados (por ejemplo `cdee4688` o `7063e4b1`).
+
+> El mapa permite saber qué vaca es cada identificador: nunca lo subas al repositorio (`Data/` está en `.gitignore`) ni compartas capturas de pantalla con números reales de vacas fuera del equipo y del socio.
 
 Arriba del panel izquierdo hay dos modos:
 
@@ -88,7 +95,7 @@ En los dos modos, la casilla **Modelos** te deja elegir cuáles correr. Por defe
 | Campo | Qué capturar | Ejemplo |
 |---|---|---|
 | **Fecha** y **Hora** | Cuándo entra la vaca al robot. Debe ser posterior al último ordeño de la vaca y no después de la **fecha máxima**, que aparece debajo del campo. | 28/01/2026, 20:00 |
-| **Máquina** | El robot donde se ordeña. `referencia` es la máquina más frecuente del hato; las otras dos aparecen con su identificador anonimizado (`7063e4b1` y `86696b37`). | referencia |
+| **Máquina** | El robot donde se ordeña: VMS 1, VMS 2 o VMS 3. Sin el mapa de identificadores, VMS 1 aparece como `referencia` (la máquina más frecuente del hato, que no tiene columna propia) y VMS 3 y VMS 2 como `7063e4b1` y `86696b37`. | VMS 1 |
 | **Núm. de ordeño** | El número de ordeño del día para esa vaca (1, 2, 3…). | 2 |
 | **Temperatura (°C)** | La temperatura a esa hora. | 14 |
 | **Humedad (%)** | La humedad relativa, de 0 a 100. | 45 |
@@ -141,10 +148,13 @@ Debajo, cada modelo tiene una tarjeta por evento con:
 
 Cada factor muestra:
 
-- **El nombre de la variable.** Por ejemplo `mdi_previo` (MDI del ordeño anterior) o `conducta_previo` (si hubo patadas en el ordeño anterior).
-- **Para la LSTM, de qué ordeño viene:** `t-1` es el ordeño anterior, `t-2` el de antes, y así sucesivamente. Si no hay etiqueta, la variable es del ordeño actual.
-- **El valor** de la variable en ese ordeño. En la regresión logística se muestran juntas las columnas de una misma variable, por ejemplo el MDI previo con sus banderas de faltante.
-- **▲ aumenta el riesgo (+aporte):** cuánto sumó esa variable al riesgo, en log-odds. Mientras más grande el número, más pesó.
+- **El nombre de la variable en palabras.** Por ejemplo "MDI del ordeño anterior" o "Patada en el ordeño anterior".
+- **Para la LSTM, de qué ordeño viene:** "ordeño anterior", "hace 3 ordeños", etc. Si no dice nada, la variable es del ordeño actual.
+- **El valor en sus unidades:** horas, días, kg, °C, porcentajes, "sí" o "no", el nombre del robot. El MDI se muestra en su escala original (los datos lo guardan en logaritmo) junto con si está en alerta (desde 1.4).
+- **▲ aumenta el riesgo.**
+- **¿Qué significa y qué hacer?:** al abrirlo explica la variable sin tecnicismos y sugiere qué revisar. Abajo, en gris, vienen el nombre técnico de la variable, su valor tal como lo recibe el modelo y su aporte en log-odds (mientras más grande, más pesó).
+
+Las acciones son sugerencias de qué revisar, no un diagnóstico: confirma con el veterinario o el técnico. Las variables del hato, del calendario o del robot (por ejemplo "Vacas ordeñadas en la semana" o "Hora del ordeño") no dicen nada de la vaca en sí; su acción lo indica.
 
 Cada factor se compara contra una "vaca promedio" del entrenamiento. Si menos de 3 variables suben el riesgo, se muestran solo las que lo suben, y la tarjeta lo indica ("Solo 1 variable aumenta el riesgo" o "Ninguna variable aumenta el riesgo frente a una vaca promedio").
 
@@ -154,7 +164,11 @@ Cada factor se compara contra una "vaca promedio" del entrenamiento. Si menos de
 
 ### Variables de la sesión
 
-Esta pestaña muestra los valores con los que se predijo el último ordeño. Sirve para revisar qué recibieron los modelos, sobre todo en una sesión nueva. Las variables de historial (las que terminan en `_previo`, las tasas, los FME y la sangre) describen ordeños anteriores de la vaca o del hato, no el ordeño actual. Un valor **faltante** significa que no había dato en el historial.
+Esta pestaña muestra los valores con los que se predijo el último ordeño, con el nombre en palabras, el nombre técnico debajo y el valor en sus unidades. Sirve para revisar qué recibieron los modelos, sobre todo en una sesión nueva. Casi todas describen ordeños anteriores de la vaca o del hato, no el ordeño actual. **Sin dato** significa que no había dato en el historial.
+
+### Glosario
+
+Una tarjeta por variable con qué significa y qué revisar. Es la misma explicación que aparece en "¿Qué significa y qué hacer?" de cada factor.
 
 ### Desempeño de los modelos
 

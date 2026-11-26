@@ -9,7 +9,7 @@
 <body>
 <header>
   <h1>Predicción de eventos de ordeño</h1>
-  <p>Probabilidad calibrada de cada evento y las 3 variables que más aumentan el riesgo en cada modelo.</p>
+  <p>Probabilidad de cada evento y las 3 variables que más aumentan el riesgo en cada modelo, con qué revisar.</p>
 </header>
 <main>
   <aside class="panel">
@@ -60,13 +60,15 @@
       <button type="button" data-tab="resultados" class="active">Resultados</button>
       <button type="button" data-tab="variables">Variables de la sesión</button>
       <button type="button" data-tab="desempeno">Desempeño de los modelos</button>
+      <button type="button" data-tab="glosario">Glosario</button>
     </div>
     <div id="tab-resultados"><p class="empty">Elige una vaca, captura la sesión y presiona <b>Predecir</b>.</p></div>
     <div id="tab-variables" hidden><p class="empty">Aquí aparecen las variables calculadas para la sesión.</p></div>
     <div id="tab-desempeno" hidden></div>
-    <p class="note">Los factores son las variables que más subieron la probabilidad del evento frente a una vaca promedio,
-      con su aporte en log-odds; son asociaciones que encontró cada modelo, no causas. Si menos de 3 variables suben el
-      riesgo, se muestran menos. La línea en cada barra marca el umbral de alerta (elegido en validación para detectar al
+    <div id="tab-glosario" hidden></div>
+    <p class="note">Los factores son las variables que más subieron la probabilidad del evento frente a una vaca promedio;
+      son asociaciones que encontró cada modelo, no causas. En cada factor, «¿Qué significa y qué hacer?» lo explica sin
+      tecnicismos y da su aporte en log-odds. Si menos de 3 variables suben el riesgo, se muestran menos. La línea en cada barra marca el umbral de alerta (elegido en validación para detectar al
       menos 80 % de los eventos).</p>
   </section>
 </main>

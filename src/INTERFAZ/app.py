@@ -3,7 +3,8 @@ Servidor Flask de la interfaz para probar los modelos: sirve la página de stati
 styles.css y script.js) y una API JSON.
 Con el dataset integrado ya cargado, se elige una vaca y se captura una sesión nueva (o se elige
 una del dataset), y los tres modelos dan la probabilidad de cada evento y las 3 variables que
-más aumentan el riesgo.
+más aumentan el riesgo, traducidas a lenguaje no técnico con qué revisar (traduccion.py). Si existe
+Data/mapa_id_vacas.csv, las vacas y las máquinas se muestran con su nombre real (VMS 1, VMS 2, VMS 3).
 
 Uso, desde la raíz del repo y después de preparar los datos y build_history_features.py:
     python src/INTERFAZ/app.py
@@ -17,6 +18,7 @@ import pandas as pd
 from flask import Flask, jsonify, request
 
 import nueva_sesion as ns
+import traduccion
 
 PORT = 8000
 CAPTURE_FIELDS = {"temperatura": float, "humedad": float, "horas_thi_alto_24h": float, "numero_ordeno": int}
@@ -45,8 +47,15 @@ def load():
     visits = ns.load_visits()
     import modelos  # TensorFlow tarda en importar
 
+    labels = traduccion.load_labels(visits)
+    if labels["vacas"]:
+        print(f"[app] Nombres reales de {len(labels['vacas'])} vacas y {len(labels['maquinas'])} máquinas "
+              f"({traduccion.MAP_PATH.name})", flush=True)
+    else:
+        print(f"[app] Sin {traduccion.MAP_PATH.name}: se muestran los identificadores anonimizados", flush=True)
     print("[app] Cargando los modelos...", flush=True)
-    state.update(visits=visits, herd=visits[ns.is_milking(visits)], modelos=modelos, models=modelos.load_models())
+    state.update(visits=visits, herd=visits[ns.is_milking(visits)], modelos=modelos, models=modelos.load_models(),
+                 labels=labels)
 
 
 def plain(value):
@@ -103,6 +112,8 @@ def info():
         "modelos": [{"nombre": m.name, "desempeno": m.performance} for m in state["models"]],
         "linea_base": modelos.baseline(),
         "fecha_maxima": f"{ns.last_date(state['visits']):%Y-%m-%d}",
+        "etiquetas": state["labels"],
+        "glosario": traduccion.glossary(),
     }
 
 
@@ -153,8 +164,8 @@ def predict():
     columns = list(dict.fromkeys(modelos.xgb_dataset.FEATURES + modelos.lstm_dataset.CONTEXT_FEATURES))
     return {
         "vaca": capture["vaca"], "inicio": plain(row["inicio"]), "real": actual, "avisos": notes,
-        "resultados": results,
-        "variables": {column: plain(row.get(column)) for column in columns},
+        "resultados": traduccion.describe_results(results, state["labels"]),
+        "variables": traduccion.session_variables(row, columns, ns.machine_of(row), state["labels"]),
     }
 
 

@@ -68,3 +68,13 @@ td.num { font-variant-numeric: tabular-nums; }
 .loading { color: var(--muted); padding: 24px 0; }
 .factors-note { margin-top: 8px; }
 .notice { background: var(--alert-bg); color: var(--alert); border-radius: 7px; padding: 8px 12px; font-size: 13px; margin: 0 0 12px; }
+.factors details { margin-top: 4px; }
+.factors summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+.factors details p { margin: 6px 0 0; }
+.action { color: var(--text); }
+.tech { font-size: 11px; color: var(--muted); font-weight: 400; word-break: break-word; }
+.glossary { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin: 12px 0 0; }
+.glossary > div { border: 1px solid var(--border); border-radius: 9px; padding: 12px; }
+.glossary dt { font-weight: 600; margin-bottom: 4px; }
+.glossary dd { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.glossary dd.action { color: var(--text); }

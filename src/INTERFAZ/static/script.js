@@ -2,6 +2,10 @@ const $ = (id) => document.getElementById(id);
 let info = null, mode = "nueva";
 const pct = (v) => (100 * v).toFixed(1) + " %";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+// Nombres reales de vacas y máquinas (Data/mapa_id_vacas.csv); sin el mapa se muestra el identificador.
+const cowName = (id) => info?.etiquetas?.vacas?.[id] ?? id;
+const machineName = (id) => info?.etiquetas?.maquinas?.[id] ?? id;
+const byName = (name) => (a, b) => name(a).localeCompare(name(b), "es", {numeric: true});
 const fmtDate = (s) => { const [d, t] = s.split(" "); const [y, m, dd] = d.split("-"); return `${dd}/${m}/${y} ${t.slice(0, 5)}`; };
 
 async function api(path, body) {
@@ -39,15 +43,20 @@ async function loadCow() {
   updateThi();
 }
 
-// Los factores son las variables que más aumentan el riesgo (aporte positivo), hasta 3.
+// Los factores son las variables que más aumentan el riesgo (aporte positivo), hasta 3, con su
+// explicación sin tecnicismos y qué revisar.
 function factorList(factors) {
   if (!factors.length) return `<p class="hint factors-note">Ninguna variable aumenta el riesgo frente a una vaca promedio.</p>`;
   const note = factors.length < 3
     ? `<p class="hint factors-note">Solo ${factors.length === 1 ? "1 variable aumenta" : `${factors.length} variables aumentan`} el riesgo.</p>` : "";
   return `<ol class="factors">${factors.map((f, i) => `
-    <li><span class="name">${i + 1}. ${esc(f.variable)}</span>${f.sesion && f.sesion !== "actual" ? ` <span class="value">(${esc(f.sesion)})</span>` : ""}
-      <div class="value">valor: ${esc(f.valor)}</div>
-      <div class="up">▲ aumenta el riesgo (+${f.aporte.toFixed(3)})</div>
+    <li><span class="name">${i + 1}. ${esc(f.nombre)}</span>${f.cuando ? ` <span class="value">(${esc(f.cuando)})</span>` : ""}
+      <div class="value">${esc(f.valor_legible)}</div>
+      <div class="up">▲ aumenta el riesgo</div>
+      <details><summary>¿Qué significa y qué hacer?</summary>
+        ${f.significado ? `<p>${esc(f.significado)}</p><p class="action"><b>Qué revisar:</b> ${esc(f.accion)}</p>` : ""}
+        <p class="tech">Variable ${esc(f.variable)} · valor ${esc(f.valor)} · aporte +${f.aporte.toFixed(3)} log-odds</p>
+      </details>
     </li>`).join("")}</ol>${note}`;
 }
 
@@ -72,12 +81,12 @@ function renderResults(data) {
   }).join("")}</div></div>`).join("");
 
   const notes = (data.avisos || []).map((a) => `<p class="notice">${esc(a)}</p>`).join("");
-  $("tab-resultados").innerHTML = `<h2>Vaca ${esc(data.vaca)} · ${fmtDate(data.inicio)}</h2>${notes}
+  $("tab-resultados").innerHTML = `<h2>Vaca ${esc(cowName(data.vaca))} · ${fmtDate(data.inicio)}</h2>${notes}
     <div class="table-wrap"><table>${header}${rows}</table></div>${detail}`;
-  $("tab-variables").innerHTML = `<p class="hint">Valores con los que se predijo la sesión. Las variables de historial
-    (*_previo, tasas, FME, sangre) describen ordeños anteriores de la vaca o del hato.</p>
-    <div class="table-wrap"><table><tr><th>Variable</th><th>Valor</th></tr>${Object.entries(data.variables).map(([k, v]) =>
-      `<tr><td>${esc(k)}</td><td class="num">${v === null ? "faltante" : typeof v === "number" ? +v.toFixed(4) : esc(v)}</td></tr>`).join("")}</table></div>`;
+  $("tab-variables").innerHTML = `<p class="hint">Valores con los que se predijo la sesión, en sus unidades. Casi todas
+    describen ordeños anteriores de la vaca o del hato; en la pestaña <b>Glosario</b> está qué significa cada una.</p>
+    <div class="table-wrap"><table><tr><th>Variable</th><th>Valor</th></tr>${data.variables.map((v) =>
+      `<tr><td>${esc(v.nombre)}<div class="tech">${esc(v.variable)}</div></td><td class="num">${esc(v.valor)}</td></tr>`).join("")}</table></div>`;
 }
 
 function performanceTable(name, performance) {
@@ -99,6 +108,17 @@ function renderPerformance() {
   $("tab-desempeno").innerHTML = `<p class="hint">Métricas en test (el 15 % más reciente de las sesiones). F1, recall y precisión usan el umbral
     elegido en validación para detectar al menos 80 % de los eventos; Brier mide la calibración de la probabilidad (más bajo es mejor).</p>` +
     info.modelos.map((m) => performanceTable(m.nombre, m.desempeno)).join("") + baseline;
+}
+
+function renderGlossary() {
+  $("tab-glosario").innerHTML = `<p class="hint">Qué significa cada variable que puede aparecer como factor y qué revisar
+    cuando aparece. Son sugerencias: los factores son asociaciones que encontró cada modelo, no causas, y no sustituyen
+    la revisión del veterinario o del técnico.</p>
+    <dl class="glossary">${info.glosario.map((g) => `<div>
+      <dt>${esc(g.nombre)} <span class="tech">${esc(g.variable)}</span></dt>
+      <dd>${esc(g.significado)}</dd>
+      <dd class="action"><b>Qué revisar:</b> ${esc(g.accion)}</dd>
+    </div>`).join("")}</dl>`;
 }
 
 $("form").addEventListener("submit", async (event) => {
@@ -135,7 +155,7 @@ $("form").addEventListener("submit", async (event) => {
 
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  ["resultados", "variables", "desempeno"].forEach((t) => { $(`tab-${t}`).hidden = t !== name; });
+  ["resultados", "variables", "desempeno", "glosario"].forEach((t) => { $(`tab-${t}`).hidden = t !== name; });
 }
 
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -147,12 +167,15 @@ $("vaca").addEventListener("change", () => loadCow().catch((e) => { $("error").t
   setMode("nueva");
   try {
     info = await api("/api/info");
-    $("vaca").innerHTML = info.vacas.map((v) => `<option value="${esc(v.id)}">${esc(v.id)} (último ${fmtDate(v.ultimo).slice(0, 10)})</option>`).join("");
+    const cows = Object.keys(info.etiquetas.vacas).length ? [...info.vacas].sort(byName((v) => cowName(v.id))) : info.vacas;
+    $("vaca").innerHTML = cows.map((v) => `<option value="${esc(v.id)}">${esc(cowName(v.id))} (último ${fmtDate(v.ultimo).slice(0, 10)})</option>`).join("");
     $("fecha").max = info.fecha_maxima;
     $("fecha-hint").textContent = `Fecha máxima: ${fmtDate(info.fecha_maxima + " 00:00").slice(0, 10)}, el día siguiente al fin del dataset.`;
-    $("maquina").innerHTML = info.maquinas.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+    $("maquina").innerHTML = [...info.maquinas].sort(byName(machineName))
+      .map((m) => `<option value="${esc(m)}">${esc(machineName(m))}</option>`).join("");
     $("modelos").innerHTML = info.modelos.map((m) => `<label><input type="checkbox" value="${esc(m.nombre)}" checked> ${esc(m.nombre)}</label>`).join("");
     renderPerformance();
+    renderGlossary();
     await loadCow();
     $("predecir").disabled = false; $("predecir").textContent = "Predecir";
   } catch (error) {
