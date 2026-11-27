@@ -62,11 +62,39 @@ Deja la terminal abierta mientras usas la interfaz. Para cerrarla, regresa a la 
 La pantalla tiene dos partes:
 
 - **Panel izquierdo, "Sesión":** aquí eliges el modo, la vaca, los datos del ordeño y los modelos que quieres correr.
-- **Panel derecho:** tiene cuatro pestañas.
+- **Panel derecho:** tiene cinco pestañas.
   - **Resultados:** las probabilidades, las alertas y la variable más importante de cada modelo.
+  - **Gráficas:** los resultados de XGBoost en velocímetros, para ver de un vistazo si hay que revisar a la vaca (ver abajo).
   - **Variables de la sesión:** todos los valores con los que se hizo la predicción.
   - **Desempeño de los modelos:** qué tan bien funciona cada modelo en los datos de prueba.
   - **Glosario:** qué significa cada variable que puede aparecer como la más importante y qué revisar cuando aparece.
+
+### Pestaña Gráficas
+
+Muestra los resultados de **XGBoost v5**, el modelo principal, en velocímetros. Para verla, XGBoost debe estar activado en **Modelos**.
+
+- **Franja de arriba:** responde "¿hago algo con esta vaca?".
+  - En rojo: "Revisar a la vaca 1203: alerta en falla mecánica".
+  - En ámbar: "Vigilar a la vaca…", cuando algún evento está cerca del umbral.
+  - En azul: "Sin alertas: ordeño normal…".
+- **Alguna anomalía, en grande:**
+  - un velocímetro con el número debajo;
+  - debajo, una escala de las tres zonas con su color y su rango (**Normal**, **Vigilar** y **Alerta**). La zona donde cae la aguja aparece en negritas y con su ícono, y las otras atenuadas. Es solo una leyenda: no se puede presionar;
+  - una frase que lo resume (por ejemplo, "Está cerca del umbral: 33.7 %; la alerta empieza en 33.8 %");
+  - lo que más pesó y qué revisar.
+- **Cada evento:** un velocímetro chico para falla mecánica, salud y conducta, con su estado, lo que más pesó y qué revisar.
+- **Cómo leer un velocímetro:** va de 0 % a 100 %, y la aguja marca la probabilidad.
+
+  | Zona | Color | Rango |
+  |---|---|---|
+  | Normal | Azul | Por debajo de la mitad del umbral |
+  | Vigilar | Ámbar | Desde la mitad del umbral hasta el umbral |
+  | Alerta | Rojo | Desde el umbral de alerta del modelo |
+
+  La marca oscura sobre el arco es el umbral. Como los umbrales son bajos (de 10 % a 34 %), la zona roja ocupa casi todo el arco: la alerta empieza pronto.
+- **Al pasar el cursor** (o tocar un velocímetro en el celular) se ven la probabilidad y el umbral con un decimal, el estado y la variable más importante.
+
+El estado nunca depende solo del color: siempre lleva ícono y texto. Se usa azul y no verde para "Normal" porque el verde y el ámbar no se distinguen con daltonismo.
 
 ### Nombres de vacas y robots
 

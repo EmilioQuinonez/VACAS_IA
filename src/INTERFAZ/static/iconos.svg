@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Íconos de la interfaz, en una cuadrícula de 24 x 24 con trazo (stroke) y currentColor: toman el color del
+    texto, así que funcionan en modo claro y oscuro. Se usan con <svg class="ico"><use href="iconos.svg#id"/></svg>.
+    Los genéricos (reloj, calendario, termómetro, sol, gota, leche, rayo, reloj de arena, número, alerta,
+    check, ojo, info, gráfica, lista, libro, diana, historial y establo) están adaptados de Lucide
+    (https://lucide.dev, licencia ISC). Los del rancho (vaca, robot, ubre, pezonera, patada, mosca y salud)
+    se dibujaron para este proyecto.
+  -->
+
+  <!-- Del rancho -->
+  <symbol id="vaca" viewBox="0 0 24 24">
+    <path d="M8 7h8a2 2 0 0 1 2 2v4.5c0 3.3-2.7 5.5-6 5.5s-6-2.2-6-5.5V9a2 2 0 0 1 2-2z"/>
+    <path d="M6 9.5 2.5 8.5c.4 1.6 1.6 2.6 3.5 2.5"/>
+    <path d="M18 9.5l3.5-1c-.4 1.6-1.6 2.6-3.5 2.5"/>
+    <path d="M8.6 7C7.9 5.6 8 4.3 9.1 3.3"/>
+    <path d="M15.4 7c.7-1.4.6-2.7-.5-3.7"/>
+    <rect x="8.5" y="13.5" width="7" height="4.5" rx="2.25"/>
+    <path d="M10.8 15.8h.01M13.2 15.8h.01M9.6 10.4h.01M14.4 10.4h.01"/>
+  </symbol>
+  <symbol id="robot" viewBox="0 0 24 24">
+    <path d="M4 20V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/>
+    <path d="M2 20h20"/>
+    <rect x="7" y="6.5" width="5" height="3.5" rx=".8"/>
+    <path d="M20 12.5h-6.5l-1.5 2"/>
+    <path d="M9.5 14.5h6"/>
+    <path d="M10.5 14.5v3M14.5 14.5v3"/>
+  </symbol>
+  <symbol id="ubre" viewBox="0 0 24 24">
+    <path d="M4 5h16c0 5.5-3.6 9-8 9s-8-3.5-8-9z"/>
+    <path d="M12 5v9"/>
+    <path d="M7.4 11.6v4.4M10.5 13.6v4.9M13.5 13.6v4.9M16.6 11.6v4.4"/>
+  </symbol>
+  <symbol id="pezonera" viewBox="0 0 24 24">
+    <path d="M7.5 3h7"/>
+    <path d="M8 3h6l-1 9h-4z"/>
+    <path d="M11 12v3a4 4 0 0 0 4 4h5"/>
+    <path d="M20 16.5v5"/>
+  </symbol>
+  <symbol id="patada" viewBox="0 0 24 24">
+    <path d="M7 3v6l3 4-1 4h4.5l.6-2.2"/>
+    <path d="M9 17v3"/>
+    <path d="M16 7l3-1.5M16.5 11h4M16 15l3 1.5"/>
+  </symbol>
+  <symbol id="mosca" viewBox="0 0 24 24">
+    <ellipse cx="12" cy="15" rx="2.6" ry="4.5"/>
+    <circle cx="12" cy="8.6" r="1.8"/>
+    <path d="M10 12.5C7 10 3.5 10.5 3.5 12.5s3.5 2.5 6.5 1.6"/>
+    <path d="M14 12.5c3-2.5 6.5-2 6.5 0s-3.5 2.5-6.5 1.6"/>
+    <path d="M9.6 16.8 7.5 18.8M14.4 16.8l2.1 2M10.8 7 9.8 5.2M13.2 7l1-1.8"/>
+  </symbol>
+  <symbol id="salud" viewBox="0 0 24 24">
+    <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>
+    <path d="M12 12.8v5.2M9.4 15.4h5.2"/>
+  </symbol>
+  <symbol id="hato" viewBox="0 0 24 24">
+    <path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/>
+    <path d="M6 18h12M6 14h12"/>
+    <rect x="6" y="10" width="12" height="12"/>
+  </symbol>
+
+  <!-- Genéricos (adaptados de Lucide, ISC) -->
+  <symbol id="reloj" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="calendario" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="termometro" viewBox="0 0 24 24"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></symbol>
+  <symbol id="sol" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+  <symbol id="gota" viewBox="0 0 24 24"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></symbol>
+  <symbol id="leche" viewBox="0 0 24 24"><path d="M8 2h8"/><path d="M9 2v2.79a4 4 0 0 1-.67 2.22l-.66.98A4 4 0 0 0 7 10.21V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9.79a4 4 0 0 0-.67-2.22l-.66-.98A4 4 0 0 1 15 4.79V2"/><path d="M7 15a6.5 6.5 0 0 1 5 0 6.5 6.5 0 0 0 5 0"/></symbol>
+  <symbol id="rayo" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+  <symbol id="reloj-arena" viewBox="0 0 24 24"><path d="M5 22h14M5 2h14"/><path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/><path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></symbol>
+  <symbol id="numero" viewBox="0 0 24 24"><path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/></symbol>
+  <symbol id="alerta" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="ojo" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="grafica" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></symbol>
+  <symbol id="lista" viewBox="0 0 24 24"><path d="M3 6h.01M3 12h.01M3 18h.01M8 6h13M8 12h13M8 18h13"/></symbol>
+  <symbol id="libro" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+  <symbol id="diana" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="historial" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+</svg>

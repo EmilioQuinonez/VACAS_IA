@@ -4,12 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Predicción de ordeño</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header>
-  <h1>Predicción de eventos de ordeño</h1>
-  <p>Probabilidad de cada evento y la variable que más aumenta el riesgo en cada modelo, con qué revisar.</p>
+<header class="top">
+  <span class="logo" aria-hidden="true"><svg class="ico"><use href="iconos.svg#vaca"/></svg></span>
+  <div>
+    <h1>Predicción de eventos de ordeño</h1>
+    <p>Probabilidad de cada evento y la variable que más aumenta el riesgo en cada modelo, con qué revisar.</p>
+  </div>
 </header>
 <main>
   <aside class="panel">
@@ -20,31 +24,31 @@
     </div>
     <p class="hint" id="mode-hint"></p>
     <form id="form">
-      <label for="vaca">Vaca</label>
+      <label for="vaca"><svg class="ico" aria-hidden="true"><use href="iconos.svg#vaca"/></svg>Vaca</label>
       <select id="vaca"></select>
       <p class="hint" id="ultimo"></p>
 
       <div id="nueva">
         <div class="row">
-          <div><label for="fecha">Fecha</label><input type="date" id="fecha"></div>
-          <div><label for="hora">Hora</label><input type="time" id="hora"></div>
+          <div><label for="fecha"><svg class="ico" aria-hidden="true"><use href="iconos.svg#calendario"/></svg>Fecha</label><input type="date" id="fecha"></div>
+          <div><label for="hora"><svg class="ico" aria-hidden="true"><use href="iconos.svg#reloj"/></svg>Hora</label><input type="time" id="hora"></div>
         </div>
         <p class="hint" id="fecha-hint"></p>
         <div class="row">
-          <div><label for="maquina">Máquina</label><select id="maquina"></select></div>
-          <div><label for="numero">Núm. de ordeño</label><input type="number" id="numero" min="1" max="10"></div>
+          <div><label for="maquina"><svg class="ico" aria-hidden="true"><use href="iconos.svg#robot"/></svg>Máquina</label><select id="maquina"></select></div>
+          <div><label for="numero"><svg class="ico" aria-hidden="true"><use href="iconos.svg#numero"/></svg>Núm. de ordeño</label><input type="number" id="numero" min="1" max="10"></div>
         </div>
         <div class="row">
-          <div><label for="temperatura">Temperatura (°C)</label><input type="number" id="temperatura" step="0.1"></div>
-          <div><label for="humedad">Humedad (%)</label><input type="number" id="humedad" min="0" max="100"></div>
+          <div><label for="temperatura"><svg class="ico" aria-hidden="true"><use href="iconos.svg#termometro"/></svg>Temperatura (°C)</label><input type="number" id="temperatura" step="0.1"></div>
+          <div><label for="humedad"><svg class="ico" aria-hidden="true"><use href="iconos.svg#gota"/></svg>Humedad (%)</label><input type="number" id="humedad" min="0" max="100"></div>
         </div>
-        <label for="horas">Horas con THI ≥ 68 (24 h previas)</label>
+        <label for="horas"><svg class="ico" aria-hidden="true"><use href="iconos.svg#sol"/></svg>Horas con THI ≥ 68 (24 h previas)</label>
         <input type="number" id="horas" min="0" max="24">
         <p class="hint" id="thi"></p>
       </div>
 
       <div id="existente" hidden>
-        <label for="ordeno">Ordeño</label>
+        <label for="ordeno"><svg class="ico" aria-hidden="true"><use href="iconos.svg#historial"/></svg>Ordeño</label>
         <select id="ordeno"></select>
       </div>
 
@@ -57,22 +61,25 @@
 
   <section class="panel">
     <div class="tabs">
-      <button type="button" data-tab="resultados" class="active">Resultados</button>
-      <button type="button" data-tab="variables">Variables de la sesión</button>
-      <button type="button" data-tab="desempeno">Desempeño de los modelos</button>
-      <button type="button" data-tab="glosario">Glosario</button>
+      <button type="button" data-tab="resultados" class="active"><svg class="ico" aria-hidden="true"><use href="iconos.svg#lista"/></svg>Resultados</button>
+      <button type="button" data-tab="graficas"><svg class="ico" aria-hidden="true"><use href="iconos.svg#grafica"/></svg>Gráficas</button>
+      <button type="button" data-tab="variables"><svg class="ico" aria-hidden="true"><use href="iconos.svg#info"/></svg>Variables de la sesión</button>
+      <button type="button" data-tab="desempeno"><svg class="ico" aria-hidden="true"><use href="iconos.svg#diana"/></svg>Desempeño de los modelos</button>
+      <button type="button" data-tab="glosario"><svg class="ico" aria-hidden="true"><use href="iconos.svg#libro"/></svg>Glosario</button>
     </div>
-    <div id="tab-resultados"><p class="empty">Elige una vaca, captura la sesión y presiona <b>Predecir</b>.</p></div>
-    <div id="tab-variables" hidden><p class="empty">Aquí aparecen las variables calculadas para la sesión.</p></div>
+    <div id="tab-resultados"></div>
+    <div id="tab-graficas" hidden></div>
+    <div id="tab-variables" hidden></div>
     <div id="tab-desempeno" hidden></div>
     <div id="tab-glosario" hidden></div>
     <p class="note">La variable más importante es la que más subió la probabilidad del evento frente a una vaca promedio;
       es una asociación que encontró cada modelo, no una causa. «¿Qué significa y qué hacer?» la explica sin tecnicismos y
-      da su aporte en log-odds. Si ninguna variable sube el riesgo, no se muestra ninguna. La línea en cada barra marca el umbral de alerta (elegido en validación para detectar al
-      menos 80 % de los eventos).</p>
+      da su aporte en log-odds. Si ninguna variable sube el riesgo, no se muestra ninguna. El umbral de alerta de cada modelo
+      se eligió en validación para detectar al menos 80 % de los eventos.</p>
   </section>
 </main>
 
+<div id="viz-tip" class="viz-tip" role="tooltip" hidden></div>
 <script src="script.js"></script>
 </body>
 </html>

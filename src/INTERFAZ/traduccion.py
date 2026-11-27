@@ -261,6 +261,28 @@ GLOSSARY = {
         "Revisar si en domingo cambia la rutina o el personal.",
         "si_no"),
 }
+# Ícono de cada variable en static/iconos.svg, para reconocerla antes de leerla.
+ICONS = {
+    **dict.fromkeys(("intervalo_horas", "intervalo_horas_sin_dato", "intervalo_horas_previo", "hora"), "reloj"),
+    **dict.fromkeys(("regreso_tras_periodo_seco", "mes", "dia_semana", "es_domingo"), "calendario"),
+    "estado_numero_de_ordeno": "numero",
+    **dict.fromkeys(("maquina", "sangre_tasa_maquina_30d", "sangre_pico_maquina"), "robot"),
+    "t_sesion": "termometro",
+    **dict.fromkeys(("thi_sesion", "horas_thi_alto_24h"), "sol"),
+    **dict.fromkeys(("fme_connection", "fme_milk_production", "fme_incomplete", "mecanico_previo",
+                     "mecanico_vaca_30d"), "pezonera"),
+    **dict.fromkeys(("mecanico_hato_7d", "salud_hato_7d", "conducta_hato_7d", "vacas_activas_7d"), "hato"),
+    **dict.fromkeys((*(f"blood_diff_{q}" for q in QUARTERS), "cuarto_inactivo_previo"), "ubre"),
+    "box_time_to_yield_ratio": "reloj-arena",
+    **dict.fromkeys(("kicks_ratio_7d", "conducta_previo", "conducta_vaca_30d"), "patada"),
+    "flies_proxy": "mosca",
+    **dict.fromkeys(("salud_previo", "salud_vaca_30d", "mdi_previo", "mdi_faltante_previo",
+                     "estado_mdi_sin_dato_previo"), "salud"),
+    "conductividad_max_previa": "rayo",
+    "produccion_previa": "leche",
+    **dict.fromkeys(("dias_en_leche", "dias_en_hato"), "vaca"),
+}
+
 # Columnas que en la tabla de variables se juntan con otra o no se muestran.
 HIDDEN = re.compile(r"^(maquina_.+|(mes|hora|dia_semana)_(sin|cos))$")
 
@@ -287,8 +309,8 @@ def load_labels(visits):
 
 def glossary():
     """El glosario completo para la pestaña de la página."""
-    return [{"variable": name, "nombre": entry[0], "significado": entry[1], "accion": entry[2]}
-            for name, entry in GLOSSARY.items()]
+    return [{"variable": name, "nombre": entry[0], "significado": entry[1], "accion": entry[2],
+             "icono": ICONS.get(name, "info")} for name, entry in GLOSSARY.items()]
 
 
 def to_number(value):
@@ -414,12 +436,16 @@ def describe_factor(factor, labels):
     """Agrega a un factor su nombre, valor legible, cuándo pasó, qué significa y qué hacer."""
     name = factor["variable"]
     entry = GLOSSARY.get(name)
+    label, moment = (entry[0] if entry else name), when(factor.get("sesion"))
+    if moment:  # La LSTM ya dice de qué ordeño viene: «hace 3 ordeños» en lugar de «en el ordeño anterior»
+        label = re.sub(r"\s*(\(ordeño anterior\)|(en|del) (el )?ordeño anterior)", "", label)
     return {**factor,
-            "nombre": entry[0] if entry else name,
+            "nombre": label,
             "valor_legible": readable_value(name, factor.get("valor"), labels),
-            "cuando": when(factor.get("sesion")),
+            "cuando": moment,
             "significado": entry[1] if entry else "",
-            "accion": entry[2] if entry else ""}
+            "accion": entry[2] if entry else "",
+            "icono": ICONS.get(name, "info")}
 
 
 def describe_results(results, labels):
@@ -431,12 +457,13 @@ def describe_results(results, labels):
 
 def session_variables(row, columns, machine, labels):
     """Filas de la pestaña de variables: nombre legible, columna y valor en sus unidades."""
-    rows = [{"variable": "maquina", "nombre": GLOSSARY["maquina"][0], "valor": machine_name(machine, labels)}]
+    rows = [{"variable": "maquina", "nombre": GLOSSARY["maquina"][0], "valor": machine_name(machine, labels),
+             "icono": ICONS["maquina"]}]
     for column in columns:
         if HIDDEN.match(column) or column not in row.index:
             continue
         value = row[column]
         value = "faltante" if pd.isna(value) else value
         rows.append({"variable": column, "nombre": GLOSSARY.get(column, (column,))[0],
-                     "valor": readable_value(column, value, labels)})
+                     "valor": readable_value(column, value, labels), "icono": ICONS.get(column, "info")})
     return rows

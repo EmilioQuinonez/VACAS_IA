@@ -1,12 +1,33 @@
 const $ = (id) => document.getElementById(id);
-let info = null, mode = "nueva";
+let info = null, mode = "nueva", lastResult = null;
 const pct = (v) => (100 * v).toFixed(1) + " %";
+const pct0 = (v) => Math.round(100 * v) + " %";
+// Sin decimales, salvo que dos valores que se comparan se redondeen igual (33.7 % contra 33.8 %).
+const pctVs = (v, other) => pct0(v) === pct0(other) ? pct(v) : pct0(v);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 // Nombres reales de vacas y máquinas (Data/mapa_id_vacas.csv); sin el mapa se muestra el identificador.
 const cowName = (id) => info?.etiquetas?.vacas?.[id] ?? id;
 const machineName = (id) => info?.etiquetas?.maquinas?.[id] ?? id;
 const byName = (name) => (a, b) => name(a).localeCompare(name(b), "es", {numeric: true});
 const fmtDate = (s) => { const [d, t] = s.split(" "); const [y, m, dd] = d.split("-"); return `${dd}/${m}/${y} ${t.slice(0, 5)}`; };
+
+// Íconos de static/iconos.svg: acompañan al texto, nunca lo reemplazan (por eso aria-hidden).
+const ico = (id, cls = "") => `<svg class="ico ${cls}" aria-hidden="true"><use href="iconos.svg#${id}"/></svg>`;
+const EVENT_ICONS = {
+  mechanical_connection_failure_event: "pezonera", health_anomaly_event: "salud",
+  behavior_interruption_event: "patada", alguna_anomalia: "alerta",
+};
+const eventName = (id) => info.eventos.find((e) => e.id === id).nombre;
+const eventLabel = (id) => `${ico(EVENT_ICONS[id])}${esc(eventName(id))}`;
+// Primero alguna anomalía (la pregunta principal) y después los tres eventos.
+const eventsFirstAny = () => [...info.eventos].sort((a, b) => (b.id === "alguna_anomalia") - (a.id === "alguna_anomalia"));
+
+const emptyState = (text) => `<div class="empty">
+  <svg class="empty-art" viewBox="0 0 240 96" aria-hidden="true">
+    <use href="iconos.svg#vaca" x="20" y="10" width="76" height="76" class="art-cow"/>
+    <path d="M108 48h34m-7-7 7 7-7 7" class="art-arrow"/>
+    <use href="iconos.svg#robot" x="148" y="10" width="76" height="76" class="art-robot"/>
+  </svg><p>${text}</p></div>`;
 
 async function api(path, body) {
   const response = await fetch(path, body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {});
@@ -43,13 +64,26 @@ async function loadCow() {
   updateThi();
 }
 
+// Ubre vista desde arriba (cabeza hacia arriba) con el cuarto de la variable resaltado.
+const QUARTERS = {di: "delantero izquierdo", dd: "delantero derecho", ti: "trasero izquierdo", td: "trasero derecho"};
+function udder(variable) {
+  const quarter = variable.match(/^blood_diff_(di|dd|ti|td)$/)?.[1];
+  if (!quarter) return "";
+  const cell = (q, x, y) => `<rect x="${x}" y="${y}" width="40" height="30" rx="10" class="${q === quarter ? "on" : ""}"/>
+    <circle cx="${x + 20}" cy="${y + 15}" r="4"/>`;
+  return `<figure class="udder"><svg viewBox="0 0 96 76" role="img" aria-label="Cuarto ${QUARTERS[quarter]}">
+      <text x="48" y="8">cabeza ↑</text>${cell("di", 6, 12)}${cell("dd", 50, 12)}${cell("ti", 6, 44)}${cell("td", 50, 44)}
+    </svg><figcaption>Cuarto ${QUARTERS[quarter]}</figcaption></figure>`;
+}
+
 // La variable que más aumenta el riesgo (mayor aporte positivo), con su explicación sin
 // tecnicismos y qué revisar.
 function factorList(factors) {
   if (!factors.length) return `<p class="hint factors-note">Ninguna variable aumenta el riesgo frente a una vaca promedio.</p>`;
   return `<ol class="factors"><li class="factors-title">Variable más importante</li>${factors.map((f) => `
-    <li><span class="name">${esc(f.nombre)}</span>${f.cuando ? ` <span class="value">(${esc(f.cuando)})</span>` : ""}
+    <li><span class="name">${ico(f.icono)}${esc(f.nombre)}</span>${f.cuando ? ` <span class="value">(${esc(f.cuando)})</span>` : ""}
       <div class="value">${esc(f.valor_legible)}</div>
+      ${udder(f.variable)}
       <div class="up">▲ aumenta el riesgo</div>
       <details><summary>¿Qué significa y qué hacer?</summary>
         ${f.significado ? `<p>${esc(f.significado)}</p><p class="action"><b>Qué revisar:</b> ${esc(f.accion)}</p>` : ""}
@@ -61,7 +95,7 @@ function factorList(factors) {
 function renderResults(data) {
   const events = info.eventos, models = Object.keys(data.resultados);
   const header = `<tr><th>Evento</th>${models.map((m) => `<th>${esc(m)}</th>`).join("")}${data.real ? "<th>Real</th>" : ""}</tr>`;
-  const rows = events.map((e) => `<tr><td>${esc(e.nombre)}</td>${models.map((m) => {
+  const rows = events.map((e) => `<tr><td><span class="event-cell">${eventLabel(e.id)}</span></td>${models.map((m) => {
     const r = data.resultados[m][e.id];
     return `<td class="num">${pct(r.probabilidad)} ${r.alerta ? '<span class="badge alert">alerta</span>' : ""}</td>`;
   }).join("")}${data.real ? `<td>${data.real[e.id] ? "ocurrió" : "no ocurrió"}</td>` : ""}</tr>`).join("");
@@ -69,7 +103,7 @@ function renderResults(data) {
   const detail = models.map((m) => `<div class="model"><h3>${esc(m)}</h3><div class="cards">${events.map((e) => {
     const r = data.resultados[m][e.id];
     return `<div class="card">
-      <div class="event">${esc(e.nombre)}</div>
+      <div class="event">${eventLabel(e.id)}</div>
       <div class="prob">${pct(r.probabilidad)}</div>
       <div class="meter"><span style="width:${(100 * r.probabilidad).toFixed(1)}%"></span><i style="left:${(100 * r.umbral).toFixed(1)}%"></i></div>
       <span class="badge ${r.alerta ? "alert" : "ok"}">${r.alerta ? "Alerta" : "Sin alerta"} · umbral ${pct(r.umbral)}</span>
@@ -78,20 +112,21 @@ function renderResults(data) {
     </div>`;
   }).join("")}</div></div>`).join("");
 
-  const notes = (data.avisos || []).map((a) => `<p class="notice">${esc(a)}</p>`).join("");
-  $("tab-resultados").innerHTML = `<h2>Vaca ${esc(cowName(data.vaca))} · ${fmtDate(data.inicio)}</h2>${notes}
+  const notes = (data.avisos || []).map((a) => `<p class="notice">${ico("alerta")}${esc(a)}</p>`).join("");
+  $("tab-resultados").innerHTML = `<h2 class="cow-title">${ico("vaca")}Vaca ${esc(cowName(data.vaca))} · ${fmtDate(data.inicio)}</h2>${notes}
     <div class="table-wrap"><table>${header}${rows}</table></div>${detail}`;
   $("tab-variables").innerHTML = `<p class="hint">Valores con los que se predijo la sesión, en sus unidades. Casi todas
     describen ordeños anteriores de la vaca o del hato; en la pestaña <b>Glosario</b> está qué significa cada una.</p>
     <div class="table-wrap"><table><tr><th>Variable</th><th>Valor</th></tr>${data.variables.map((v) =>
-      `<tr><td>${esc(v.nombre)}<div class="tech">${esc(v.variable)}</div></td><td class="num">${esc(v.valor)}</td></tr>`).join("")}</table></div>`;
+      `<tr><td><span class="var-name">${ico(v.icono)}${esc(v.nombre)}</span><div class="tech">${esc(v.variable)}</div></td>
+        <td class="num">${esc(v.valor)}</td></tr>`).join("")}</table></div>`;
 }
 
 function performanceTable(name, performance) {
   const metrics = Object.keys(Object.values(performance)[0]);
   return `<div class="model"><h3>${esc(name)}</h3><div class="table-wrap"><table>
     <tr><th>Evento</th>${metrics.map((k) => `<th>${k}</th>`).join("")}</tr>
-    ${info.eventos.map((e) => `<tr><td>${esc(e.nombre)}</td>${metrics.map((k) => {
+    ${info.eventos.map((e) => `<tr><td><span class="event-cell">${eventLabel(e.id)}</span></td>${metrics.map((k) => {
       const v = performance[e.id][k];
       return `<td class="num">${v === null ? "—" : v.toFixed(3)}</td>`;
     }).join("")}</tr>`).join("")}
@@ -109,15 +144,155 @@ function renderPerformance() {
 }
 
 function renderGlossary() {
-  $("tab-glosario").innerHTML = `<p class="hint">Qué significa cada variable que puede aparecer como factor y qué revisar
-    cuando aparece. Son sugerencias: los factores son asociaciones que encontró cada modelo, no causas, y no sustituyen
+  $("tab-glosario").innerHTML = `<p class="hint">Qué significa cada variable que puede aparecer como la más importante y qué
+    revisar cuando aparece. Son sugerencias: es una asociación que encontró cada modelo, no una causa, y no sustituye
     la revisión del veterinario o del técnico.</p>
     <dl class="glossary">${info.glosario.map((g) => `<div>
-      <dt>${esc(g.nombre)} <span class="tech">${esc(g.variable)}</span></dt>
+      <dt><span class="glossary-icon">${ico(g.icono)}</span><span>${esc(g.nombre)}<span class="tech">${esc(g.variable)}</span></span></dt>
       <dd>${esc(g.significado)}</dd>
       <dd class="action"><b>Qué revisar:</b> ${esc(g.accion)}</dd>
     </div>`).join("")}</dl>`;
 }
+
+// --- Gráficas: velocímetros del XGBoost, el modelo principal. «Alguna anomalía» va en grande y los otros
+// tres eventos en velocímetros chicos.
+const CHART_MODEL = "XGBoost v5";
+
+// Estado de un evento: alerta desde el umbral; «vigilar» desde la mitad del umbral (regla de la interfaz).
+const STATES = {
+  alerta: {label: "Alerta", icon: "alerta", rank: 2},
+  vigilar: {label: "Vigilar", icon: "ojo", rank: 1},
+  normal: {label: "Normal", icon: "check", rank: 0},
+};
+const stateOf = (r) => r.alerta ? "alerta" : r.probabilidad >= r.umbral / 2 ? "vigilar" : "normal";
+const stateBadge = (state) => `<span class="state st-${state}">${ico(STATES[state].icon)}${STATES[state].label}</span>`;
+const realText = (eventId) => lastResult.real ? `<span class="viz-real">Real: ${lastResult.real[eventId] ? "ocurrió" : "no ocurrió"}</span>` : "";
+const mainFactor = (r) => r.factores[0];
+const joinNames = (names) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} y ${names.at(-1)}`;
+
+function whyLine(r, withAction) {
+  const f = mainFactor(r);
+  if (!f) return `<p class="why muted">Ninguna variable aumenta el riesgo frente a una vaca promedio.</p>`;
+  return `<p class="why">${ico(f.icono)}<span>Lo que más pesó: <b>${esc(f.nombre)}</b>${f.valor_legible ? ` · ${esc(f.valor_legible)}` : ""}${f.cuando ? ` (${esc(f.cuando)})` : ""}</span></p>
+    ${udder(f.variable)}
+    ${withAction ? `<p class="todo"><b>Qué revisar:</b> ${esc(f.accion)}</p>` : ""}`;
+}
+
+// Franja de veredicto del modelo: alerta, vigilar o normal, con los eventos que lo provocan.
+function verdict(model) {
+  const results = lastResult.resultados[model], cow = esc(cowName(lastResult.vaca));
+  const named = (state) => eventsFirstAny().filter((e) => stateOf(results[e.id]) === state).map((e) => eventName(e.id).toLowerCase());
+  const alerts = named("alerta"), watch = named("vigilar");
+  const [state, text] = alerts.length ? ["alerta", `Revisar a la vaca ${cow}: alerta en ${esc(joinNames(alerts))}.`]
+    : watch.length ? ["vigilar", `Vigilar a la vaca ${cow}: ${esc(joinNames(watch))} cerca del umbral.`]
+    : ["normal", `Sin alertas: ordeño normal para la vaca ${cow}.`];
+  return `<div class="verdict st-${state}"><span class="verdict-light">${ico(STATES[state].icon)}</span><p>${text}</p></div>`;
+}
+
+// Velocímetro (medio círculo): zonas normal / vigilar / alerta sobre 0-100 %, marca del umbral y aguja en
+// la probabilidad.
+function gaugeSvg(r) {
+  const cx = 100, cy = 100, R = 80, p = Math.min(1, r.probabilidad), u = r.umbral;
+  const pt = (v, radius) => [cx - radius * Math.cos(Math.PI * v), cy - radius * Math.sin(Math.PI * v)];
+  const xy = ([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`;
+  const arc = (a, b, zone) => b > a ? `<path class="zone z-${zone}" d="M ${xy(pt(a, R))} A ${R} ${R} 0 0 1 ${xy(pt(b, R))}"/>` : "";
+  const line = (a, b, cls) => `<line class="${cls}" x1="${a[0].toFixed(2)}" y1="${a[1].toFixed(2)}" x2="${b[0].toFixed(2)}" y2="${b[1].toFixed(2)}"/>`;
+  return `<svg viewBox="0 0 200 122" class="gauge" role="img"
+      aria-label="${pct0(p)}; ${STATES[stateOf(r)].label}; alerta desde ${pct0(u)}">
+    ${arc(0, u / 2, "normal")}${arc(u / 2, u, "vigilar")}${arc(u, 1, "alerta")}
+    ${line(pt(u, R - 13), pt(u, R + 13), "gauge-thr")}
+    <text class="gauge-end" x="${cx - R}" y="${cy + 20}">0</text><text class="gauge-end" x="${cx + R}" y="${cy + 20}">100</text>
+    ${line([cx, cy], pt(p, R - 24), "needle")}<circle class="hub" cx="${cx}" cy="${cy}" r="7"/>
+  </svg>`;
+}
+
+// «Alguna anomalía» en grande: velocímetro, número, las tres zonas escritas con su rango (se resalta la
+// zona en la que cae), una frase que lo resume y lo que más pesó.
+function heroGauge(model) {
+  const r = lastResult.resultados[model].alguna_anomalia, state = stateOf(r), u = r.umbral;
+  const pv = pctVs(r.probabilidad, u), uv = pctVs(u, r.probabilidad);
+  const zones = [["normal", `0 a ${pct0(u / 2)}`], ["vigilar", `${pct0(u / 2)} a ${uv}`], ["alerta", `${uv} a 100 %`]];
+  const sentence = {
+    alerta: `Está en alerta: ${pv}, por encima del umbral de ${uv}.`,
+    vigilar: `Está cerca del umbral: ${pv}; la alerta empieza en ${uv}.`,
+    normal: `Está en zona normal: ${pv}; la alerta empieza en ${uv}.`,
+  }[state];
+  return `<section class="hero st-${state}" tabindex="0" data-model="${esc(model)}" data-event="alguna_anomalia">
+    <h4>${eventLabel("alguna_anomalia")} ${realText("alguna_anomalia")}</h4>
+    <div class="hero-chart">${gaugeSvg(r)}<p class="hero-value">${pv}</p></div>
+    <div class="zone-scale" aria-label="Zonas del velocímetro">${zones.map(([z, range]) => `<div class="zone-item p-${z}${z === state ? " is-on" : ""}">
+      <i class="zone-swatch"></i><span class="zone-name">${z === state ? ico(STATES[z].icon) : ""}${STATES[z].label}</span>
+      <small>${range}</small></div>`).join("")}</div>
+    <p class="hero-sentence">${sentence}</p>
+    ${whyLine(r, state !== "normal")}
+  </section>`;
+}
+
+// Velocímetros chicos de los otros tres eventos.
+function smallGauges(model) {
+  const results = lastResult.resultados[model];
+  return `<div class="gauge-grid">${info.eventos.filter((e) => e.id !== "alguna_anomalia").map((e) => {
+    const r = results[e.id], state = stateOf(r);
+    return `<section class="gauge-card st-${state}" tabindex="0" data-model="${esc(model)}" data-event="${e.id}">
+      <h4>${eventLabel(e.id)}</h4>
+      ${gaugeSvg(r)}
+      <p class="gauge-value">${pctVs(r.probabilidad, r.umbral)}</p>
+      <p class="gauge-meta">${stateBadge(state)} <span>alerta desde ${pctVs(r.umbral, r.probabilidad)}</span></p>
+      <p class="gauge-real">${realText(e.id)}</p>
+      ${whyLine(r, state !== "normal")}
+    </section>`;
+  }).join("")}</div>`;
+}
+
+const gaugeLegend = `<p class="hint key-row"><span class="key-zone z-normal"></span>Normal <span class="key-zone z-vigilar"></span>Vigilar
+  (desde la mitad del umbral) <span class="key-zone z-alerta"></span>Alerta (desde el umbral del modelo) <span class="key-tick"></span>Umbral de alerta</p>`;
+
+function renderCharts() {
+  if (!lastResult) { $("tab-graficas").innerHTML = emptyState("Aquí aparecen las gráficas después de presionar <b>Predecir</b>."); return; }
+  if (!lastResult.resultados[CHART_MODEL]) {
+    $("tab-graficas").innerHTML = emptyState(`Activa ${esc(CHART_MODEL)} en «Modelos» para ver las gráficas.`); return;
+  }
+  $("tab-graficas").innerHTML = `<p class="hint">Velocímetros de ${esc(CHART_MODEL)}, el modelo principal. Pasa el
+      cursor (o toca) un velocímetro para ver el detalle.</p>
+    ${verdict(CHART_MODEL)}
+    ${heroGauge(CHART_MODEL)}
+    <h3 class="section-title">Cada evento</h3>
+    ${smallGauges(CHART_MODEL)}${gaugeLegend}`;
+}
+
+// Tooltip compartido: valor primero y después el contexto (textContent: los nombres vienen de datos).
+function tip(lines, x, y) {
+  const el = $("viz-tip");
+  el.replaceChildren(...lines.map((text, i) => {
+    const div = document.createElement("div");
+    div.textContent = text;
+    div.className = i === 0 ? "tip-value" : i === 1 ? "tip-label" : "";
+    return div;
+  }));
+  el.hidden = false;
+  const box = el.getBoundingClientRect();
+  el.style.left = `${Math.max(8, Math.min(x + 14, window.innerWidth - box.width - 8))}px`;
+  el.style.top = `${Math.max(8, y - box.height - 12)}px`;
+}
+const hideTip = () => { $("viz-tip").hidden = true; };
+
+const CHART_CARDS = ".hero, .gauge-card";
+function cardTip(el, x, y) {
+  const r = lastResult.resultados[el.dataset.model][el.dataset.event], f = mainFactor(r);
+  tip([pct(r.probabilidad), `${el.dataset.model} · ${eventName(el.dataset.event)}`,
+    `Umbral ${pct(r.umbral)} · ${STATES[stateOf(r)].label}`,
+    f ? `Lo que más pesó: ${f.nombre}${f.valor_legible ? ` (${f.valor_legible})` : ""}` : "Ninguna variable aumenta el riesgo"], x, y);
+}
+$("tab-graficas").addEventListener("pointermove", (e) => {
+  const el = e.target.closest(CHART_CARDS);
+  if (el) cardTip(el, e.clientX, e.clientY); else hideTip();
+});
+$("tab-graficas").addEventListener("pointerleave", hideTip);
+$("tab-graficas").addEventListener("focusin", (e) => {
+  const el = e.target.closest(CHART_CARDS);
+  if (el) { const b = el.getBoundingClientRect(); cardTip(el, b.left + b.width / 2, b.top); }
+});
+$("tab-graficas").addEventListener("focusout", hideTip);
 
 $("form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -139,13 +314,16 @@ $("form").addEventListener("submit", async (event) => {
   }
   const button = $("predecir");
   button.disabled = true; button.textContent = "Corriendo los modelos...";
-  showTab("resultados");
-  $("tab-resultados").innerHTML = `<p class="loading">Corriendo los modelos...</p>`;
+  if ($("tab-graficas").hidden) showTab("resultados");
+  ["resultados", "graficas"].forEach((t) => { $(`tab-${t}`).innerHTML = `<p class="loading">Corriendo los modelos...</p>`; });
   try {
-    renderResults(await api("/api/predecir", body));
+    lastResult = await api("/api/predecir", body);
+    renderResults(lastResult);
+    renderCharts();
   } catch (error) {
+    lastResult = null;
     $("error").textContent = error.message;
-    $("tab-resultados").innerHTML = `<p class="empty">${esc(error.message)}</p>`;
+    ["resultados", "graficas"].forEach((t) => { $(`tab-${t}`).innerHTML = emptyState(esc(error.message)); });
   } finally {
     button.disabled = false; button.textContent = "Predecir";
   }
@@ -153,7 +331,8 @@ $("form").addEventListener("submit", async (event) => {
 
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  ["resultados", "variables", "desempeno", "glosario"].forEach((t) => { $(`tab-${t}`).hidden = t !== name; });
+  hideTip();
+  ["resultados", "graficas", "variables", "desempeno", "glosario"].forEach((t) => { $(`tab-${t}`).hidden = t !== name; });
 }
 
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -163,8 +342,11 @@ $("vaca").addEventListener("change", () => loadCow().catch((e) => { $("error").t
 
 (async () => {
   setMode("nueva");
+  $("tab-resultados").innerHTML = emptyState("Elige una vaca, captura la sesión y presiona <b>Predecir</b>.");
+  $("tab-variables").innerHTML = emptyState("Aquí aparecen las variables calculadas para la sesión.");
   try {
     info = await api("/api/info");
+    renderCharts();
     const cows = Object.keys(info.etiquetas.vacas).length ? [...info.vacas].sort(byName((v) => cowName(v.id))) : info.vacas;
     $("vaca").innerHTML = cows.map((v) => `<option value="${esc(v.id)}">${esc(cowName(v.id))} (último ${fmtDate(v.ultimo).slice(0, 10)})</option>`).join("");
     $("fecha").max = info.fecha_maxima;
