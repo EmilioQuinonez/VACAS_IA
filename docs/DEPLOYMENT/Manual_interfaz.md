@@ -63,13 +63,13 @@ La pantalla tiene dos partes:
 
 - **Panel izquierdo, "Sesión":** aquí eliges el modo, la vaca y los datos del ordeño.
 - **Panel derecho:** tiene cinco pestañas.
-  - **Resultados:** las probabilidades, las alertas y la variable más importante de cada evento.
-  - **Gráficas:** los mismos resultados en velocímetros, para ver de un vistazo si hay que revisar a la vaca (ver abajo).
+  - **Resultado:** la predicción en velocímetros, para ver de un vistazo si hay que revisar a la vaca (ver abajo). Es la pestaña que se abre al predecir.
+  - **Resultado detallado:** las probabilidades, los umbrales, las alertas y la variable más importante de cada evento, en tabla y tarjetas.
   - **Variables de la sesión:** todos los valores con los que se hizo la predicción.
   - **Desempeño del modelo:** qué tan bien funciona el modelo en los datos de prueba.
   - **Glosario:** qué significa cada variable que puede aparecer como la más importante y qué revisar cuando aparece.
 
-### Pestaña Gráficas
+### Pestaña Resultado
 
 Muestra los resultados en velocímetros.
 
@@ -115,7 +115,7 @@ Arriba del panel izquierdo hay dos modos:
 1. Elige **Nueva sesión**.
 2. Elige la **vaca**. La lista está ordenada por la fecha de su último ordeño, de la más reciente a la más antigua. Debajo aparece la fecha y hora de ese último ordeño.
 3. Revisa los campos del ordeño. Vienen prellenados con valores del último ordeño de la vaca, así que puedes predecir sin cambiar nada o ajustar solo lo que quieras probar.
-4. Presiona **Predecir**. Tarda alrededor de un segundo y se abre la pestaña **Gráficas**; el detalle sigue en **Resultados**.
+4. Presiona **Predecir**. Tarda alrededor de un segundo y se abre la pestaña **Resultado**; el detalle está en **Resultado detallado**.
 
 ### Campos
 
@@ -146,7 +146,7 @@ Puedes ver todos esos valores en la pestaña **Variables de la sesión**.
 1. Elige **Del dataset**.
 2. Elige la **vaca**.
 3. En **Ordeño**, elige la fecha y hora. La lista empieza por el más reciente.
-4. Presiona **Predecir**. Se abre la pestaña **Gráficas**.
+4. Presiona **Predecir**. Se abre la pestaña **Resultado**.
 
 Este modo usa los datos reales de ese ordeño y su historial. Además de la predicción, cada evento muestra **Real: ocurrió** o **Real: no ocurrió**, así que puedes comparar lo que predijo el modelo con lo que pasó.
 
@@ -156,7 +156,7 @@ Este modo usa los datos reales de ese ordeño y su historial. Además de la pred
 
 ### Tabla comparativa
 
-Arriba de la pestaña **Resultados** hay una tabla con una fila por evento: la probabilidad (con la etiqueta **alerta** cuando llega al umbral) y el umbral de alerta. En el modo **Del dataset** se agrega la columna **Real**.
+Arriba de la pestaña **Resultado detallado** hay una tabla con una fila por evento: la probabilidad (con la etiqueta **alerta** cuando llega al umbral) y el umbral de alerta. En el modo **Del dataset** se agrega la columna **Real**.
 
 ### Tarjetas por evento
 

@@ -249,7 +249,7 @@ const gaugeLegend = `<p class="hint key-row"><span class="key-zone z-normal"></s
   (desde la mitad del umbral) <span class="key-zone z-alerta"></span>Alerta (desde el umbral del modelo) <span class="key-tick"></span>Umbral de alerta</p>`;
 
 function renderCharts() {
-  if (!lastResult) { $("tab-graficas").innerHTML = emptyState("Aquí aparecen las gráficas después de presionar <b>Predecir</b>."); return; }
+  if (!lastResult) { $("tab-graficas").innerHTML = emptyState("Elige una vaca, captura la sesión y presiona <b>Predecir</b>."); return; }
   $("tab-graficas").innerHTML = `<p class="hint">Velocímetros de ${esc(info.modelo.nombre)}. Pasa el cursor (o toca) un
       velocímetro para ver el detalle.</p>
     ${verdict()}
@@ -310,7 +310,7 @@ $("form").addEventListener("submit", async (event) => {
   }
   const button = $("predecir");
   button.disabled = true; button.textContent = "Corriendo el modelo...";
-  showTab("graficas");  // Al predecir se muestran primero las gráficas
+  showTab("graficas");  // Al predecir se muestra la pestaña «Resultado» (los velocímetros)
   ["resultados", "graficas"].forEach((t) => { $(`tab-${t}`).innerHTML = `<p class="loading">Corriendo el modelo...</p>`; });
   try {
     lastResult = await api("/api/predecir", body);
@@ -328,7 +328,7 @@ $("form").addEventListener("submit", async (event) => {
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   hideTip();
-  ["resultados", "graficas", "variables", "desempeno", "glosario"].forEach((t) => { $(`tab-${t}`).hidden = t !== name; });
+  ["graficas", "resultados", "variables", "desempeno", "glosario"].forEach((t) => { $(`tab-${t}`).hidden = t !== name; });
 }
 
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -338,7 +338,8 @@ $("vaca").addEventListener("change", () => loadCow().catch((e) => { $("error").t
 
 (async () => {
   setMode("nueva");
-  $("tab-resultados").innerHTML = emptyState("Elige una vaca, captura la sesión y presiona <b>Predecir</b>.");
+  $("tab-graficas").innerHTML = emptyState("Elige una vaca, captura la sesión y presiona <b>Predecir</b>.");
+  $("tab-resultados").innerHTML = emptyState("Aquí aparece el detalle después de presionar <b>Predecir</b>.");
   $("tab-variables").innerHTML = emptyState("Aquí aparecen las variables calculadas para la sesión.");
   try {
     info = await api("/api/info");
