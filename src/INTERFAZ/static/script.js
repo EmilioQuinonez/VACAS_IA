@@ -24,7 +24,9 @@ const EVENT_ICONS = {
   behavior_interruption_event: "patada", alguna_anomalia: "alerta",
 };
 const eventName = (id) => info.eventos.find((e) => e.id === id).nombre;
-const eventLabel = (id) => `${ico(EVENT_ICONS[id])}${esc(eventName(id))}`;
+// El nombre del evento abre al pasar el cursor una ventanita con qué es (glosario de eventos de traduccion.py).
+const eventLabel = (id) => `${ico(EVENT_ICONS[id])}<span class="var-link ev-link" tabindex="0" data-ev="${id}"
+  aria-describedby="var-pop">${esc(eventName(id))}</span>`;
 // Primero alguna anomalía (la pregunta principal) y después los tres eventos.
 const eventsFirstAny = () => [...info.eventos].sort((a, b) => (b.id === "alguna_anomalia") - (a.id === "alguna_anomalia"));
 
@@ -154,9 +156,18 @@ function renderPerformance() {
 }
 
 function renderGlossary() {
-  $("tab-glosario").innerHTML = `<p class="hint">Qué significa cada variable que puede aparecer como la más importante y qué
-    revisar cuando aparece. Son sugerencias: es una asociación que encontró el modelo, no una causa, y no sustituye
-    la revisión del veterinario o del técnico.</p>
+  const events = `<h3 class="section-title">Eventos que predice el modelo</h3>
+    <dl class="glossary">${eventsFirstAny().map((e) => `<div>
+      <dt><span class="glossary-icon">${ico(EVENT_ICONS[e.id])}</span><span>${esc(e.nombre)}</span></dt>
+      <dd>${esc(e.que_es)}</dd>
+      <dd>Cuenta como evento si:<ul class="var-pop-list">${e.cuenta.map((c) => `<li>${esc(c)}</li>`).join("")}</ul></dd>
+      <dd>${esc(e.por_que)}</dd>
+      <dd class="action"><b>Qué revisar:</b> ${esc(e.accion)}</dd>
+    </div>`).join("")}</dl>
+    <h3 class="section-title">Variables</h3>`;
+  $("tab-glosario").innerHTML = `<p class="hint">Qué es cada evento que predice el modelo, qué significa cada variable que
+    puede aparecer como la más importante y qué revisar. Son sugerencias: es una asociación que encontró el modelo, no
+    una causa, y no sustituye la revisión del veterinario o del técnico.</p>${events}
     <dl class="glossary">${info.glosario.map((g) => `<div>
       <dt><span class="glossary-icon">${ico(g.icono)}</span><span>${esc(g.nombre)}<span class="tech">${esc(g.variable)}</span></span></dt>
       <dd>${esc(g.significado)}</dd>
@@ -182,9 +193,9 @@ const joinNames = (names) => names.length < 2 ? names.join("") : `${names.slice(
 function whyLine(r, withAction) {
   const f = mainFactor(r);
   if (!f) return `<p class="why muted">Ninguna variable aumenta el riesgo frente a una vaca promedio.</p>`;
-  // El nombre abre una ventanita con qué significa y qué revisar (si la variable está en el glosario).
+  // Al pasar el cursor por el nombre (o enfocarlo) se ve qué significa y qué revisar, si está en el glosario.
   const name = f.significado
-    ? `<button type="button" class="var-link" aria-haspopup="dialog" aria-expanded="false" aria-controls="var-pop">${esc(f.nombre)}${ico("info", "var-link-ico")}</button>`
+    ? `<span class="var-link" tabindex="0" aria-describedby="var-pop">${esc(f.nombre)}${ico("info", "var-link-ico")}</span>`
     : `<b>${esc(f.nombre)}</b>`;
   return `<p class="why">${ico(f.icono)}<span>Lo que más pesó: ${name}${f.valor_legible ? ` · ${esc(f.valor_legible)}` : ""}</span></p>
     ${udder(f.variable)}
@@ -294,7 +305,7 @@ function heroGauge() {
     vigilar: `Está cerca del umbral: ${pv}; la alerta empieza en ${uv}.`,
     normal: `Está en zona normal: ${pv}; la alerta empieza en ${uv}.`,
   }[state];
-  return `<section class="hero st-${state}" tabindex="0" data-event="alguna_anomalia">
+  return `<section class="hero st-${state}" data-event="alguna_anomalia">
     <h4>${eventLabel("alguna_anomalia")} ${realText("alguna_anomalia")}</h4>
     <div class="hero-chart">${gaugeSvg(r)}<p class="hero-value">${pv}</p></div>
     <div class="zone-scale" aria-label="Zonas del velocímetro">${zones.map(([z, range]) => `<div class="zone-item p-${z}${z === state ? " is-on" : ""}">
@@ -311,7 +322,7 @@ function smallGauges() {
   const results = lastResult.resultados;
   return `<div class="gauge-grid">${info.eventos.filter((e) => e.id !== "alguna_anomalia").map((e) => {
     const r = results[e.id], state = stateOf(r);
-    return `<section class="gauge-card st-${state}" tabindex="0" data-event="${e.id}">
+    return `<section class="gauge-card st-${state}" data-event="${e.id}">
       <h4>${eventLabel(e.id)}</h4>
       ${gaugeSvg(r)}
       <p class="gauge-value">${pctVs(r.probabilidad, r.umbral)}</p>
@@ -328,8 +339,8 @@ const gaugeLegend = `<p class="hint key-row"><span class="key-zone z-normal"></s
 
 function renderCharts() {
   if (!lastResult) { $("tab-graficas").innerHTML = emptyState("Elige una vaca, captura la sesión y presiona <b>Predecir</b>."); return; }
-  $("tab-graficas").innerHTML = `<p class="hint">Velocímetros de ${esc(info.modelo.nombre)}. Pasa el cursor (o toca) un
-      velocímetro para ver el detalle.</p>
+  $("tab-graficas").innerHTML = `<p class="hint">Velocímetros de ${esc(info.modelo.nombre)}. Pasa el cursor por la variable
+      de «Lo que más pesó» para ver qué significa.</p>
     ${verdict()}
     ${heroGauge()}
     <h3 class="section-title">Cada evento</h3>
@@ -353,77 +364,88 @@ function tip(lines, x, y) {
 }
 const hideTip = () => { $("viz-tip").hidden = true; };
 
-const CHART_CARDS = ".hero, .gauge-card, .delay-row";
-function cardTip(el, x, y) {
-  if (el.classList.contains("delay-row")) {
-    const t = lastResult.tiempo, e = t.eventos[el.dataset.event];
-    tip([`${fmtExtra(e.extra_mediana)} (mediana)`, `${eventName(el.dataset.event)} · tiempo extra si ocurre`,
-      `En promedio: ${fmtExtra(e.extra_media)}`,
-      t.normal != null ? `Duración esperada: ${fmtDur(e.esperado)} (normal ${fmtDur(t.normal)})` : ""].filter(Boolean), x, y);
-    return;
-  }
-  const r = lastResult.resultados[el.dataset.event], f = mainFactor(r);
-  tip([pct(r.probabilidad), `${info.modelo.nombre} · ${eventName(el.dataset.event)}`,
-    `Umbral ${pct(r.umbral)} · ${STATES[stateOf(r)].label}`,
-    f ? `Lo que más pesó: ${f.nombre}${f.valor_legible ? ` (${f.valor_legible})` : ""}` : "Ninguna variable aumenta el riesgo"], x, y);
+// Tooltip de las barras de «Tiempo del ordeño» (los velocímetros no llevan tooltip).
+function delayTip(el, x, y) {
+  const t = lastResult.tiempo, e = t.eventos[el.dataset.event];
+  tip([`${fmtExtra(e.extra_mediana)} (mediana)`, `${eventName(el.dataset.event)} · tiempo extra si ocurre`,
+    `En promedio: ${fmtExtra(e.extra_media)}`,
+    t.normal != null ? `Duración esperada: ${fmtDur(e.esperado)} (normal ${fmtDur(t.normal)})` : ""].filter(Boolean), x, y);
 }
 $("tab-graficas").addEventListener("pointermove", (e) => {
-  if (!$("var-pop").hidden || e.target.closest(".var-link")) { hideTip(); return; }
-  const el = e.target.closest(CHART_CARDS);
-  if (el) cardTip(el, e.clientX, e.clientY); else hideTip();
+  if (e.target.closest(".var-link, #var-pop")) { hideTip(); return; }
+  const el = e.target.closest(".delay-row");
+  if (el) delayTip(el, e.clientX, e.clientY); else hideTip();
 });
 $("tab-graficas").addEventListener("pointerleave", hideTip);
 $("tab-graficas").addEventListener("focusin", (e) => {
-  if (e.target.closest(".var-link")) { hideTip(); return; }
-  const el = e.target.closest(CHART_CARDS);
-  if (el) { const b = el.getBoundingClientRect(); cardTip(el, b.left + b.width / 2, b.top); }
+  if (e.target.closest(".var-link")) return;
+  const el = e.target.closest(".delay-row");
+  if (el) { const b = el.getBoundingClientRect(); delayTip(el, b.left + b.width / 2, b.top); }
 });
 $("tab-graficas").addEventListener("focusout", hideTip);
 
-// --- Ventanita de la variable más importante: qué significa y qué revisar, sin ir al glosario.
-let popButton = null;
-function openVarPop(button) {
-  const f = mainFactor(lastResult.resultados[button.closest("[data-event]").dataset.event]);
-  const pop = $("var-pop");
-  pop.innerHTML = `<div class="var-pop-head">
-      <span class="glossary-icon">${ico(f.icono)}</span>
-      <h4 id="var-pop-title">${esc(f.nombre)}</h4>
-      <button type="button" class="var-pop-close" aria-label="Cerrar">×</button>
-    </div>
+// --- Ventanitas de explicación: la variable de «Lo que más pesó» (qué significa y qué revisar) y los nombres de
+// los eventos (qué es y qué cuenta como evento). Aparecen al pasar el cursor por el nombre y siguen abiertas
+// mientras el cursor esté en el nombre o en la ventanita; también con el foco (teclado) o al tocar en el celular.
+function variablePop(link) {
+  const f = mainFactor(lastResult.resultados[link.closest("[data-event]").dataset.event]);
+  return `<div class="var-pop-head"><span class="glossary-icon">${ico(f.icono)}</span><h4>${esc(f.nombre)}</h4></div>
     ${f.valor_legible ? `<p class="var-pop-value">En este ordeño: <b>${esc(f.valor_legible)}</b></p>` : ""}
     <p>${esc(f.significado)}</p>
     <p class="action"><b>Qué revisar:</b> ${esc(f.accion)}</p>
     <p class="hint">Es una asociación que encontró el modelo, no una causa. <span class="tech">${esc(f.variable)}</span></p>`;
-  closeVarPop(false);
-  popButton = button;
-  button.setAttribute("aria-expanded", "true");
+}
+function eventPop(id) {
+  const e = info.eventos.find((ev) => ev.id === id), time = lastResult?.tiempo?.eventos?.[id];
+  return `<div class="var-pop-head"><span class="glossary-icon">${ico(EVENT_ICONS[id])}</span><h4>${esc(e.nombre)}</h4></div>
+    <p>${esc(e.que_es)}</p>
+    <p class="var-pop-sub">Cuenta como evento si:</p>
+    <ul class="var-pop-list">${e.cuenta.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>
+    <p class="var-pop-value">${esc(e.por_que)}</p>
+    ${time ? `<p>${ico("reloj")}Si ocurre, el ordeño suele tardar <b>${fmtDur(time.extra_mediana)} más</b>.</p>` : ""}
+    <p class="action"><b>Qué revisar:</b> ${esc(e.accion)}</p>`;
+}
+
+let popLink = null, hideTimer = null;
+function showVarPop(link) {
+  clearTimeout(hideTimer);
+  if (popLink === link && !$("var-pop").hidden) return;
+  const pop = $("var-pop");
+  pop.innerHTML = link.dataset.ev ? eventPop(link.dataset.ev) : variablePop(link);
   pop.hidden = false;
+  popLink = link;
   hideTip();
   // Debajo del nombre (o arriba si no cabe), dentro de la pantalla; se mueve con la página al hacer scroll.
-  const b = button.getBoundingClientRect(), box = pop.getBoundingClientRect();
+  const b = link.getBoundingClientRect(), box = pop.getBoundingClientRect();
   const left = Math.max(8, Math.min(b.left, window.innerWidth - box.width - 8));
-  const below = b.bottom + 8 + box.height <= window.innerHeight || b.top - 8 - box.height < 0;
+  const below = b.bottom + 6 + box.height <= window.innerHeight || b.top - 6 - box.height < 0;
   pop.style.left = `${left + window.scrollX}px`;
-  pop.style.top = `${(below ? b.bottom + 8 : b.top - 8 - box.height) + window.scrollY}px`;
-  pop.querySelector(".var-pop-close").focus();
+  pop.style.top = `${(below ? b.bottom + 6 : b.top - 6 - box.height) + window.scrollY}px`;
 }
-function closeVarPop(restoreFocus = true) {
-  if ($("var-pop").hidden) return;
-  $("var-pop").hidden = true;
-  if (popButton) {
-    popButton.setAttribute("aria-expanded", "false");
-    if (restoreFocus && popButton.isConnected) popButton.focus();
-  }
-  popButton = null;
-}
-document.addEventListener("click", (e) => {
-  const button = e.target.closest(".var-link");
-  if (button) { button === popButton ? closeVarPop() : openVarPop(button); return; }
-  if (e.target.closest(".var-pop-close")) closeVarPop();
-  else if (!e.target.closest("#var-pop")) closeVarPop(false);
+const hideVarPop = () => { clearTimeout(hideTimer); $("var-pop").hidden = true; popLink = null; };
+// Un momento de gracia para cruzar del nombre a la ventanita sin que se cierre.
+const hideSoon = () => { clearTimeout(hideTimer); hideTimer = setTimeout(hideVarPop, 250); };
+const inPop = (el) => el instanceof Node && (el.closest?.("#var-pop") || $("var-pop").contains(el));
+
+document.addEventListener("pointerover", (e) => {
+  const link = e.target.closest(".var-link");
+  if (link) showVarPop(link);
+  else if (inPop(e.target)) clearTimeout(hideTimer);
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarPop(); });
-window.addEventListener("resize", () => closeVarPop(false));
+// Con el mouse se cierra al salir del nombre y de la ventanita. Al tocar en el celular no hay hover: se queda
+// abierta hasta tocar fuera.
+document.addEventListener("pointerout", (e) => {
+  if (e.pointerType === "touch" || $("var-pop").hidden) return;
+  const from = e.target.closest(".var-link") || (inPop(e.target) ? $("var-pop") : null);
+  if (!from || from.contains(e.relatedTarget)) return;
+  if (inPop(e.relatedTarget) || e.relatedTarget?.closest?.(".var-link") === popLink) return;
+  hideSoon();
+});
+document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".var-link") && !inPop(e.target)) hideVarPop(); });
+document.addEventListener("focusin", (e) => { const link = e.target.closest?.(".var-link"); if (link) showVarPop(link); });
+document.addEventListener("focusout", (e) => { if (e.target.closest?.(".var-link") && !popLink?.matches(":hover") && !$("var-pop").matches(":hover")) hideSoon(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideVarPop(); });
+window.addEventListener("resize", hideVarPop);
 
 $("form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -443,7 +465,7 @@ $("form").addEventListener("submit", async (event) => {
   }
   const button = $("predecir");
   button.disabled = true; button.textContent = "Corriendo el modelo...";
-  closeVarPop(false);
+  hideVarPop();
   showTab("graficas");  // Al predecir se muestra la pestaña «Resultado» (los velocímetros)
   ["resultados", "graficas"].forEach((t) => { $(`tab-${t}`).innerHTML = `<p class="loading">Corriendo el modelo...</p>`; });
   try {
@@ -462,7 +484,7 @@ $("form").addEventListener("submit", async (event) => {
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   hideTip();
-  closeVarPop(false);
+  hideVarPop();
   ["graficas", "resultados", "variables", "desempeno", "glosario"].forEach((t) => { $(`tab-${t}`).hidden = t !== name; });
 }
 

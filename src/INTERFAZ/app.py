@@ -115,7 +115,8 @@ def info():
     return {
         "vacas": [{"id": cow, "ultimo": plain(start)} for cow, start in last.items()],
         "maquinas": ns.machines(state["visits"]),
-        "eventos": [{"id": event, "nombre": modelos.EVENT_NAMES[event]} for event in modelos.EVENTS],
+        "eventos": [{"id": event, "nombre": modelos.EVENT_NAMES[event], **traduccion.EVENT_GLOSSARY[event]}
+                    for event in modelos.EVENTS],
         "modelo": {"nombre": model.name, "desempeno": model.performance},
         "linea_base": modelos.baseline(),
         "fecha_maxima": f"{ns.last_date(state['visits']):%Y-%m-%d}",

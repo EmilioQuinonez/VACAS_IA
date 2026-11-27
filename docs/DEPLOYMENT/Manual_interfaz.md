@@ -85,7 +85,10 @@ Muestra los resultados en velocímetros.
   - una frase que lo resume (por ejemplo, "Está cerca del umbral: 33.7 %; la alerta empieza en 33.8 %");
   - lo que más pesó y qué revisar.
 - **Cada evento:** un velocímetro chico para falla mecánica, salud y conducta, con su estado, lo que más pesó y qué revisar. En los velocímetros en Vigilar o Alerta (también el grande) se agrega cuánto suele tardar de más el ordeño si ocurre ese evento.
-- **Qué significa la variable:** el nombre de la variable en "Lo que más pesó" está subrayado con un ícono ⓘ. Al presionarlo se abre una ventanita con su valor en este ordeño, qué significa y qué revisar, sin tener que ir al **Glosario**. Se cierra con la ×, con Esc o presionando fuera de ella.
+- **Ventanitas de explicación:** sin tener que ir al **Glosario**.
+  - **Variable:** el nombre de la variable en "Lo que más pesó" está subrayado con un ícono ⓘ. Al pasar el cursor sobre él aparece una ventanita con su valor en este ordeño, qué significa y qué revisar.
+  - **Evento:** los nombres de los eventos (Falla mecánica, Salud, Conducta y Alguna anomalía) también están subrayados, en esta pestaña y en **Resultado detallado**. Al pasar el cursor se ve qué es el evento, qué cuenta como evento (según `src/DP/integrate_derivates.py` y el reporte de Data Preparation II), por qué importa, cuánto suele alargar el ordeño y qué revisar.
+  - La ventanita sigue abierta mientras el cursor esté en el nombre o dentro de ella (se puede pasar el cursor del nombre a la ventanita para leerla) y se cierra al salir de los dos. En el celular aparece al tocar el nombre y se cierra al tocar fuera; con teclado, al llegar al nombre con Tab (Esc la cierra).
 - **Cómo leer un velocímetro:** va de 0 % a 100 %, y la aguja marca la probabilidad.
 
   | Zona | Color | Rango |
@@ -95,7 +98,6 @@ Muestra los resultados en velocímetros.
   | Alerta | Rojo | Desde el umbral de alerta del modelo |
 
   La marca oscura sobre el arco es el umbral. Como los umbrales son bajos (de 10 % a 34 %), la zona roja ocupa casi todo el arco: la alerta empieza pronto.
-- **Al pasar el cursor** (o tocar un velocímetro en el celular) se ven la probabilidad y el umbral con un decimal, el estado y la variable más importante.
 
 El estado nunca depende solo del color: siempre lleva ícono y texto. Se usa azul y no verde para "Normal" porque el verde y el ámbar no se distinguen con daltonismo.
 
@@ -217,7 +219,8 @@ Esta pestaña muestra los valores con los que se predijo el último ordeño, con
 
 ### Glosario
 
-Una tarjeta por variable con qué significa y qué revisar. Es la misma explicación que aparece en "¿Qué significa y qué hacer?" en cada tarjeta.
+- **Eventos que predice el modelo:** una tarjeta por evento con qué es, qué cuenta como evento, por qué importa y qué revisar. Es la misma explicación de la ventanita de los nombres de los eventos.
+- **Variables:** una tarjeta por variable con qué significa y qué revisar. Es la misma explicación que aparece en "¿Qué significa y qué hacer?" en cada tarjeta y en la ventanita de "Lo que más pesó".
 
 ### Desempeño del modelo
 

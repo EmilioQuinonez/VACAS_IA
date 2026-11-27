@@ -291,6 +291,47 @@ def load_labels(visits):
     return labels
 
 
+# Qué es cada evento, con la definición de src/DP/integrate_derivates.py y del reporte de Data Preparation II
+# (tabla de atributos y eventos y su justificación), en lenguaje no técnico.
+EVENT_GLOSSARY = {
+    "mechanical_connection_failure_event": {
+        "que_es": "El robot no pudo ordeñar bien a la vaca por un problema al conectar o al sacar la leche.",
+        "cuenta": ["El robot no encontró o no pudo conectar algún pezón.",
+                   "Algún cuarto que sí se ordeña dio 0 kg de leche.",
+                   "El ordeño quedó marcado como incompleto."],
+        "por_que": "Es una pérdida directa: el ordeño tarda más, puede quedar leche en la ubre y el robot se "
+                   "ocupa más tiempo. En estudios, la mayoría de estas fallas vienen de conexiones que tardan "
+                   "mucho, de varios intentos fallidos de colocar las pezoneras o de tiempo sin flujo de leche.",
+        "accion": CHECK_CONNECTION,
+    },
+    "health_anomaly_event": {
+        "que_es": "El robot detectó una señal de un posible problema de salud en la ubre.",
+        "cuenta": ["Sangre en la leche de algún cuarto.",
+                   f"MDI (índice de mastitis del robot) de {MDI_ALERT} o más.",
+                   "Alerta AMD del robot en la ubre o en algún pezón."],
+        "por_que": "La sangre en la leche se asocia con golpes o heridas en el pezón o la ubre y con "
+                   "inflamaciones fuertes; el MDI alto puede indicar mastitis.",
+        "accion": CHECK_UDDER,
+    },
+    "behavior_interruption_event": {
+        "que_es": "La vaca pateó durante el ordeño.",
+        "cuenta": ["El robot marcó patada en al menos un cuarto."],
+        "por_que": "Una patada puede mover o tirar las pezoneras e interrumpir el ordeño. Las moscas, más activas "
+                   "por la tarde y con más de 15 °C, provocan patadas, coletazos y sacudidas que dificultan "
+                   "conectar las pezoneras.",
+        "accion": CHECK_KICKS,
+    },
+    "alguna_anomalia": {
+        "que_es": "El ordeño tuvo al menos uno de los tres eventos: falla mecánica, salud o conducta. Es lo "
+                  "contrario de un ordeño exitoso.",
+        "cuenta": ["Cualquiera de los tres eventos; pueden ocurrir varios en el mismo ordeño."],
+        "por_que": "Es la pregunta principal (¿este ordeño saldrá bien?) y con ella se mide si el modelo cumple "
+                   "el objetivo del proyecto. Cerca de 4 de cada 10 ordeños de test tuvieron alguna anomalía.",
+        "accion": "Revisar lo que indica el evento concreto (falla mecánica, salud o conducta) que esté más alto.",
+    },
+}
+
+
 def glossary():
     """El glosario completo para la pestaña de la página."""
     return [{"variable": name, "nombre": entry[0], "significado": entry[1], "accion": entry[2],
