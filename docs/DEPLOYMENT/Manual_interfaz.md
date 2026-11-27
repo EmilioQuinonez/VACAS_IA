@@ -115,7 +115,7 @@ Arriba del panel izquierdo hay dos modos:
 1. Elige **Nueva sesión**.
 2. Elige la **vaca**. La lista está ordenada por la fecha de su último ordeño, de la más reciente a la más antigua. Debajo aparece la fecha y hora de ese último ordeño.
 3. Revisa los campos del ordeño. Vienen prellenados con valores del último ordeño de la vaca, así que puedes predecir sin cambiar nada o ajustar solo lo que quieras probar.
-4. Presiona **Predecir**. Tarda alrededor de un segundo.
+4. Presiona **Predecir**. Tarda alrededor de un segundo y se abre la pestaña **Gráficas**; el detalle sigue en **Resultados**.
 
 ### Campos
 
@@ -146,7 +146,7 @@ Puedes ver todos esos valores en la pestaña **Variables de la sesión**.
 1. Elige **Del dataset**.
 2. Elige la **vaca**.
 3. En **Ordeño**, elige la fecha y hora. La lista empieza por el más reciente.
-4. Presiona **Predecir**.
+4. Presiona **Predecir**. Se abre la pestaña **Gráficas**.
 
 Este modo usa los datos reales de ese ordeño y su historial. Además de la predicción, cada evento muestra **Real: ocurrió** o **Real: no ocurrió**, así que puedes comparar lo que predijo el modelo con lo que pasó.
 

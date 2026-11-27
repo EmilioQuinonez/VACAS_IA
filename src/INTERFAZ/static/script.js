@@ -310,7 +310,7 @@ $("form").addEventListener("submit", async (event) => {
   }
   const button = $("predecir");
   button.disabled = true; button.textContent = "Corriendo el modelo...";
-  if ($("tab-graficas").hidden) showTab("resultados");
+  showTab("graficas");  // Al predecir se muestran primero las gráficas
   ["resultados", "graficas"].forEach((t) => { $(`tab-${t}`).innerHTML = `<p class="loading">Corriendo el modelo...</p>`; });
   try {
     lastResult = await api("/api/predecir", body);
