@@ -32,6 +32,7 @@ La interfaz no entrena ni modifica el modelo ni los datos: usa el modelo guardad
   En Windows, usa `py` en lugar de `python3`.
 
 - **El dataset integrado**, `Data/dataset_vacas_integrado.csv`, generado con los pasos de la sección *¿Cómo obtener y preparar los datos?* del [README](../../README.md) y con las variables de historial de `src/MODELING/XGBoost/build_history_features.py`. Los datos no están en el repositorio: cada persona los genera en su computadora.
+- **Opcional, para el tiempo del ordeño:** `src/EVALUATION/metrics/duracion_por_evento.json`, que ya viene en el repositorio (se regenera con `python -B src/EVALUATION/duracion_por_evento.py`). Sin ese archivo, la interfaz funciona igual pero no dice cuánto se alarga el ordeño.
 - **En Mac:** XGBoost necesita la librería OpenMP. Si no la tienes, instálala con `brew install libomp`.
 - **Un navegador** actualizado (Chrome, Edge, Firefox o Safari).
 
@@ -77,12 +78,13 @@ Muestra los resultados en velocímetros.
   - En rojo: "Revisar a la vaca 1203: alerta en falla mecánica".
   - En ámbar: "Vigilar a la vaca…", cuando algún evento está cerca del umbral.
   - En azul: "Sin alertas: ordeño normal…".
+  - Debajo, cuando hay alerta o algo que vigilar, cuánto se alargaría el ordeño si ocurre el evento que más lo alarga entre los marcados. Por ejemplo: "Si ocurre falla mecánica, el ordeño tardaría unos 56 s más (7 min 15 s → 8 min 10 s)".
 - **Alguna anomalía, en grande:**
   - un velocímetro con el número debajo;
   - debajo, una escala de las tres zonas con su color y su rango (**Normal**, **Vigilar** y **Alerta**). La zona donde cae la aguja aparece en negritas y con su ícono, y las otras atenuadas. Es solo una leyenda: no se puede presionar;
   - una frase que lo resume (por ejemplo, "Está cerca del umbral: 33.7 %; la alerta empieza en 33.8 %");
   - lo que más pesó y qué revisar.
-- **Cada evento:** un velocímetro chico para falla mecánica, salud y conducta, con su estado, lo que más pesó y qué revisar.
+- **Cada evento:** un velocímetro chico para falla mecánica, salud y conducta, con su estado, lo que más pesó y qué revisar. En los velocímetros en Vigilar o Alerta (también el grande) se agrega cuánto suele tardar de más el ordeño si ocurre ese evento.
 - **Cómo leer un velocímetro:** va de 0 % a 100 %, y la aguja marca la probabilidad.
 
   | Zona | Color | Rango |
@@ -95,6 +97,26 @@ Muestra los resultados en velocímetros.
 - **Al pasar el cursor** (o tocar un velocímetro en el celular) se ven la probabilidad y el umbral con un decimal, el estado y la variable más importante.
 
 El estado nunca depende solo del color: siempre lleva ícono y texto. Se usa azul y no verde para "Normal" porque el verde y el ámbar no se distinguen con daltonismo.
+
+#### Tiempo del ordeño
+
+Al final de la pestaña **Resultado** está cuánto se alarga el ordeño si ocurre cada evento, con las métricas de `src/EVALUATION/duracion_por_evento.py`:
+
+- **Lo normal de la vaca:** la mediana de la duración de sus últimos 30 ordeños sin evento antes de la sesión.
+- **Barras de tiempo extra:** cuánto más suele tardar un ordeño con cada evento (mediana) frente a los ordeños sin evento de la misma vaca, medido en los ordeños de test (05/10/2025 a 28/01/2026).
+
+  | Evento | Tiempo extra típico (mediana) | Promedio |
+  |---|---|---|
+  | Falla mecánica | +56 s | +1 min 19 s |
+  | Salud | +22 s | +34 s |
+  | Conducta | +12 s | +25 s |
+  | Alguna anomalía | +27 s | +45 s |
+
+  Las barras de los eventos en Vigilar o Alerta van en ámbar o rojo y llevan su estado; las demás van en gris. Al pasar el cursor se ven el promedio y la duración esperada (lo normal de la vaca más el tiempo extra).
+- **Este ordeño duró…:** solo en el modo **Del dataset**, lo que duró de verdad frente a lo normal de la vaca.
+- **Espera en la fila:** la espera estimada en la fila de la máquina de la sesión y cuánto bajaría si los ordeños con ese evento duraran lo normal (todos los de test, no solo este). Es la forma en que los eventos hacen crecer la fila.
+
+Son valores típicos, no una predicción de la duración: un ordeño con falla mecánica puede durar lo normal o mucho más. Se usa la mediana porque unos pocos ordeños muy largos suben el promedio.
 
 ### Nombres de vacas y robots
 
@@ -156,7 +178,7 @@ Este modo usa los datos reales de ese ordeño y su historial. Además de la pred
 
 ### Tabla comparativa
 
-Arriba de la pestaña **Resultado detallado** hay una tabla con una fila por evento: la probabilidad (con la etiqueta **alerta** cuando llega al umbral) y el umbral de alerta. En el modo **Del dataset** se agrega la columna **Real**.
+Arriba de la pestaña **Resultado detallado** hay una tabla con una fila por evento: la probabilidad (con la etiqueta **alerta** cuando llega al umbral), el umbral de alerta y cuánto tarda de más el ordeño si ocurre (**Si ocurre, tarda**). En el modo **Del dataset** se agrega la columna **Real**.
 
 ### Tarjetas por evento
 
@@ -168,6 +190,7 @@ Debajo hay una tarjeta por evento con:
 | **Barra** | La parte de color es la probabilidad; la línea vertical marca el **umbral de alerta**. |
 | **Alerta / Sin alerta** | Hay alerta cuando la probabilidad llega al umbral. Cada evento tiene su propio umbral, elegido para detectar al menos el 80 % de los eventos en validación. Por eso un 15 % puede ser alerta en falla mecánica y un 30 % no serlo en alguna anomalía. |
 | **Real** | Solo en el modo **Del dataset**: si el evento ocurrió. |
+| **Si ocurre…** | Cuánto suele tardar de más el ordeño con ese evento y cuánto duraría para esta vaca (ver [Tiempo del ordeño](#tiempo-del-ordeño)). |
 | **Variable más importante** | La variable que más aumentó el riesgo en este ordeño (ver abajo). |
 
 ### La variable más importante

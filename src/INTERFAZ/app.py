@@ -5,6 +5,8 @@ Con el dataset integrado ya cargado, se elige una vaca y se captura una sesión 
 una del dataset), y el XGBoost da la probabilidad de cada evento y la variable que
 más aumenta el riesgo, traducida a lenguaje no técnico con qué revisar (traduccion.py). Si existe
 Data/mapa_id_vacas.csv, las vacas y las máquinas se muestran con su nombre real (VMS 1, VMS 2, VMS 3).
+Con src/EVALUATION/metrics/duracion_por_evento.json también dice cuánto se alarga el ordeño si ocurre cada
+evento (tiempos.py).
 
 Uso, desde la raíz del repo y después de preparar los datos y src/MODELING/XGBoost/build_history_features.py:
     python src/INTERFAZ/app.py
@@ -19,6 +21,7 @@ from flask import Flask, jsonify, request
 
 import modelos
 import nueva_sesion as ns
+import tiempos
 import traduccion
 
 PORT = 8000
@@ -53,8 +56,13 @@ def load():
               f"({traduccion.MAP_PATH.name})", flush=True)
     else:
         print(f"[app] Sin {traduccion.MAP_PATH.name}: se muestran los identificadores anonimizados", flush=True)
+    times = tiempos.load(visits)
+    if times is None:
+        print(f"[app] Sin {tiempos.METRICS_PATH.name}: no se muestra cuánto se alarga el ordeño "
+              "(correr src/EVALUATION/duracion_por_evento.py)", flush=True)
     print("[app] Cargando el modelo...", flush=True)
-    state.update(visits=visits, herd=visits[ns.is_milking(visits)], model=modelos.load_model(), labels=labels)
+    state.update(visits=visits, herd=visits[ns.is_milking(visits)], model=modelos.load_model(), labels=labels,
+                 times=times)
 
 
 def plain(value):
@@ -159,10 +167,13 @@ def predict():
         results = state["model"].predict(sessions)
 
     row = sessions.iloc[-1]
+    machine = ns.machine_of(row)
+    times = tiempos.describe(state["times"], sessions, machine, row if actual is not None else None)
     return {
-        "vaca": capture["vaca"], "inicio": plain(row["inicio"]), "real": actual, "avisos": notes,
+        "vaca": capture["vaca"], "inicio": plain(row["inicio"]), "maquina": machine, "real": actual, "avisos": notes,
+        "tiempo": times,
         "resultados": traduccion.describe_results(results, state["labels"]),
-        "variables": traduccion.session_variables(row, modelos.xgb_dataset.FEATURES, ns.machine_of(row), state["labels"]),
+        "variables": traduccion.session_variables(row, modelos.xgb_dataset.FEATURES, machine, state["labels"]),
     }
 
 

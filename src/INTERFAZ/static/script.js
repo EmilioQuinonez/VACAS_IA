@@ -9,6 +9,12 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<"
 const cowName = (id) => info?.etiquetas?.vacas?.[id] ?? id;
 const machineName = (id) => info?.etiquetas?.maquinas?.[id] ?? id;
 const byName = (name) => (a, b) => name(a).localeCompare(name(b), "es", {numeric: true});
+// Duraciones en minutos (de tiempos.py) a «5 min 17 s» o «56 s».
+function fmtDur(minutes) {
+  const total = Math.round(Math.abs(minutes) * 60), m = Math.floor(total / 60), s = total % 60;
+  return m ? (s ? `${m} min ${s} s` : `${m} min`) : `${s} s`;
+}
+const fmtExtra = (minutes) => (minutes < 0 ? "−" : "+") + fmtDur(minutes);
 const fmtDate = (s) => { const [d, t] = s.split(" "); const [y, m, dd] = d.split("-"); return `${dd}/${m}/${y} ${t.slice(0, 5)}`; };
 
 // Íconos de static/iconos.svg: acompañan al texto, nunca lo reemplazan (por eso aria-hidden).
@@ -94,12 +100,13 @@ function factorList(factors) {
 
 function renderResults(data) {
   const events = info.eventos;
-  const header = `<tr><th>Evento</th><th>Probabilidad</th><th>Umbral de alerta</th>${data.real ? "<th>Real</th>" : ""}</tr>`;
+  const times = data.tiempo;
+  const header = `<tr><th>Evento</th><th>Probabilidad</th><th>Umbral de alerta</th>${times ? "<th>Si ocurre, tarda</th>" : ""}${data.real ? "<th>Real</th>" : ""}</tr>`;
   const rows = events.map((e) => {
     const r = data.resultados[e.id];
     return `<tr><td><span class="event-cell">${eventLabel(e.id)}</span></td>
       <td class="num">${pct(r.probabilidad)} ${r.alerta ? '<span class="badge alert">alerta</span>' : ""}</td>
-      <td class="num">${pct(r.umbral)}</td>${data.real ? `<td>${data.real[e.id] ? "ocurrió" : "no ocurrió"}</td>` : ""}</tr>`;
+      <td class="num">${pct(r.umbral)}</td>${times ? `<td class="num">${fmtExtra(times.eventos[e.id].extra_mediana)}</td>` : ""}${data.real ? `<td>${data.real[e.id] ? "ocurrió" : "no ocurrió"}</td>` : ""}</tr>`;
   }).join("");
 
   const detail = `<div class="model"><h3>${esc(info.modelo.nombre)}</h3><div class="cards">${events.map((e) => {
@@ -110,6 +117,7 @@ function renderResults(data) {
       <div class="meter"><span style="width:${(100 * r.probabilidad).toFixed(1)}%"></span><i style="left:${(100 * r.umbral).toFixed(1)}%"></i></div>
       <span class="badge ${r.alerta ? "alert" : "ok"}">${r.alerta ? "Alerta" : "Sin alerta"} · umbral ${pct(r.umbral)}</span>
       ${data.real ? `<div class="real">Real: ${data.real[e.id] ? "ocurrió" : "no ocurrió"}</div>` : ""}
+      ${times ? `<p class="delay">${ico("reloj")}<span>${delayText(e.id, times)}</span></p>` : ""}
       ${factorList(r.factores)}
     </div>`;
   }).join("")}</div></div>`;
@@ -187,7 +195,71 @@ function verdict() {
   const [state, text] = alerts.length ? ["alerta", `Revisar a la vaca ${cow}: alerta en ${esc(joinNames(alerts))}.`]
     : watch.length ? ["vigilar", `Vigilar a la vaca ${cow}: ${esc(joinNames(watch))} cerca del umbral.`]
     : ["normal", `Sin alertas: ordeño normal para la vaca ${cow}.`];
-  return `<div class="verdict st-${state}"><span class="verdict-light">${ico(STATES[state].icon)}</span><p>${text}</p></div>`;
+  const main = mainDelayEvent(), t = lastResult.tiempo;
+  const time = main ? `<p class="verdict-time">${ico("reloj")}<span>Si ocurre ${esc(eventName(main).toLowerCase())}, el ordeño
+    tardaría unos <b>${fmtDur(t.eventos[main].extra_mediana)} más</b>${t.normal != null ? ` (${fmtDur(t.normal)} → ${fmtDur(t.eventos[main].esperado)})` : ""}.</span></p>` : "";
+  return `<div class="verdict st-${state}"><span class="verdict-light">${ico(STATES[state].icon)}</span><div><p>${text}</p>${time}</div></div>`;
+}
+
+// --- Tiempo del ordeño (src/EVALUATION/duracion_por_evento.py): cuánto suele alargarse si ocurre cada evento.
+
+// Frase de cuánto se alarga el ordeño si ocurre el evento, frente a lo normal de la vaca.
+function delayText(eventId, t = lastResult.tiempo) {
+  const e = t.eventos[eventId];
+  const range = t.normal != null ? ` (${fmtDur(t.normal)} → ${fmtDur(e.esperado)})` : "";
+  return `Si ocurre, el ordeño suele tardar <b>${fmtDur(e.extra_mediana)} más</b> que uno normal de esta vaca${range}.`;
+}
+const delayLine = (eventId) => lastResult.tiempo ? `<p class="delay">${ico("reloj")}<span>${delayText(eventId)}</span></p>` : "";
+
+// El evento que más alarga el ordeño entre los que están en alerta (o, si no hay, en vigilar). Se prefieren
+// los tres eventos concretos; «alguna anomalía» solo si ninguno de ellos está en esa zona.
+function mainDelayEvent() {
+  const r = lastResult.resultados, t = lastResult.tiempo;
+  if (!t) return null;
+  for (const state of ["alerta", "vigilar"]) {
+    const ids = info.eventos.filter((e) => e.id !== "alguna_anomalia" && stateOf(r[e.id]) === state).map((e) => e.id);
+    if (ids.length) return ids.sort((a, b) => t.eventos[b].extra_mediana - t.eventos[a].extra_mediana)[0];
+    if (stateOf(r.alguna_anomalia) === state) return "alguna_anomalia";
+  }
+  return null;
+}
+
+// Barras de minutos extra por evento (mediana), lo normal de la vaca, lo que duró de verdad (en un ordeño
+// del dataset) y la espera en la fila de la máquina de la sesión.
+function timeSection() {
+  const t = lastResult.tiempo, results = lastResult.resultados;
+  if (!t) return "";
+  const max = Math.max(...Object.values(t.eventos).map((e) => e.extra_mediana));
+  const rows = eventsFirstAny().map((ev) => {
+    const e = t.eventos[ev.id], state = stateOf(results[ev.id]);
+    return `<div class="delay-row st-${state}" tabindex="0" data-event="${ev.id}">
+      <span class="delay-name">${eventLabel(ev.id)}</span>
+      <span class="delay-track"><span class="delay-bar" style="width:${(100 * e.extra_mediana / max).toFixed(1)}%"></span></span>
+      <span class="delay-val">${fmtExtra(e.extra_mediana)}</span>
+      <span class="delay-state">${state === "normal" ? "" : stateBadge(state)}</span>
+    </div>`;
+  }).join("");
+  const cow = esc(cowName(lastResult.vaca));
+  const normal = t.normal != null
+    ? `Un ordeño normal de la vaca ${cow} dura <b>${fmtDur(t.normal)}</b> (mediana de sus últimos ${t.ordenos_normales} ordeños sin evento).`
+    : `La vaca ${cow} no tiene ordeños sin evento antes de esta sesión para saber cuánto dura uno normal.`;
+  const real = t.real != null && t.normal != null
+    ? `<p class="time-real">${ico("historial")}<span>Este ordeño duró <b>${fmtDur(t.real)}</b>: ${fmtExtra(t.real - t.normal)} frente a lo normal.</span></p>` : "";
+  const main = mainDelayEvent() ?? "alguna_anomalia", saving = t.eventos[main].ahorro_espera;
+  const queue = t.espera_maquina != null
+    ? `<p class="time-queue">${ico("robot")}<span>En ${esc(machineName(lastResult.maquina))} la espera estimada en la fila es de
+        ${fmtDur(t.espera_maquina)}${saving != null ? `; si todos los ordeños con ${esc(eventName(main).toLowerCase())} duraran lo
+        normal, bajaría unos ${fmtDur(saving)}` : ""}.</span></p>` : "";
+  return `<h3 class="section-title">${ico("reloj")}Tiempo del ordeño</h3>
+    <section class="time-card">
+      <p class="time-normal">${normal} Si ocurre un evento, suele tardar más:</p>
+      <div class="delay-chart" aria-label="Minutos extra si ocurre cada evento">${rows}</div>
+      ${real}${queue}
+      <p class="hint">Retraso típico (mediana) de los ordeños con ese evento frente a los ordeños sin evento de la misma
+        vaca, medido en test (${fmtDate(t.periodo[0] + " 00:00").slice(0, 10)} a ${fmtDate(t.periodo[1] + " 00:00").slice(0, 10)},
+        ${t.ordenos_test.toLocaleString("es-MX")} ordeños; src/EVALUATION/duracion_por_evento.py). En promedio el retraso es
+        mayor porque algunos ordeños se alargan mucho: pasa el cursor sobre una barra para verlo.</p>
+    </section>`;
 }
 
 // Velocímetro (medio círculo): zonas normal / vigilar / alerta sobre 0-100 %, marca del umbral y aguja en
@@ -225,6 +297,7 @@ function heroGauge() {
       <i class="zone-swatch"></i><span class="zone-name">${z === state ? ico(STATES[z].icon) : ""}${STATES[z].label}</span>
       <small>${range}</small></div>`).join("")}</div>
     <p class="hero-sentence">${sentence}</p>
+    ${state !== "normal" ? delayLine("alguna_anomalia") : ""}
     ${whyLine(r, state !== "normal")}
   </section>`;
 }
@@ -240,6 +313,7 @@ function smallGauges() {
       <p class="gauge-value">${pctVs(r.probabilidad, r.umbral)}</p>
       <p class="gauge-meta">${stateBadge(state)} <span>alerta desde ${pctVs(r.umbral, r.probabilidad)}</span></p>
       <p class="gauge-real">${realText(e.id)}</p>
+      ${state !== "normal" ? delayLine(e.id) : ""}
       ${whyLine(r, state !== "normal")}
     </section>`;
   }).join("")}</div>`;
@@ -255,7 +329,8 @@ function renderCharts() {
     ${verdict()}
     ${heroGauge()}
     <h3 class="section-title">Cada evento</h3>
-    ${smallGauges()}${gaugeLegend}`;
+    ${smallGauges()}${gaugeLegend}
+    ${timeSection()}`;
 }
 
 // Tooltip compartido: valor primero y después el contexto (textContent: los nombres vienen de datos).
@@ -274,8 +349,15 @@ function tip(lines, x, y) {
 }
 const hideTip = () => { $("viz-tip").hidden = true; };
 
-const CHART_CARDS = ".hero, .gauge-card";
+const CHART_CARDS = ".hero, .gauge-card, .delay-row";
 function cardTip(el, x, y) {
+  if (el.classList.contains("delay-row")) {
+    const t = lastResult.tiempo, e = t.eventos[el.dataset.event];
+    tip([`${fmtExtra(e.extra_mediana)} (mediana)`, `${eventName(el.dataset.event)} · tiempo extra si ocurre`,
+      `En promedio: ${fmtExtra(e.extra_media)}`,
+      t.normal != null ? `Duración esperada: ${fmtDur(e.esperado)} (normal ${fmtDur(t.normal)})` : ""].filter(Boolean), x, y);
+    return;
+  }
   const r = lastResult.resultados[el.dataset.event], f = mainFactor(r);
   tip([pct(r.probabilidad), `${info.modelo.nombre} · ${eventName(el.dataset.event)}`,
     `Umbral ${pct(r.umbral)} · ${STATES[stateOf(r)].label}`,

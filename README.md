@@ -262,7 +262,7 @@ En Mac, XGBoost necesita OpenMP: si falla al cargar `libxgboost.dylib`, instala 
 
 - **Nueva sesión:** eliges una vaca y capturas lo que se sabe al entrar al robot (fecha y hora, máquina, número de ordeño, temperatura, humedad y horas con THI alto). El resto de las variables (FME, sangre, ordeño previo, tasas de la vaca y del hato y calendario) se calcula con el historial de la vaca, con las mismas funciones de `integrate_derivates.py` y `build_history_features.py`. La fecha puede ser a lo más el día siguiente al fin del dataset, porque las tasas del hato usan los 7 días anteriores; si pasaron más de 48 h desde el último ordeño o 45 días desde la última visita, la página lo avisa.
 - **Del dataset:** eliges un ordeño que ya está en los datos y además ves si cada evento ocurrió.
-- El XGBoost da la probabilidad calibrada de los 4 eventos, si pasa el umbral de alerta elegido en val y la variable que más aumenta el riesgo, con el mismo método que sus alertas de test (SHAP). Si ninguna variable sube el riesgo, no se muestra ninguna. Es una asociación, no una causa. La pestaña **Resultado**, que se abre al predecir, lo muestra en velocímetros; **Resultado detallado** tiene la tabla y las tarjetas por evento.
+- El XGBoost da la probabilidad calibrada de los 4 eventos, si pasa el umbral de alerta elegido en val y la variable que más aumenta el riesgo, con el mismo método que sus alertas de test (SHAP). Si ninguna variable sube el riesgo, no se muestra ninguna. Es una asociación, no una causa. La pestaña **Resultado**, que se abre al predecir, lo muestra en velocímetros y dice cuánto se alargaría el ordeño si ocurre cada evento (con `src/EVALUATION/metrics/duracion_por_evento.json`); **Resultado detallado** tiene la tabla y las tarjetas por evento.
 - La pestaña **Desempeño del modelo** muestra F1, recall, precisión y Brier del XGBoost en test, y la línea base de persistencia de `src/EVALUATION/metrics/lineas_base.json`.
 
 El [manual de uso de la interfaz](docs/DEPLOYMENT/Manual_interfaz.md) explica cada campo, cómo leer los resultados, los avisos y errores, y los problemas comunes.
@@ -420,6 +420,7 @@ La estructura del repositorio es:
     - [`nueva_sesion.py`](src/INTERFAZ/nueva_sesion.py) — Arma las variables de una sesión capturada con el historial de la vaca.
     - [`modelos.py`](src/INTERFAZ/modelos.py) — Carga el XGBoost y da la probabilidad y la variable más importante de cada evento.
     - [`traduccion.py`](src/INTERFAZ/traduccion.py) — Nombres reales de vacas y máquinas, y el glosario de variables en lenguaje no técnico.
+    - [`tiempos.py`](src/INTERFAZ/tiempos.py) — Cuánto se alarga el ordeño si ocurre cada evento (métricas de `src/EVALUATION/duracion_por_evento.py`) frente a lo normal de la vaca.
     - [`static/`](src/INTERFAZ/static/) — La página (`index.html`), sus estilos (`styles.css`), su código (`script.js`) y los íconos (`iconos.svg`, `favicon.svg`).
   - **[`RETO_DATOS/`](src/RETO_DATOS/)** — Código y datos del reto de datos.
     - [`get_data_sample.py`](src/RETO_DATOS/get_data_sample.py) — Obtiene una muestra estratificada por vaca con la fórmula de Cochran.
