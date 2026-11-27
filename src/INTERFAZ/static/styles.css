@@ -180,6 +180,20 @@ label .ico { color: var(--accent); }
 .zone-item small { font-size: 11px; color: var(--muted); }
 .hero-sentence { text-align: center; font-size: 16px; font-weight: 600; margin: 0 0 8px; }
 
+/* Detalle desplegable bajo cada velocímetro (cerrado al inicio) */
+.more { margin-top: 10px; }
+.more summary { list-style: none; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; user-select: none;
+                font-size: 13px; font-weight: 600; color: var(--accent); padding: 5px 12px; border: 1px solid var(--border);
+                border-radius: 16px; }
+.more summary::-webkit-details-marker { display: none; }
+.more summary:hover { background: var(--bg); }
+.more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.more summary .ico { margin-right: 4px; }
+.more summary .more-chevron { margin: 0 0 0 4px; transition: transform .15s; }
+.more[open] summary .more-chevron { transform: rotate(180deg); }
+.more-body { text-align: left; margin-top: 4px; }
+.hero .more { text-align: center; }
+
 /* Velocímetros chicos */
 .gauge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 12px; }
 .gauge-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center; }

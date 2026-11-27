@@ -83,8 +83,11 @@ Muestra los resultados en velocímetros.
   - un velocímetro con el número debajo;
   - debajo, una escala de las tres zonas con su color y su rango (**Normal**, **Vigilar** y **Alerta**). La zona donde cae la aguja aparece en negritas y con su ícono, y las otras atenuadas. Es solo una leyenda: no se puede presionar;
   - una frase que lo resume (por ejemplo, "Está cerca del umbral: 33.7 %; la alerta empieza en 33.8 %");
-  - lo que más pesó y qué revisar.
-- **Cada evento:** un velocímetro chico para falla mecánica, salud y conducta, con su estado, lo que más pesó y qué revisar. En los velocímetros en Vigilar o Alerta (también el grande) se agrega cuánto suele tardar de más el ordeño si ocurre ese evento.
+  - el botón **Por qué y qué revisar** (o **Por qué**, si está en Normal), que despliega lo que más pesó, qué revisar y cuánto se alargaría el ordeño.
+- **Cada evento:** un velocímetro chico para falla mecánica, salud y conducta, con su estado y el mismo botón desplegable.
+- **Detalle desplegable:** el texto bajo cada velocímetro está oculto al inicio para que la pantalla se lea de un vistazo. Al presionar **Por qué y qué revisar** (o **Por qué**) se muestra y al presionarlo otra vez se oculta:
+  - en Vigilar o Alerta: cuánto suele tardar de más el ordeño si ocurre el evento, lo que más pesó y qué revisar;
+  - en Normal: solo lo que más pesó.
 - **Ventanitas de explicación:** sin tener que ir al **Glosario**.
   - **Variable:** el nombre de la variable en "Lo que más pesó" está subrayado con un ícono ⓘ. Al pasar el cursor sobre él aparece una ventanita con su valor en este ordeño, qué significa y qué revisar.
   - **Evento:** los nombres de los eventos (Falla mecánica, Salud, Conducta y Alguna anomalía) también están subrayados, en esta pestaña y en **Resultado detallado**. Al pasar el cursor se ve qué es el evento, qué cuenta como evento (según `src/DP/integrate_derivates.py` y el reporte de Data Preparation II), por qué importa, cuánto suele alargar el ordeño y qué revisar.

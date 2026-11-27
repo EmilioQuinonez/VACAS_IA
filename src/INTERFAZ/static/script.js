@@ -312,9 +312,18 @@ function heroGauge() {
       <i class="zone-swatch"></i><span class="zone-name">${z === state ? ico(STATES[z].icon) : ""}${STATES[z].label}</span>
       <small>${range}</small></div>`).join("")}</div>
     <p class="hero-sentence">${sentence}</p>
-    ${state !== "normal" ? delayLine("alguna_anomalia") : ""}
-    ${whyLine(r, state !== "normal")}
+    ${moreInfo(state, delayLine("alguna_anomalia"), r)}
   </section>`;
+}
+
+// Detalle bajo cada velocímetro (tiempo extra, lo que más pesó y qué revisar), en una pestaña desplegable que
+// empieza cerrada. El tiempo extra y qué revisar solo van si el evento está en Vigilar o Alerta.
+function moreInfo(state, delay, r) {
+  const flagged = state !== "normal";
+  return `<details class="more">
+    <summary>${ico("info")}<span>${flagged ? "Por qué y qué revisar" : "Por qué"}</span>${ico("chevron", "more-chevron")}</summary>
+    <div class="more-body">${flagged ? delay : ""}${whyLine(r, flagged)}</div>
+  </details>`;
 }
 
 // Velocímetros chicos de los otros tres eventos.
@@ -328,8 +337,7 @@ function smallGauges() {
       <p class="gauge-value">${pctVs(r.probabilidad, r.umbral)}</p>
       <p class="gauge-meta">${stateBadge(state)} <span>alerta desde ${pctVs(r.umbral, r.probabilidad)}</span></p>
       <p class="gauge-real">${realText(e.id)}</p>
-      ${state !== "normal" ? delayLine(e.id) : ""}
-      ${whyLine(r, state !== "normal")}
+      ${moreInfo(state, delayLine(e.id), r)}
     </section>`;
   }).join("")}</div>`;
 }
@@ -339,8 +347,8 @@ const gaugeLegend = `<p class="hint key-row"><span class="key-zone z-normal"></s
 
 function renderCharts() {
   if (!lastResult) { $("tab-graficas").innerHTML = emptyState("Elige una vaca, captura la sesión y presiona <b>Predecir</b>."); return; }
-  $("tab-graficas").innerHTML = `<p class="hint">Velocímetros de ${esc(info.modelo.nombre)}. Pasa el cursor por la variable
-      de «Lo que más pesó» para ver qué significa.</p>
+  $("tab-graficas").innerHTML = `<p class="hint">Velocímetros de ${esc(info.modelo.nombre)}. Presiona <b>Por qué</b> bajo un
+      velocímetro para ver lo que más pesó y qué revisar; pasa el cursor por un nombre subrayado para ver qué significa.</p>
     ${verdict()}
     ${heroGauge()}
     <h3 class="section-title">Cada evento</h3>
