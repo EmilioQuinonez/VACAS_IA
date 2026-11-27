@@ -85,6 +85,7 @@ Muestra los resultados en velocímetros.
   - una frase que lo resume (por ejemplo, "Está cerca del umbral: 33.7 %; la alerta empieza en 33.8 %");
   - lo que más pesó y qué revisar.
 - **Cada evento:** un velocímetro chico para falla mecánica, salud y conducta, con su estado, lo que más pesó y qué revisar. En los velocímetros en Vigilar o Alerta (también el grande) se agrega cuánto suele tardar de más el ordeño si ocurre ese evento.
+- **Qué significa la variable:** el nombre de la variable en "Lo que más pesó" está subrayado con un ícono ⓘ. Al presionarlo se abre una ventanita con su valor en este ordeño, qué significa y qué revisar, sin tener que ir al **Glosario**. Se cierra con la ×, con Esc o presionando fuera de ella.
 - **Cómo leer un velocímetro:** va de 0 % a 100 %, y la aguja marca la probabilidad.
 
   | Zona | Color | Rango |

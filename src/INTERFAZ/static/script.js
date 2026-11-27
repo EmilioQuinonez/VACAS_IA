@@ -182,7 +182,11 @@ const joinNames = (names) => names.length < 2 ? names.join("") : `${names.slice(
 function whyLine(r, withAction) {
   const f = mainFactor(r);
   if (!f) return `<p class="why muted">Ninguna variable aumenta el riesgo frente a una vaca promedio.</p>`;
-  return `<p class="why">${ico(f.icono)}<span>Lo que más pesó: <b>${esc(f.nombre)}</b>${f.valor_legible ? ` · ${esc(f.valor_legible)}` : ""}</span></p>
+  // El nombre abre una ventanita con qué significa y qué revisar (si la variable está en el glosario).
+  const name = f.significado
+    ? `<button type="button" class="var-link" aria-haspopup="dialog" aria-expanded="false" aria-controls="var-pop">${esc(f.nombre)}${ico("info", "var-link-ico")}</button>`
+    : `<b>${esc(f.nombre)}</b>`;
+  return `<p class="why">${ico(f.icono)}<span>Lo que más pesó: ${name}${f.valor_legible ? ` · ${esc(f.valor_legible)}` : ""}</span></p>
     ${udder(f.variable)}
     ${withAction ? `<p class="todo"><b>Qué revisar:</b> ${esc(f.accion)}</p>` : ""}`;
 }
@@ -364,15 +368,62 @@ function cardTip(el, x, y) {
     f ? `Lo que más pesó: ${f.nombre}${f.valor_legible ? ` (${f.valor_legible})` : ""}` : "Ninguna variable aumenta el riesgo"], x, y);
 }
 $("tab-graficas").addEventListener("pointermove", (e) => {
+  if (!$("var-pop").hidden || e.target.closest(".var-link")) { hideTip(); return; }
   const el = e.target.closest(CHART_CARDS);
   if (el) cardTip(el, e.clientX, e.clientY); else hideTip();
 });
 $("tab-graficas").addEventListener("pointerleave", hideTip);
 $("tab-graficas").addEventListener("focusin", (e) => {
+  if (e.target.closest(".var-link")) { hideTip(); return; }
   const el = e.target.closest(CHART_CARDS);
   if (el) { const b = el.getBoundingClientRect(); cardTip(el, b.left + b.width / 2, b.top); }
 });
 $("tab-graficas").addEventListener("focusout", hideTip);
+
+// --- Ventanita de la variable más importante: qué significa y qué revisar, sin ir al glosario.
+let popButton = null;
+function openVarPop(button) {
+  const f = mainFactor(lastResult.resultados[button.closest("[data-event]").dataset.event]);
+  const pop = $("var-pop");
+  pop.innerHTML = `<div class="var-pop-head">
+      <span class="glossary-icon">${ico(f.icono)}</span>
+      <h4 id="var-pop-title">${esc(f.nombre)}</h4>
+      <button type="button" class="var-pop-close" aria-label="Cerrar">×</button>
+    </div>
+    ${f.valor_legible ? `<p class="var-pop-value">En este ordeño: <b>${esc(f.valor_legible)}</b></p>` : ""}
+    <p>${esc(f.significado)}</p>
+    <p class="action"><b>Qué revisar:</b> ${esc(f.accion)}</p>
+    <p class="hint">Es una asociación que encontró el modelo, no una causa. <span class="tech">${esc(f.variable)}</span></p>`;
+  closeVarPop(false);
+  popButton = button;
+  button.setAttribute("aria-expanded", "true");
+  pop.hidden = false;
+  hideTip();
+  // Debajo del nombre (o arriba si no cabe), dentro de la pantalla; se mueve con la página al hacer scroll.
+  const b = button.getBoundingClientRect(), box = pop.getBoundingClientRect();
+  const left = Math.max(8, Math.min(b.left, window.innerWidth - box.width - 8));
+  const below = b.bottom + 8 + box.height <= window.innerHeight || b.top - 8 - box.height < 0;
+  pop.style.left = `${left + window.scrollX}px`;
+  pop.style.top = `${(below ? b.bottom + 8 : b.top - 8 - box.height) + window.scrollY}px`;
+  pop.querySelector(".var-pop-close").focus();
+}
+function closeVarPop(restoreFocus = true) {
+  if ($("var-pop").hidden) return;
+  $("var-pop").hidden = true;
+  if (popButton) {
+    popButton.setAttribute("aria-expanded", "false");
+    if (restoreFocus && popButton.isConnected) popButton.focus();
+  }
+  popButton = null;
+}
+document.addEventListener("click", (e) => {
+  const button = e.target.closest(".var-link");
+  if (button) { button === popButton ? closeVarPop() : openVarPop(button); return; }
+  if (e.target.closest(".var-pop-close")) closeVarPop();
+  else if (!e.target.closest("#var-pop")) closeVarPop(false);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarPop(); });
+window.addEventListener("resize", () => closeVarPop(false));
 
 $("form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -392,6 +443,7 @@ $("form").addEventListener("submit", async (event) => {
   }
   const button = $("predecir");
   button.disabled = true; button.textContent = "Corriendo el modelo...";
+  closeVarPop(false);
   showTab("graficas");  // Al predecir se muestra la pestaña «Resultado» (los velocímetros)
   ["resultados", "graficas"].forEach((t) => { $(`tab-${t}`).innerHTML = `<p class="loading">Corriendo el modelo...</p>`; });
   try {
@@ -410,6 +462,7 @@ $("form").addEventListener("submit", async (event) => {
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   hideTip();
+  closeVarPop(false);
   ["graficas", "resultados", "variables", "desempeno", "glosario"].forEach((t) => { $(`tab-${t}`).hidden = t !== name; });
 }
 
