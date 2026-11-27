@@ -81,7 +81,7 @@ function udder(variable) {
 function factorList(factors) {
   if (!factors.length) return `<p class="hint factors-note">Ninguna variable aumenta el riesgo frente a una vaca promedio.</p>`;
   return `<ol class="factors"><li class="factors-title">Variable más importante</li>${factors.map((f) => `
-    <li><span class="name">${ico(f.icono)}${esc(f.nombre)}</span>${f.cuando ? ` <span class="value">(${esc(f.cuando)})</span>` : ""}
+    <li><span class="name">${ico(f.icono)}${esc(f.nombre)}</span>
       <div class="value">${esc(f.valor_legible)}</div>
       ${udder(f.variable)}
       <div class="up">▲ aumenta el riesgo</div>
@@ -93,15 +93,17 @@ function factorList(factors) {
 }
 
 function renderResults(data) {
-  const events = info.eventos, models = Object.keys(data.resultados);
-  const header = `<tr><th>Evento</th>${models.map((m) => `<th>${esc(m)}</th>`).join("")}${data.real ? "<th>Real</th>" : ""}</tr>`;
-  const rows = events.map((e) => `<tr><td><span class="event-cell">${eventLabel(e.id)}</span></td>${models.map((m) => {
-    const r = data.resultados[m][e.id];
-    return `<td class="num">${pct(r.probabilidad)} ${r.alerta ? '<span class="badge alert">alerta</span>' : ""}</td>`;
-  }).join("")}${data.real ? `<td>${data.real[e.id] ? "ocurrió" : "no ocurrió"}</td>` : ""}</tr>`).join("");
+  const events = info.eventos;
+  const header = `<tr><th>Evento</th><th>Probabilidad</th><th>Umbral de alerta</th>${data.real ? "<th>Real</th>" : ""}</tr>`;
+  const rows = events.map((e) => {
+    const r = data.resultados[e.id];
+    return `<tr><td><span class="event-cell">${eventLabel(e.id)}</span></td>
+      <td class="num">${pct(r.probabilidad)} ${r.alerta ? '<span class="badge alert">alerta</span>' : ""}</td>
+      <td class="num">${pct(r.umbral)}</td>${data.real ? `<td>${data.real[e.id] ? "ocurrió" : "no ocurrió"}</td>` : ""}</tr>`;
+  }).join("");
 
-  const detail = models.map((m) => `<div class="model"><h3>${esc(m)}</h3><div class="cards">${events.map((e) => {
-    const r = data.resultados[m][e.id];
+  const detail = `<div class="model"><h3>${esc(info.modelo.nombre)}</h3><div class="cards">${events.map((e) => {
+    const r = data.resultados[e.id];
     return `<div class="card">
       <div class="event">${eventLabel(e.id)}</div>
       <div class="prob">${pct(r.probabilidad)}</div>
@@ -110,7 +112,7 @@ function renderResults(data) {
       ${data.real ? `<div class="real">Real: ${data.real[e.id] ? "ocurrió" : "no ocurrió"}</div>` : ""}
       ${factorList(r.factores)}
     </div>`;
-  }).join("")}</div></div>`).join("");
+  }).join("")}</div></div>`;
 
   const notes = (data.avisos || []).map((a) => `<p class="notice">${ico("alerta")}${esc(a)}</p>`).join("");
   $("tab-resultados").innerHTML = `<h2 class="cow-title">${ico("vaca")}Vaca ${esc(cowName(data.vaca))} · ${fmtDate(data.inicio)}</h2>${notes}
@@ -140,12 +142,12 @@ function renderPerformance() {
     : "";
   $("tab-desempeno").innerHTML = `<p class="hint">Métricas en test (el 15 % más reciente de las sesiones). F1, recall y precisión usan el umbral
     elegido en validación para detectar al menos 80 % de los eventos; Brier mide la calibración de la probabilidad (más bajo es mejor).</p>` +
-    info.modelos.map((m) => performanceTable(m.nombre, m.desempeno)).join("") + baseline;
+    performanceTable(info.modelo.nombre, info.modelo.desempeno) + baseline;
 }
 
 function renderGlossary() {
   $("tab-glosario").innerHTML = `<p class="hint">Qué significa cada variable que puede aparecer como la más importante y qué
-    revisar cuando aparece. Son sugerencias: es una asociación que encontró cada modelo, no una causa, y no sustituye
+    revisar cuando aparece. Son sugerencias: es una asociación que encontró el modelo, no una causa, y no sustituye
     la revisión del veterinario o del técnico.</p>
     <dl class="glossary">${info.glosario.map((g) => `<div>
       <dt><span class="glossary-icon">${ico(g.icono)}</span><span>${esc(g.nombre)}<span class="tech">${esc(g.variable)}</span></span></dt>
@@ -154,9 +156,8 @@ function renderGlossary() {
     </div>`).join("")}</dl>`;
 }
 
-// --- Gráficas: velocímetros del XGBoost, el modelo principal. «Alguna anomalía» va en grande y los otros
-// tres eventos en velocímetros chicos.
-const CHART_MODEL = "XGBoost v5";
+// --- Gráficas: velocímetros del XGBoost. «Alguna anomalía» va en grande y los otros tres eventos en
+// velocímetros chicos.
 
 // Estado de un evento: alerta desde el umbral; «vigilar» desde la mitad del umbral (regla de la interfaz).
 const STATES = {
@@ -173,14 +174,14 @@ const joinNames = (names) => names.length < 2 ? names.join("") : `${names.slice(
 function whyLine(r, withAction) {
   const f = mainFactor(r);
   if (!f) return `<p class="why muted">Ninguna variable aumenta el riesgo frente a una vaca promedio.</p>`;
-  return `<p class="why">${ico(f.icono)}<span>Lo que más pesó: <b>${esc(f.nombre)}</b>${f.valor_legible ? ` · ${esc(f.valor_legible)}` : ""}${f.cuando ? ` (${esc(f.cuando)})` : ""}</span></p>
+  return `<p class="why">${ico(f.icono)}<span>Lo que más pesó: <b>${esc(f.nombre)}</b>${f.valor_legible ? ` · ${esc(f.valor_legible)}` : ""}</span></p>
     ${udder(f.variable)}
     ${withAction ? `<p class="todo"><b>Qué revisar:</b> ${esc(f.accion)}</p>` : ""}`;
 }
 
-// Franja de veredicto del modelo: alerta, vigilar o normal, con los eventos que lo provocan.
-function verdict(model) {
-  const results = lastResult.resultados[model], cow = esc(cowName(lastResult.vaca));
+// Franja de veredicto: alerta, vigilar o normal, con los eventos que lo provocan.
+function verdict() {
+  const results = lastResult.resultados, cow = esc(cowName(lastResult.vaca));
   const named = (state) => eventsFirstAny().filter((e) => stateOf(results[e.id]) === state).map((e) => eventName(e.id).toLowerCase());
   const alerts = named("alerta"), watch = named("vigilar");
   const [state, text] = alerts.length ? ["alerta", `Revisar a la vaca ${cow}: alerta en ${esc(joinNames(alerts))}.`]
@@ -208,8 +209,8 @@ function gaugeSvg(r) {
 
 // «Alguna anomalía» en grande: velocímetro, número, las tres zonas escritas con su rango (se resalta la
 // zona en la que cae), una frase que lo resume y lo que más pesó.
-function heroGauge(model) {
-  const r = lastResult.resultados[model].alguna_anomalia, state = stateOf(r), u = r.umbral;
+function heroGauge() {
+  const r = lastResult.resultados.alguna_anomalia, state = stateOf(r), u = r.umbral;
   const pv = pctVs(r.probabilidad, u), uv = pctVs(u, r.probabilidad);
   const zones = [["normal", `0 a ${pct0(u / 2)}`], ["vigilar", `${pct0(u / 2)} a ${uv}`], ["alerta", `${uv} a 100 %`]];
   const sentence = {
@@ -217,7 +218,7 @@ function heroGauge(model) {
     vigilar: `Está cerca del umbral: ${pv}; la alerta empieza en ${uv}.`,
     normal: `Está en zona normal: ${pv}; la alerta empieza en ${uv}.`,
   }[state];
-  return `<section class="hero st-${state}" tabindex="0" data-model="${esc(model)}" data-event="alguna_anomalia">
+  return `<section class="hero st-${state}" tabindex="0" data-event="alguna_anomalia">
     <h4>${eventLabel("alguna_anomalia")} ${realText("alguna_anomalia")}</h4>
     <div class="hero-chart">${gaugeSvg(r)}<p class="hero-value">${pv}</p></div>
     <div class="zone-scale" aria-label="Zonas del velocímetro">${zones.map(([z, range]) => `<div class="zone-item p-${z}${z === state ? " is-on" : ""}">
@@ -229,11 +230,11 @@ function heroGauge(model) {
 }
 
 // Velocímetros chicos de los otros tres eventos.
-function smallGauges(model) {
-  const results = lastResult.resultados[model];
+function smallGauges() {
+  const results = lastResult.resultados;
   return `<div class="gauge-grid">${info.eventos.filter((e) => e.id !== "alguna_anomalia").map((e) => {
     const r = results[e.id], state = stateOf(r);
-    return `<section class="gauge-card st-${state}" tabindex="0" data-model="${esc(model)}" data-event="${e.id}">
+    return `<section class="gauge-card st-${state}" tabindex="0" data-event="${e.id}">
       <h4>${eventLabel(e.id)}</h4>
       ${gaugeSvg(r)}
       <p class="gauge-value">${pctVs(r.probabilidad, r.umbral)}</p>
@@ -249,15 +250,12 @@ const gaugeLegend = `<p class="hint key-row"><span class="key-zone z-normal"></s
 
 function renderCharts() {
   if (!lastResult) { $("tab-graficas").innerHTML = emptyState("Aquí aparecen las gráficas después de presionar <b>Predecir</b>."); return; }
-  if (!lastResult.resultados[CHART_MODEL]) {
-    $("tab-graficas").innerHTML = emptyState(`Activa ${esc(CHART_MODEL)} en «Modelos» para ver las gráficas.`); return;
-  }
-  $("tab-graficas").innerHTML = `<p class="hint">Velocímetros de ${esc(CHART_MODEL)}, el modelo principal. Pasa el
-      cursor (o toca) un velocímetro para ver el detalle.</p>
-    ${verdict(CHART_MODEL)}
-    ${heroGauge(CHART_MODEL)}
+  $("tab-graficas").innerHTML = `<p class="hint">Velocímetros de ${esc(info.modelo.nombre)}. Pasa el cursor (o toca) un
+      velocímetro para ver el detalle.</p>
+    ${verdict()}
+    ${heroGauge()}
     <h3 class="section-title">Cada evento</h3>
-    ${smallGauges(CHART_MODEL)}${gaugeLegend}`;
+    ${smallGauges()}${gaugeLegend}`;
 }
 
 // Tooltip compartido: valor primero y después el contexto (textContent: los nombres vienen de datos).
@@ -278,8 +276,8 @@ const hideTip = () => { $("viz-tip").hidden = true; };
 
 const CHART_CARDS = ".hero, .gauge-card";
 function cardTip(el, x, y) {
-  const r = lastResult.resultados[el.dataset.model][el.dataset.event], f = mainFactor(r);
-  tip([pct(r.probabilidad), `${el.dataset.model} · ${eventName(el.dataset.event)}`,
+  const r = lastResult.resultados[el.dataset.event], f = mainFactor(r);
+  tip([pct(r.probabilidad), `${info.modelo.nombre} · ${eventName(el.dataset.event)}`,
     `Umbral ${pct(r.umbral)} · ${STATES[stateOf(r)].label}`,
     f ? `Lo que más pesó: ${f.nombre}${f.valor_legible ? ` (${f.valor_legible})` : ""}` : "Ninguna variable aumenta el riesgo"], x, y);
 }
@@ -297,9 +295,7 @@ $("tab-graficas").addEventListener("focusout", hideTip);
 $("form").addEventListener("submit", async (event) => {
   event.preventDefault();
   $("error").textContent = "";
-  const chosen = [...document.querySelectorAll("#modelos input:checked")].map((i) => i.value);
-  if (!chosen.length) { $("error").textContent = "Elige al menos un modelo."; return; }
-  const body = {modo: mode, vaca: $("vaca").value, modelos: chosen};
+  const body = {modo: mode, vaca: $("vaca").value};
   if (mode === "nueva") {
     Object.assign(body, {
       inicio: `${$("fecha").value} ${$("hora").value}`, maquina: $("maquina").value,
@@ -313,9 +309,9 @@ $("form").addEventListener("submit", async (event) => {
     body.inicio = $("ordeno").value;
   }
   const button = $("predecir");
-  button.disabled = true; button.textContent = "Corriendo los modelos...";
+  button.disabled = true; button.textContent = "Corriendo el modelo...";
   if ($("tab-graficas").hidden) showTab("resultados");
-  ["resultados", "graficas"].forEach((t) => { $(`tab-${t}`).innerHTML = `<p class="loading">Corriendo los modelos...</p>`; });
+  ["resultados", "graficas"].forEach((t) => { $(`tab-${t}`).innerHTML = `<p class="loading">Corriendo el modelo...</p>`; });
   try {
     lastResult = await api("/api/predecir", body);
     renderResults(lastResult);
@@ -353,7 +349,6 @@ $("vaca").addEventListener("change", () => loadCow().catch((e) => { $("error").t
     $("fecha-hint").textContent = `Fecha máxima: ${fmtDate(info.fecha_maxima + " 00:00").slice(0, 10)}, el día siguiente al fin del dataset.`;
     $("maquina").innerHTML = [...info.maquinas].sort(byName(machineName))
       .map((m) => `<option value="${esc(m)}">${esc(machineName(m))}</option>`).join("");
-    $("modelos").innerHTML = info.modelos.map((m) => `<label><input type="checkbox" value="${esc(m.nombre)}" checked> ${esc(m.nombre)}</label>`).join("");
     renderPerformance();
     renderGlossary();
     await loadCow();

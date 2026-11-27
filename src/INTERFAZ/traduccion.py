@@ -4,11 +4,11 @@ Traduce lo técnico de la interfaz al lenguaje del rancho:
 1. Identificadores: los hashes de vacas y máquinas vuelven a su nombre real (VMS 1, VMS 2, VMS 3 y el
    número de cada vaca) con Data/mapa_id_vacas.csv, que genera anonymize_data.py. El mapa nunca sale de
    Data/ (está en .gitignore): si no existe, la interfaz sigue mostrando los hashes.
-2. Variables: cada variable de los modelos tiene un nombre corto, qué significa sin tecnicismos y qué
+2. Variables: cada variable del XGBoost tiene un nombre corto, qué significa sin tecnicismos y qué
    revisar cuando aparece como factor. Los valores se muestran en sus unidades reales (por ejemplo, el
    MDI sin el logaritmo que le aplica clean_data.py).
 
-Los factores son asociaciones que encontró cada modelo, no causas: las acciones son sugerencias de qué
+Los factores son asociaciones que encontró el modelo, no causas: las acciones son sugerencias de qué
 revisar, no un diagnóstico.
 """
 
@@ -17,10 +17,9 @@ import re
 
 import pandas as pd
 
-from nueva_sesion import REFERENCE_MACHINE, ROOT, load_module
+from nueva_sesion import REFERENCE_MACHINE, ROOT
 
 MAP_PATH = ROOT / "Data" / "mapa_id_vacas.csv"
-logistic_dataset = load_module("logistic_dataset_bins", ROOT / "src" / "MODELING" / "logistic" / "dataset.py")
 
 MDI_ALERT = 1.4  # integrate_derivates.py: MDI >= 1.4 es evento de salud
 QUARTERS = {"di": "delantero izquierdo", "dd": "delantero derecho", "ti": "trasero izquierdo", "td": "trasero derecho"}
@@ -91,13 +90,8 @@ GLOSSARY = {
         "Si es alto, pedir al técnico que revise el robot (pezoneras gastadas, vacío o pulsación), porque puede "
         "lastimar los pezones.",
         "porcentaje"),
-    "sangre_pico_maquina": (
-        "Robot con mucha sangre en la leche",
-        "En los últimos 30 días más del 15 % de los ordeños de este robot tuvieron sangre en la leche.",
-        "Pedir al técnico que revise el robot (pezoneras gastadas, vacío o pulsación).",
-        "si_no"),
 
-    # Lo que pasó en el ordeño anterior (o en el que indique la LSTM).
+    # Lo que pasó en el ordeño anterior.
     "fme_connection": (
         "Pezón no encontrado",
         "En el ordeño anterior el robot no pudo encontrar o conectar algún pezón.",
@@ -202,11 +196,6 @@ GLOSSARY = {
         "En el ordeño anterior tenía al menos un cuarto marcado como inactivo (el robot no lo ordeña).",
         "Confirmar que ese cuarto esté bien marcado en el robot.",
         "si_no"),
-    "intervalo_horas_previo": (
-        "Horas entre ordeños anteriores",
-        "Cuántas horas pasaron entre dos de sus ordeños anteriores.",
-        "Si fueron muchas horas, revisar si le cuesta venir al robot (cojera o enfermedad).",
-        "horas"),
     "dias_en_leche": (
         "Días desde que empezó su ciclo de ordeño",
         "Días desde su primer ordeño después de su última ausencia larga (más de 45 días). Se usa como aproximación "
@@ -255,18 +244,13 @@ GLOSSARY = {
         "Día de la semana del ordeño.",
         "No requiere acción con la vaca; puede señalar días en que cambia la rutina o el personal.",
         "dia_semana"),
-    "es_domingo": (
-        "Domingo",
-        "Indica si el ordeño fue en domingo.",
-        "Revisar si en domingo cambia la rutina o el personal.",
-        "si_no"),
 }
 # Ícono de cada variable en static/iconos.svg, para reconocerla antes de leerla.
 ICONS = {
-    **dict.fromkeys(("intervalo_horas", "intervalo_horas_sin_dato", "intervalo_horas_previo", "hora"), "reloj"),
-    **dict.fromkeys(("regreso_tras_periodo_seco", "mes", "dia_semana", "es_domingo"), "calendario"),
+    **dict.fromkeys(("intervalo_horas", "intervalo_horas_sin_dato", "hora"), "reloj"),
+    **dict.fromkeys(("regreso_tras_periodo_seco", "mes", "dia_semana"), "calendario"),
     "estado_numero_de_ordeno": "numero",
-    **dict.fromkeys(("maquina", "sangre_tasa_maquina_30d", "sangre_pico_maquina"), "robot"),
+    **dict.fromkeys(("maquina", "sangre_tasa_maquina_30d"), "robot"),
     "t_sesion": "termometro",
     **dict.fromkeys(("thi_sesion", "horas_thi_alto_24h"), "sol"),
     **dict.fromkeys(("fme_connection", "fme_milk_production", "fme_incomplete", "mecanico_previo",
@@ -283,8 +267,8 @@ ICONS = {
     **dict.fromkeys(("dias_en_leche", "dias_en_hato"), "vaca"),
 }
 
-# Columnas que en la tabla de variables se juntan con otra o no se muestran.
-HIDDEN = re.compile(r"^(maquina_.+|(mes|hora|dia_semana)_(sin|cos))$")
+# Dummies de máquina: en la tabla de variables se juntan en una sola fila.
+HIDDEN = re.compile(r"^maquina_.+$")
 
 
 def load_labels(visits):
@@ -321,50 +305,6 @@ def to_number(value):
     return number if math.isfinite(number) else None
 
 
-def cycle(parts, name, period):
-    """Valor de un ciclo (hora o mes) a partir de su seno y coseno, como los codifica la regresión logística."""
-    sin, cos = to_number(parts.get(f"{name}_sin")), to_number(parts.get(f"{name}_cos"))
-    if sin is None or cos is None:
-        return None
-    return (math.atan2(sin, cos) / (2 * math.pi) * period) % period
-
-
-def day_range(parts, name, bins):
-    """Rango de días de las dummies <name>_rango_k de la regresión logística (sin dummy activa es el rango 0)."""
-    active = [int(k.rsplit("_", 1)[1]) for k, v in parts.items() if k.startswith(f"{name}_rango_") and to_number(v) == 1]
-    k = active[0] if active else 0
-    low, high = bins[k], bins[k + 1]
-    return f"{low:g} días o más" if math.isinf(high) else f"{low:g} a {high - 1:g} días"
-
-
-def from_logistic(name, parts, labels):
-    """
-    Valor de un factor de la regresión logística, que llega como «columna=valor; ...» con todas las
-    columnas del grupo. Devuelve el texto final o el número a formatear.
-    """
-    if name == "maquina":
-        active = [k.removeprefix("maquina_") for k, v in parts.items() if to_number(v) == 1]
-        return machine_name(active[0] if active else REFERENCE_MACHINE, labels)
-    if name == "dias_en_leche":
-        return day_range(parts, name, logistic_dataset.MILK_BINS)
-    if name == "dias_en_hato":
-        return day_range(parts, name, logistic_dataset.HERD_BINS)
-    if name == "hora":
-        hour = cycle(parts, "hora", 24)
-        return None if hour is None else f"{int(hour):02d}:{int(hour % 1 * 60):02d}"
-    if name == "mes":
-        month = cycle(parts, "mes", 12)
-        return None if month is None else MONTHS[int(round(month)) % 12]
-    if name == "mdi_previo" and any(to_number(parts.get(f)) == 1 for f in ("mdi_faltante_previo", "estado_mdi_sin_dato_previo")):
-        return "sin dato (se estimó)"
-    if name == "conductividad_max_previa" and to_number(parts.get("conductividad_ms_cm_sin_dato_previa")) == 1:
-        return "sin dato (se estimó)"
-    if name == "intervalo_horas" and to_number(parts.get("intervalo_horas_sin_dato")) == 1:
-        return "sin dato (se estimó)"
-    value = parts.get(name, next(iter(parts.values())))
-    return value.removesuffix(" s/kg").strip()
-
-
 def machine_name(code, labels):
     return labels["maquinas"].get(code, code)
 
@@ -374,10 +314,6 @@ def readable_value(name, value, labels):
     if value is None or value == "":
         return ""
     text = str(value).strip()
-    if "=" in text:  # Regresión logística: todas las columnas del grupo
-        text = from_logistic(name, dict(re.findall(r"([\w]+)=([^;]+)", text)), labels)
-        if text is None or to_number(text) is None:
-            return text or "sin dato"
     if text == "faltante":
         return "sin dato"
     kind = GLOSSARY.get(name, (None, None, None, "texto"))[3]
@@ -424,35 +360,22 @@ def readable_value(name, value, labels):
     return f"{number:.2f}".rstrip("0").rstrip(".")
 
 
-def when(session):
-    """De qué ordeño viene un factor de la LSTM: «actual», «t-1» (el anterior) o «t-k»."""
-    if not session or session == "actual":
-        return ""
-    steps = int(session.removeprefix("t-"))
-    return "ordeño anterior" if steps == 1 else f"hace {steps} ordeños"
-
-
 def describe_factor(factor, labels):
-    """Agrega a un factor su nombre, valor legible, cuándo pasó, qué significa y qué hacer."""
+    """Agrega a un factor su nombre, valor legible, qué significa y qué hacer."""
     name = factor["variable"]
     entry = GLOSSARY.get(name)
-    label, moment = (entry[0] if entry else name), when(factor.get("sesion"))
-    if moment:  # La LSTM ya dice de qué ordeño viene: «hace 3 ordeños» en lugar de «en el ordeño anterior»
-        label = re.sub(r"\s*(\(ordeño anterior\)|(en|del) (el )?ordeño anterior)", "", label)
     return {**factor,
-            "nombre": label,
+            "nombre": entry[0] if entry else name,
             "valor_legible": readable_value(name, factor.get("valor"), labels),
-            "cuando": moment,
             "significado": entry[1] if entry else "",
             "accion": entry[2] if entry else "",
             "icono": ICONS.get(name, "info")}
 
 
 def describe_results(results, labels):
-    """Los resultados de los modelos con cada factor traducido."""
-    return {model: {event: {**result, "factores": [describe_factor(f, labels) for f in result["factores"]]}
-                    for event, result in by_event.items()}
-            for model, by_event in results.items()}
+    """Los resultados del modelo por evento, con cada factor traducido."""
+    return {event: {**result, "factores": [describe_factor(f, labels) for f in result["factores"]]}
+            for event, result in results.items()}
 
 
 def session_variables(row, columns, machine, labels):

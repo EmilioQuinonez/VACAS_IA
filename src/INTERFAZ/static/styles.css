@@ -41,8 +41,6 @@ input, select { width: 100%; padding: 7px 9px; border: 1px solid var(--border); 
 .modes { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .modes button { border: 0; padding: 8px; background: var(--bg); color: var(--text); font: inherit; cursor: pointer; }
 .modes button.active { background: var(--accent); color: var(--accent-text); }
-.checks label { display: flex; gap: 8px; align-items: center; color: var(--text); margin: 6px 0; }
-.checks input { width: auto; }
 button.primary { margin-top: 16px; width: 100%; padding: 10px; border: 0; border-radius: 7px; background: var(--accent);
                  color: var(--accent-text); font: inherit; font-weight: 600; cursor: pointer; }
 button.primary:disabled { opacity: .6; cursor: progress; }
