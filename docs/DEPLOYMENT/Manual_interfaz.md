@@ -75,7 +75,7 @@ La pantalla tiene dos partes:
 Muestra los resultados en velocímetros.
 
 - **Franja de arriba:** responde "¿hago algo con esta vaca?".
-  - En rojo: "Revisar a la vaca 1203: alerta en falla mecánica".
+  - En rojo: "Revisar a la vaca [número]: alerta en falla mecánica".
   - En ámbar: "Vigilar a la vaca…", cuando algún evento está cerca del umbral.
   - En azul: "Sin alertas: ordeño normal…".
   - Debajo, cuando hay alerta o algo que vigilar, cuánto se alargaría el ordeño si ocurre el evento que más lo alarga entre los marcados. Por ejemplo: "Si ocurre falla mecánica, el ordeño tardaría unos 56 s más (7 min 15 s → 8 min 10 s)".
@@ -150,7 +150,7 @@ Arriba del panel izquierdo hay dos modos:
 | Campo | Qué capturar | Ejemplo |
 |---|---|---|
 | **Fecha** y **Hora** | Cuándo entra la vaca al robot. Debe ser posterior al último ordeño de la vaca y no después de la **fecha máxima**, que aparece debajo del campo. | 28/01/2026, 20:00 |
-| **Máquina** | El robot donde se ordeña: VMS 1, VMS 2 o VMS 3. Sin el mapa de identificadores, VMS 1 aparece como `referencia` (la máquina más frecuente del hato, que no tiene columna propia) y VMS 3 y VMS 2 como `7063e4b1` y `86696b37`. | VMS 1 |
+| **Máquina** | El robot donde se ordeña: VMS 1, VMS 2 o VMS 3. Sin el mapa de identificadores aparece su identificador anonimizado, o `referencia` para la máquina más frecuente del hato, que no tiene columna propia. | VMS 1 |
 | **Núm. de ordeño** | El número de ordeño del día para esa vaca (1, 2, 3…). | 2 |
 | **Temperatura (°C)** | La temperatura a esa hora. | 14 |
 | **Humedad (%)** | La humedad relativa, de 0 a 100. | 45 |
