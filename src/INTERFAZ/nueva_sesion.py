@@ -38,7 +38,7 @@ REFERENCE_MACHINE = "referencia"  # La máquina más frecuente no tiene dummy (c
 def load_visits(path=DATA_PATH):
     """
     Todas las visitas del dataset integrado, ordenadas por vaca e inicio. Si faltan variables de
-    historial del XGBoost (el CSV se generó con el script de la LSTM), se agregan aquí.
+    historial del XGBoost (no se corrió su build_history_features.py), se agregan aquí.
     """
     visits = pd.read_csv(path, dtype={"id_vaca": str}, parse_dates=["inicio"], low_memory=False)
     visits = visits.sort_values(["id_vaca", "inicio"], kind="stable").reset_index(drop=True)
@@ -93,7 +93,7 @@ def machine_blood_rate(visits, machine, start):
 def build_session(visits, cow, capture):
     """
     Historial de la vaca anterior a la captura y, al final, la fila nueva con todas las variables
-    de los modelos. capture: inicio (Timestamp), maquina, t_sesion, thi_sesion,
+    del modelo. capture: inicio (Timestamp), maquina, t_sesion, thi_sesion,
     horas_thi_alto_24h y estado_numero_de_ordeno.
     """
     start = pd.Timestamp(capture["inicio"])
@@ -107,7 +107,7 @@ def build_session(visits, cow, capture):
         raise ValueError("La vaca no tiene ordeños anteriores a esa fecha.")
     last = milkings.iloc[-1]
 
-    # La plantilla es el último ordeño: sus mediciones no entran a los modelos, que solo usan el pasado.
+    # La plantilla es el último ordeño: sus mediciones no entran al modelo, que solo usa el pasado.
     row = last.copy()
     row["inicio"] = start
     row[ACTIONS] = 0
@@ -175,7 +175,7 @@ def notices(sessions):
     row, notes = sessions.iloc[-1], []
     if len(sessions) > 1 and row["bloque_historial"] != sessions["bloque_historial"].iloc[-2]:
         notes.append(f"Pasaron {RESTART_DAYS} días o más desde la última visita: empieza un bloque de historial "
-                     "nuevo, así que no hay ordeño previo ni secuencia para la LSTM.")
+                     "nuevo, así que no hay ordeño previo.")
     elif row["regreso_tras_periodo_seco"] == 1:
         notes.append(f"Pasaron más de {LONG_INTERVAL_HOURS} h desde el último ordeño: la sesión se marca como "
                      "regreso tras periodo seco, una situación poco común en los datos.")
