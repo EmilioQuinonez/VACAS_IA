@@ -1,11 +1,14 @@
 """
-Servidor Flask de la interfaz para probar los modelos: sirve la página de static/ (index.html,
-styles.css y script.js) y una API JSON.
+Servidor Flask de la interfaz para probar el modelo final (XGBoost): sirve la página de static/
+(index.html, styles.css, script.js e íconos) y una API JSON.
 Con el dataset integrado ya cargado, se elige una vaca y se captura una sesión nueva (o se elige
-una del dataset), y los tres modelos dan la probabilidad de cada evento y las 3 variables que
-más aumentan el riesgo.
+una del dataset), y el XGBoost da la probabilidad de cada evento y la variable que
+más aumenta el riesgo, traducida a lenguaje no técnico con qué revisar (traduccion.py). Si existe
+Data/mapa_id_vacas.csv, las vacas y las máquinas se muestran con su nombre real (VMS 1, VMS 2, VMS 3).
+Con src/EVALUATION/metrics/duracion_por_evento.json también dice cuánto se alarga el ordeño si ocurre cada
+evento (tiempos.py).
 
-Uso, desde la raíz del repo y después de preparar los datos y build_history_features.py:
+Uso, desde la raíz del repo y después de preparar los datos y src/MODELING/XGBoost/build_history_features.py:
     python src/INTERFAZ/app.py
 y abrir http://localhost:8000
 """
@@ -16,15 +19,18 @@ import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, request
 
+import modelos
 import nueva_sesion as ns
+import tiempos
+import traduccion
 
 PORT = 8000
 CAPTURE_FIELDS = {"temperatura": float, "humedad": float, "horas_thi_alto_24h": float, "numero_ordeno": int}
 state = {}
-lock = threading.Lock()  # Una predicción a la vez: TensorFlow y los DataFrames se comparten
+lock = threading.Lock()  # Una predicción a la vez: los DataFrames se comparten
 
 app = Flask(__name__, static_folder="static", static_url_path="")
-app.json.sort_keys = False  # La página usa el orden de modelos, eventos, métricas y variables
+app.json.sort_keys = False  # La página usa el orden de eventos, métricas y variables
 
 
 class ApiError(Exception):
@@ -43,10 +49,20 @@ def api_error(error):
 def load():
     print("[app] Cargando el dataset integrado...", flush=True)
     visits = ns.load_visits()
-    import modelos  # TensorFlow tarda en importar
 
-    print("[app] Cargando los modelos...", flush=True)
-    state.update(visits=visits, herd=visits[ns.is_milking(visits)], modelos=modelos, models=modelos.load_models())
+    labels = traduccion.load_labels(visits)
+    if labels["vacas"]:
+        print(f"[app] Nombres reales de {len(labels['vacas'])} vacas y {len(labels['maquinas'])} máquinas "
+              f"({traduccion.MAP_PATH.name})", flush=True)
+    else:
+        print(f"[app] Sin {traduccion.MAP_PATH.name}: se muestran los identificadores anonimizados", flush=True)
+    times = tiempos.load(visits)
+    if times is None:
+        print(f"[app] Sin {tiempos.METRICS_PATH.name}: no se muestra cuánto se alarga el ordeño "
+              "(correr src/EVALUATION/duracion_por_evento.py)", flush=True)
+    print("[app] Cargando el modelo...", flush=True)
+    state.update(visits=visits, herd=visits[ns.is_milking(visits)], model=modelos.load_model(), labels=labels,
+                 times=times)
 
 
 def plain(value):
@@ -94,15 +110,18 @@ def index():
 
 @app.get("/api/info")
 def info():
-    herd, modelos = state["herd"], state["modelos"]
+    herd, model = state["herd"], state["model"]
     last = herd.groupby("id_vaca")["inicio"].max().sort_values(ascending=False)
     return {
         "vacas": [{"id": cow, "ultimo": plain(start)} for cow, start in last.items()],
         "maquinas": ns.machines(state["visits"]),
-        "eventos": [{"id": event, "nombre": modelos.EVENT_NAMES[event]} for event in modelos.EVENTS],
-        "modelos": [{"nombre": m.name, "desempeno": m.performance} for m in state["models"]],
+        "eventos": [{"id": event, "nombre": modelos.EVENT_NAMES[event], **traduccion.EVENT_GLOSSARY[event]}
+                    for event in modelos.EVENTS],
+        "modelo": {"nombre": model.name, "desempeno": model.performance},
         "linea_base": modelos.baseline(),
         "fecha_maxima": f"{ns.last_date(state['visits']):%Y-%m-%d}",
+        "etiquetas": state["labels"],
+        "glosario": traduccion.glossary(),
     }
 
 
@@ -128,7 +147,7 @@ def cow_defaults(cow):
 @app.post("/api/predecir")
 def predict():
     capture = read_capture()
-    visits, herd, modelos = state["visits"], state["herd"], state["modelos"]
+    visits = state["visits"]
     start = capture["inicio"]
     actual, notes = None, []
     with lock:
@@ -146,15 +165,16 @@ def predict():
             actual = {event: bool(row[event]) for event in modelos.EVENTS[:3]}
             actual["alguna_anomalia"] = not bool(row["successful_milking_event"])
 
-        chosen = capture.get("modelos") or [m.name for m in state["models"]]
-        results = {m.name: m.predict(sessions, herd) for m in state["models"] if m.name in chosen}
+        results = state["model"].predict(sessions)
 
     row = sessions.iloc[-1]
-    columns = list(dict.fromkeys(modelos.xgb_dataset.FEATURES + modelos.lstm_dataset.CONTEXT_FEATURES))
+    machine = ns.machine_of(row)
+    times = tiempos.describe(state["times"], sessions, machine, row if actual is not None else None)
     return {
-        "vaca": capture["vaca"], "inicio": plain(row["inicio"]), "real": actual, "avisos": notes,
-        "resultados": results,
-        "variables": {column: plain(row.get(column)) for column in columns},
+        "vaca": capture["vaca"], "inicio": plain(row["inicio"]), "maquina": machine, "real": actual, "avisos": notes,
+        "tiempo": times,
+        "resultados": traduccion.describe_results(results, state["labels"]),
+        "variables": traduccion.session_variables(row, modelos.xgb_dataset.FEATURES, machine, state["labels"]),
     }
 
 
